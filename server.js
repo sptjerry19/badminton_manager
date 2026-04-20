@@ -17,6 +17,7 @@ const {
 } = require("./src/sheets");
 
 const app = express();
+let initPromise = null;
 
 app.use(express.json());
 app.use(
@@ -41,8 +42,34 @@ function requireAuth(req, res, next) {
   return res.status(401).json({ message: "Bạn chưa đăng nhập." });
 }
 
+async function ensureInitialized() {
+  if (!initPromise) {
+    initPromise = initializeSpreadsheet().catch((error) => {
+      initPromise = null;
+      throw error;
+    });
+  }
+  return initPromise;
+}
+
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
+});
+
+app.use("/api", async (req, res, next) => {
+  if (req.path === "/health" || req.path === "/login") {
+    return next();
+  }
+  try {
+    await ensureInitialized();
+    return next();
+  } catch (error) {
+    console.error("Không thể khởi tạo Google Sheets:", error.message);
+    return res.status(500).json({
+      message:
+        "Không thể kết nối Google Sheets. Kiểm tra GOOGLE_SHEET_ID, quyền share sheet và GOOGLE_SERVICE_ACCOUNT_JSON."
+    });
+  }
 });
 
 app.post("/api/login", (req, res) => {
@@ -134,13 +161,21 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ message: `Có lỗi hệ thống. Mã lỗi: ${requestId}` });
 });
 
-initializeSpreadsheet()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Server running at http://localhost:${PORT}`);
+if (!process.env.VERCEL) {
+  ensureInitialized()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`Server running at http://localhost:${PORT}`);
+      });
+    })
+    .catch((error) => {
+      console.error("Không thể khởi tạo Google Sheets:", error.message);
+      process.exit(1);
     });
-  })
-  .catch((error) => {
-    console.error("Không thể khởi tạo Google Sheets:", error.message);
-    process.exit(1);
+} else {
+  ensureInitialized().catch((error) => {
+    console.error("Google Sheets init warning on Vercel:", error.message);
   });
+}
+
+module.exports = app;
