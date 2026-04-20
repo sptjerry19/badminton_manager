@@ -8,7 +8,16 @@ Web app quản lý nhóm cầu lông (7 thành viên cố định) với:
 
 ---
 
-## 1) Plan chi tiết (tiếng Việt)
+## 1) Kiến trúc hiện tại (Phase 2.5)
+
+- **Primary DB:** Vercel Postgres (`POSTGRES_URL`)
+- **Backup/Reporting mirror:** Google Sheets
+- **Cơ chế sync:** dữ liệu được đồng bộ từ Postgres -> Google Sheets mỗi ngày qua Vercel Cron (`/api/cron/sync-sheets`)
+- **Manual sync:** admin có thể gọi `POST /api/admin/sync-sheets`
+
+---
+
+## 2) Plan chi tiết (tiếng Việt)
 
 ### 1.1 Cấu trúc thư mục project
 
@@ -27,7 +36,7 @@ badmintonManager/
 └─ README.md
 ```
 
-### 1.2 Các sheet trong Google Sheets cần có
+### 2.2 Các sheet trong Google Sheets cần có (Phase 2)
 
 Backend sẽ tự tạo sheet và header nếu chưa có:
 
@@ -36,43 +45,83 @@ Backend sẽ tự tạo sheet và header nếu chưa có:
    - Lưu tham số hệ thống: `extraCourtRate`, `maleGuestRate`, `femaleGuestRate`, `highThreshold`, `lowThreshold`
 
 2. `Members`
-   - `name`, `type`, `gender`, `level`, `active`
-   - Danh sách thành viên cố định + GL nếu muốn quản lý lâu dài
+   - `memberId`, `name`, `type`, `gender`, `level`, `active`, `phoneNumber`, `zaloId`, `createdAt`, `updatedAt`
+   - `level` được validate từ 1 -> 10
 
 3. `Sessions`
-   - Tổng hợp mỗi buổi (ngày, tổng chi, tổng người, chế độ tính, cảnh báo...)
+   - `sessionId`, `date`, `time`, `location`, `note`, `fixedCourtCost`, `extraCourts`, `shuttlecockCost`, `totalCost`, `createdBy`, `createdAt`
 
-4. `Participants`
-   - Chi tiết từng người trong từng buổi (sessionId, tên, loại, số tiền phải đóng)
+4. `SessionParticipants`
+   - `sessionId`, `memberId`, `memberName`, `status` (`yes`/`no`/`pending`), `respondedAt`
 
-5. `Payments`
-   - Log các khoản đã thanh toán
+5. `Polls`
+   - `pollId`, `sessionId`, `question`, `createdAt`
 
-6. `Debts`
+6. `PollAnswers`
+   - `pollId`, `sessionId`, `memberId`, `memberName`, `answer`, `answeredAt`
+
+7. `Payments`
+   - `paymentId`, `date`, `memberId`, `memberName`, `amount`, `note`, `createdAt`
+
+8. `Debts`
    - Bảng công nợ tổng hợp tự động recompute sau mỗi lần submit buổi / thêm payment
 
-### 1.3 API endpoints cần thiết
+9. `MatchPairHistory`
+   - Lưu lịch sử cặp đôi để giảm lặp cặp khi auto generate trận
+
+### 2.3 API endpoints Phase 2
+
+- `GET /api/login-options`
+  - Lấy danh sách thành viên cố định cho dropdown user login
 
 - `POST /api/login`
-  - Body: `{ password }`
-  - Đăng nhập bằng mật khẩu chung
+  - Admin: `{ mode: "admin", password }`
+  - User: `{ mode: "user", memberName, phoneNumber }`
 
 - `POST /api/logout`
   - Đăng xuất
 
 - `GET /api/bootstrap`
-  - Trả về `settings`, `members`, `debts`, `sessions` để render dashboard
+  - Admin: trả về `members`, `sessions`, `debts`, `payments`
+  - User: trả về `upcomingSession`, `myDebt`, `myHistory`, `myPayments`
 
 - `POST /api/sessions`
-  - Body gồm: `date`, `fixedCourtCost`, `extraCourts`, `shuttlecockCost`, `fixedMembers[]`, `guests[]`
-  - Tính tiền + lưu session + lưu participants + cập nhật debts
+  - Admin tạo buổi và poll để điểm danh trước trận (Phase 2): `date`, `time`, `location`, `note`, `pollQuestion`
 
-- `GET /api/debts`
-  - Lấy bảng công nợ hiện tại
+- `POST /api/sessions/:sessionId/settle`
+  - Admin chốt dữ liệu thực tế sau trận (Phase 1): `fixedCourtCost`, `extraCourts`, `shuttlecockCost`, `fixedMembers[]`, `guests[]`
+  - Endpoint này mới là nơi tính phí và cập nhật công nợ
+
+- `POST /api/sessions/:sessionId/respond`
+  - User trả lời bắt buộc tham gia `yes/no` + poll answer (nếu có poll)
+
+- `POST /api/sessions/:sessionId/guests`
+  - Admin thêm GL vào danh sách điểm danh trước buổi (`guestName`, `level`, `status`)
+  - GL được đưa vào xếp trận nếu status = `yes`
+
+- `POST /api/sessions/:sessionId/matches`
+  - Admin generate Round 1..N cho đánh đôi theo level
+
+- `PATCH /api/members/level`
+  - Admin update level member (1-10)
 
 - `POST /api/payments`
-  - Body: `{ date, name, amount, note }`
-  - Ghi nhận thanh toán và cập nhật debts
+  - Admin ghi nhận thanh toán: `{ date, memberName, amount, note }`
+
+- `GET /api/reports/monthly?month=YYYY-MM`
+  - JSON report tháng
+
+- `GET /api/reports/monthly?month=YYYY-MM&format=csv`
+  - Export CSV
+
+- `POST /api/admin/sync-sheets`
+  - Admin trigger đồng bộ Postgres -> Google Sheets thủ công
+
+- `POST /api/admin/migrate-from-sheets`
+  - One-time migration: import toàn bộ dữ liệu hiện có từ Google Sheets vào Postgres
+
+- `GET /api/cron/sync-sheets`
+  - Dùng cho Vercel Cron (bảo vệ bằng `CRON_SECRET`)
 
 ### 1.4 Cách tính tiền (logic)
 
@@ -99,7 +148,7 @@ Giữ đúng rule hiện tại:
 
 ---
 
-## 2) Code đầy đủ và cách chạy
+## 3) Code đầy đủ và cách chạy
 
 ### 2.1 Cài đặt
 
@@ -110,12 +159,15 @@ cp .env.example .env
 
 Sửa `.env`:
 - `APP_PASSWORD`: mật khẩu dùng chung cả nhóm
+- `ADMIN_PASSWORD`: mật khẩu admin
 - `SESSION_SECRET`: chuỗi bất kỳ
+- `POSTGRES_URL`: connection string Vercel Postgres
+- `CRON_SECRET`: secret cho cron sync endpoint
 - `GOOGLE_SHEET_ID`: ID file Google Sheet
 - `GOOGLE_APPLICATION_CREDENTIALS`: đường dẫn `credentials.json`
   - hoặc dùng `GOOGLE_SERVICE_ACCOUNT_JSON` (khi deploy)
 
-### 2.2 Chạy local
+### 3.2 Chạy local
 
 ```bash
 npm run dev
@@ -125,7 +177,7 @@ Mở `http://localhost:3000`
 
 ---
 
-## 3) Hướng dẫn setup Google Service Account + credentials.json
+## 4) Hướng dẫn setup Google Service Account + credentials.json
 
 1. Vào [Google Cloud Console](https://console.cloud.google.com/)
 2. Tạo project mới (hoặc dùng project có sẵn)
@@ -142,7 +194,7 @@ Mở `http://localhost:3000`
 
 ---
 
-## 4) Hướng dẫn deploy lên Vercel
+## 5) Hướng dẫn deploy lên Vercel
 
 ### 4.1 Chuẩn bị
 - Đẩy code lên GitHub
@@ -154,15 +206,19 @@ Mở `http://localhost:3000`
 3. Build command: để trống
 4. Output directory: để trống
 
-### 4.3 Environment variables trên Vercel
+### 5.3 Environment variables trên Vercel
 
 Thêm các biến:
 - `APP_PASSWORD`
+- `ADMIN_PASSWORD`
 - `SESSION_SECRET`
+- `POSTGRES_URL`
+- `CRON_SECRET`
 - `GOOGLE_SHEET_ID`
 - `GOOGLE_SERVICE_ACCOUNT_JSON` (paste toàn bộ JSON service account thành 1 dòng)
 
 > Trên Vercel nên dùng `GOOGLE_SERVICE_ACCOUNT_JSON` để không cần upload file `credentials.json`.
+> Nếu cấu hình `CRON_SECRET`, Vercel Cron sẽ tự gửi `Authorization: Bearer <CRON_SECRET>`.
 
 ### 4.4 Deploy
 - Bấm Deploy
@@ -204,30 +260,43 @@ Thêm các biến:
 
 ---
 
-## 6) Gợi ý cải tiến Phase 2
+## 6) Phase 2 đã triển khai
 
-1. **Trình độ thành viên (1-10 hoặc Beginner/Intermediate/Advanced)**
-   - Dùng cột `level` trong `Members`
-   - Thêm giao diện chỉnh level
+1. **Level thành viên**
+   - `Members.level` chuẩn hóa 1-10
+   - Admin update level trực tiếp trên UI và API
 
-2. **Tự động xếp trận đôi**
-   - Rule: ưu tiên chênh lệch level không quá 2
-   - Generate danh sách cặp đấu theo vòng
+2. **Login admin/user + phone**
+   - Admin login bằng password env (`ADMIN_PASSWORD`)
+   - User login bằng dropdown thành viên + số điện thoại
+   - Số điện thoại được lưu vào `Members.phoneNumber`
 
-3. **Thông báo tự động**
-   - Tích hợp bot Telegram/Zalo OA để gửi:
-     - lịch đánh
-     - công nợ còn thiếu
-     - kết quả buổi mới
+3. **RBAC đơn giản**
+   - Admin: full quyền quản trị
+   - User: chỉ xem dữ liệu cá nhân + vote tham gia + trả lời poll
 
-4. **Tách quyền**
-   - Admin mới được submit buổi / ghi payment
-   - Thành viên chỉ xem lịch và công nợ bản thân
+4. **Session + điểm danh + poll**
+   - Admin tạo buổi với ngày/giờ/địa điểm/note/poll
+   - User phải phản hồi `yes/no` cho buổi upcoming
+   - Nếu buổi có poll thì user bắt buộc nhập câu trả lời poll
 
-5. **Xuất báo cáo tháng**
+5. **Auto xếp trận**
+   - Generate theo vòng, cân bằng level 2 đội, giảm lặp cặp
+   - Lưu lịch sử cặp vào `MatchPairHistory`
+
+6. **NotificationService abstraction**
+   - `NotificationService.sendToMember(memberId, message)`
+   - Hiện tại là stub log console, sẵn điểm nối Telegram/Zalo OA
+
+7. **Công nợ và payment**
+   - Debt được recompute theo số người `yes` từng buổi
+   - Công thức: share từng buổi = `totalCost / số người yes`
+   - `debt = totalDue - totalPaid`
+
+8. **Báo cáo tháng + CSV**
    - Tổng chi tháng
-   - Tỷ lệ tham gia từng thành viên
-   - Top nợ / đã thanh toán
+   - Tỷ lệ tham gia từng member
+   - Top nợ / top thanh toán
 
 ---
 

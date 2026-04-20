@@ -1,7 +1,8 @@
 const path = require("path");
 
 const PORT = Number(process.env.PORT || 3000);
-const APP_PASSWORD = process.env.APP_PASSWORD || "123456";
+const APP_PASSWORD = process.env.APP_PASSWORD || process.env.ADMIN_PASSWORD || "123456";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || APP_PASSWORD;
 const SESSION_SECRET = process.env.SESSION_SECRET || "badminton-session-secret";
 const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID || "";
 const GOOGLE_APPLICATION_CREDENTIALS =
@@ -28,6 +29,7 @@ const DEFAULT_FIXED_MEMBERS = [
 module.exports = {
   PORT,
   APP_PASSWORD,
+  ADMIN_PASSWORD,
   SESSION_SECRET,
   GOOGLE_SHEET_ID,
   GOOGLE_APPLICATION_CREDENTIALS,

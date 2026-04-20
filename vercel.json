@@ -11,5 +11,11 @@
       "src": "/(.*)",
       "dest": "server.js"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/sync-sheets",
+      "schedule": "0 17 * * *"
+    }
   ]
 }
