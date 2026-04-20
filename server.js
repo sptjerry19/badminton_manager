@@ -161,7 +161,7 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ message: `Có lỗi hệ thống. Mã lỗi: ${requestId}` });
 });
 
-if (!process.env.VERCEL) {
+if (require.main === module) {
   ensureInitialized()
     .then(() => {
       app.listen(PORT, () => {
