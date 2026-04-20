@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quản lý nhóm cầu lông</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-slate-50 text-slate-800">
+    <div class="mx-auto max-w-6xl p-4 sm:p-6">
+      <header class="mb-4 rounded-xl bg-white p-4 shadow-sm sm:mb-6">
+        <h1 class="text-xl font-bold sm:text-2xl">Quản lý nhóm cầu lông</h1>
+        <p class="mt-1 text-sm text-slate-500">Điểm danh, tính tiền và cập nhật công nợ tự động.</p>
+      </header>
+
+      <section id="loginSection" class="mx-auto max-w-md rounded-xl bg-white p-5 shadow-sm">
+        <h2 class="text-lg font-semibold">Đăng nhập</h2>
+        <p class="mt-1 text-sm text-slate-500">Nhập mật khẩu chung của nhóm.</p>
+        <form id="loginForm" class="mt-4 space-y-3">
+          <input
+            id="passwordInput"
+            type="password"
+            placeholder="Mật khẩu"
+            class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+            required
+          />
+          <button class="w-full rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700">
+            Đăng nhập
+          </button>
+        </form>
+        <p id="loginError" class="mt-3 hidden text-sm text-red-600"></p>
+      </section>
+
+      <main id="appSection" class="hidden space-y-5">
+        <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 class="text-lg font-semibold">Điểm danh buổi đánh</h2>
+            <button
+              id="logoutBtn"
+              class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
+            >
+              Đăng xuất
+            </button>
+          </div>
+
+          <form id="sessionForm" class="space-y-4">
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-4">
+              <label class="text-sm">
+                <span class="mb-1 block font-medium">Ngày đánh</span>
+                <input
+                  id="dateInput"
+                  type="date"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+                  required
+                />
+              </label>
+              <label class="text-sm">
+                <span class="mb-1 block font-medium">Tiền sân cố định</span>
+                <input
+                  id="fixedCourtCostInput"
+                  type="number"
+                  min="0"
+                  value="0"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+                />
+              </label>
+              <label class="text-sm">
+                <span class="mb-1 block font-medium">Số sân thêm</span>
+                <input
+                  id="extraCourtsInput"
+                  type="number"
+                  min="0"
+                  value="0"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+                />
+              </label>
+              <label class="text-sm">
+                <span class="mb-1 block font-medium">Tiền cầu</span>
+                <input
+                  id="shuttlecockCostInput"
+                  type="number"
+                  min="0"
+                  value="0"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+                />
+              </label>
+            </div>
+
+            <div>
+              <h3 class="mb-2 font-medium">Thành viên cố định (7 người)</h3>
+              <div id="fixedMembersContainer" class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3"></div>
+            </div>
+
+            <div>
+              <div class="mb-2 flex items-center justify-between">
+                <h3 class="font-medium">Danh sách giao lưu (GL)</h3>
+                <button
+                  type="button"
+                  id="addGuestBtn"
+                  class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
+                >
+                  + Thêm GL
+                </button>
+              </div>
+              <div id="guestContainer" class="space-y-2"></div>
+            </div>
+
+            <button class="w-full rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-700">
+              Submit điểm danh & tính tiền
+            </button>
+            <p id="formMessage" class="text-sm"></p>
+          </form>
+        </section>
+
+        <section id="summarySection" class="hidden rounded-xl bg-white p-4 shadow-sm sm:p-5">
+          <h2 class="mb-3 text-lg font-semibold">Kết quả tính tiền buổi vừa submit</h2>
+          <div id="summaryInfo" class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4"></div>
+          <div class="mt-4 overflow-x-auto">
+            <table class="min-w-full border border-slate-200 text-sm">
+              <thead class="bg-slate-100">
+                <tr>
+                  <th class="border border-slate-200 px-2 py-1 text-left">Tên</th>
+                  <th class="border border-slate-200 px-2 py-1 text-left">Loại</th>
+                  <th class="border border-slate-200 px-2 py-1 text-left">Giới tính</th>
+                  <th class="border border-slate-200 px-2 py-1 text-right">Phải đóng</th>
+                </tr>
+              </thead>
+              <tbody id="summaryParticipants"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+          <h2 class="mb-3 text-lg font-semibold">Công nợ tổng hợp</h2>
+          <div class="overflow-x-auto">
+            <table class="min-w-full border border-slate-200 text-sm">
+              <thead class="bg-slate-100">
+                <tr>
+                  <th class="border border-slate-200 px-2 py-1 text-left">Tên</th>
+                  <th class="border border-slate-200 px-2 py-1 text-left">Nhóm</th>
+                  <th class="border border-slate-200 px-2 py-1 text-right">Lũy kế phải đóng</th>
+                  <th class="border border-slate-200 px-2 py-1 text-right">Đã thanh toán</th>
+                  <th class="border border-slate-200 px-2 py-1 text-right">Số dư</th>
+                  <th class="border border-slate-200 px-2 py-1 text-right">LinkQR</th>
+                </tr>
+              </thead>
+              <tbody id="debtTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+          <h2 class="mb-3 text-lg font-semibold">Ghi nhận thanh toán</h2>
+          <form id="paymentForm" class="grid grid-cols-1 gap-3 sm:grid-cols-5">
+            <input
+              id="paymentDateInput"
+              type="date"
+              class="rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+              required
+            />
+            <input
+              id="paymentNameInput"
+              placeholder="Tên người thanh toán"
+              class="rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+              required
+            />
+            <input
+              id="paymentAmountInput"
+              type="number"
+              min="0"
+              placeholder="Số tiền"
+              class="rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+              required
+            />
+            <input
+              id="paymentNoteInput"
+              placeholder="Ghi chú (không bắt buộc)"
+              class="rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+            />
+            <button class="rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-700">
+              Lưu thanh toán
+            </button>
+          </form>
+          <p id="paymentMessage" class="mt-2 text-sm"></p>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
