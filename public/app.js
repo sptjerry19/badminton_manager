@@ -317,7 +317,7 @@ function renderAdminAttendanceTable(participants = [], pollQuestion = "") {
   tbody.innerHTML = "";
   if (!participants.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="6" class="border border-slate-200 px-2 py-2 text-center text-slate-500">Chưa có dữ liệu xác nhận.</td>`;
+    tr.innerHTML = `<td colspan="7" class="border border-slate-200 px-2 py-2 text-center text-slate-500">Chưa có dữ liệu xác nhận.</td>`;
     tbody.appendChild(tr);
     return;
   }
@@ -325,11 +325,28 @@ function renderAdminAttendanceTable(participants = [], pollQuestion = "") {
     const tr = document.createElement("tr");
     const typeLabel = item.participantType || "Cố định";
     const level = item.level ?? "-";
+    const currentStatus = String(item.status || "pending").toLowerCase();
+    const allowPending = typeLabel === "GL";
+    const statusOptions = [
+      { value: "yes", label: "Có tham gia" },
+      { value: "no", label: "Không tham gia" },
+      ...(allowPending ? [{ value: "pending", label: "Chưa phản hồi" }] : [])
+    ]
+      .map((opt) => `<option value="${opt.value}" ${currentStatus === opt.value ? "selected" : ""}>${opt.label}</option>`)
+      .join("");
     tr.innerHTML = `
       <td class="border border-slate-200 px-2 py-1">${item.memberName || "-"}</td>
       <td class="border border-slate-200 px-2 py-1">${typeLabel}</td>
       <td class="border border-slate-200 px-2 py-1 text-right">${level}</td>
       <td class="border border-slate-200 px-2 py-1">${formatAttendanceStatus(item.status)}</td>
+      <td class="border border-slate-200 px-2 py-1">
+        <div class="flex flex-wrap items-center gap-2">
+          <select data-member="${item.memberName || ""}" data-type="${typeLabel}" data-level="${level}" class="attendance-status-input rounded border border-slate-300 px-2 py-1 text-sm">
+            ${statusOptions}
+          </select>
+          <button data-member="${item.memberName || ""}" data-type="${typeLabel}" data-level="${level}" class="save-attendance-status-btn rounded bg-blue-600 px-2 py-1 text-xs text-white">Lưu</button>
+        </div>
+      </td>
       <td class="border border-slate-200 px-2 py-1">${item.pollAnswer || (pollQuestion ? "-" : "Không có poll")}</td>
       <td class="border border-slate-200 px-2 py-1">${item.respondedAt || "-"}</td>
     `;
@@ -678,6 +695,49 @@ function bindEvents() {
   });
   document.getElementById("loadAttendanceBtn")?.addEventListener("click", loadAdminAttendanceTable);
   document.getElementById("attendanceSessionSelect")?.addEventListener("change", loadAdminAttendanceTable);
+  document.getElementById("attendanceTableBody")?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || !target.classList.contains("save-attendance-status-btn")) return;
+    const sessionId = document.getElementById("attendanceSessionSelect")?.value;
+    if (!sessionId) {
+      setMessage("attendanceMessage", "Vui lòng chọn session trước khi cập nhật trạng thái.", true);
+      return;
+    }
+    const memberName = String(target.dataset.member || "").trim();
+    const type = String(target.dataset.type || "").trim();
+    const level = Number(target.dataset.level || 5);
+    if (!memberName) {
+      setMessage("attendanceMessage", "Thiếu tên thành viên cần cập nhật.", true);
+      return;
+    }
+    const row = target.closest("tr");
+    const select = row?.querySelector(".attendance-status-input");
+    const status = String(select?.value || "pending");
+    try {
+      if (type === "GL") {
+        await api(`/api/sessions/${encodeURIComponent(sessionId)}/guests`, {
+          method: "POST",
+          body: JSON.stringify({
+            guestName: memberName,
+            level: Number.isFinite(level) ? level : 5,
+            status
+          })
+        });
+      } else {
+        await api(`/api/sessions/${encodeURIComponent(sessionId)}/respond`, {
+          method: "POST",
+          body: JSON.stringify({
+            memberName,
+            status
+          })
+        });
+      }
+      setMessage("attendanceMessage", `Đã cập nhật trạng thái cho ${memberName}.`);
+      await loadAdminAttendanceTable();
+    } catch (error) {
+      setMessage("attendanceMessage", error.message, true);
+    }
+  });
   document.getElementById("addAttendanceGuestForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const sessionId = document.getElementById("attendanceSessionSelect")?.value;
