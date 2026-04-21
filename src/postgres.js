@@ -171,6 +171,23 @@ async function initializeDatabase() {
       member_b TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS generated_matches (
+      id BIGSERIAL PRIMARY KEY,
+      match_date TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      round INTEGER NOT NULL,
+      match_no INTEGER NOT NULL,
+      court_no INTEGER NOT NULL DEFAULT 1,
+      match_time TEXT NOT NULL DEFAULT '',
+      team_a_json JSONB NOT NULL,
+      team_b_json JSONB NOT NULL,
+      level_diff INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'scheduled',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (match_date, round, match_no)
+    );
   `);
 
   await query(`
@@ -358,6 +375,47 @@ async function getPollBySession(sessionId) {
   };
 }
 
+async function getActivePollForMember(memberName) {
+  const nowKey = new Date().toISOString().slice(0, 16);
+  const result = await query(
+    `
+    SELECT s.session_id,
+           s.date,
+           s.time,
+           s.location,
+           p.poll_id,
+           p.question,
+           sp.status AS my_status,
+           pa.answer AS my_answer
+    FROM sessions s
+    INNER JOIN polls p ON p.session_id = s.session_id
+    INNER JOIN session_participants sp
+      ON sp.session_id = s.session_id
+     AND sp.member_name_ci = $2
+    LEFT JOIN poll_answers pa
+      ON pa.session_id = s.session_id
+     AND pa.member_name_ci = $2
+    WHERE (s.date || 'T' || COALESCE(s.time, '00:00')) >= $1
+      AND (pa.answer IS NULL OR BTRIM(pa.answer) = '')
+    ORDER BY s.date ASC, s.time ASC
+    LIMIT 1
+    `,
+    [nowKey, safeLower(memberName)]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    sessionId: row.session_id,
+    date: row.date,
+    time: row.time || "",
+    location: row.location || "",
+    pollId: row.poll_id,
+    question: row.question,
+    myStatus: row.my_status || "pending",
+    myAnswer: row.my_answer || ""
+  };
+}
+
 async function getPollAnswersBySession(sessionId) {
   const result = await query(
     `
@@ -379,27 +437,32 @@ async function getPollAnswersBySession(sessionId) {
 }
 
 async function getUpcomingSessionForMember(memberName) {
+  const memberNameCi = safeLower(memberName);
   const result = await query(
     `
-    SELECT *
-    FROM sessions
-    WHERE (date || 'T' || COALESCE(time, '00:00')) >= $1
-    ORDER BY date ASC, time ASC
+    SELECT s.*, sp.status AS my_status
+    FROM sessions s
+    INNER JOIN session_participants sp
+      ON sp.session_id = s.session_id
+     AND sp.member_name_ci = $2
+    WHERE (s.date || 'T' || COALESCE(s.time, '00:00')) >= $1
+    ORDER BY
+      CASE WHEN sp.status = 'pending' THEN 0 ELSE 1 END,
+      s.date ASC,
+      s.time ASC
     LIMIT 1
     `,
-    [new Date().toISOString().slice(0, 16)]
+    [new Date().toISOString().slice(0, 16), memberNameCi]
   );
   const row = result.rows[0];
   if (!row) return null;
   const sessionId = row.session_id;
-  const participants = await getSessionParticipants(sessionId);
-  const mine = participants.find((item) => safeLower(item.memberName) === safeLower(memberName));
   const poll = await getPollBySession(sessionId);
   let myPollAnswer = "";
   if (poll) {
     const answers = await getPollAnswersBySession(sessionId);
     myPollAnswer =
-      answers.find((item) => safeLower(item.memberName) === safeLower(memberName))?.answer || "";
+      answers.find((item) => safeLower(item.memberName) === memberNameCi)?.answer || "";
   }
   return {
     sessionId,
@@ -408,7 +471,7 @@ async function getUpcomingSessionForMember(memberName) {
     location: row.location || "",
     note: row.note || "",
     totalCost: toNumber(row.total_cost),
-    myStatus: mine?.status || "pending",
+    myStatus: row.my_status || "pending",
     poll: poll
       ? {
           pollId: poll.pollId,
@@ -614,22 +677,54 @@ async function respondToSession({ sessionId, memberName, status, pollAnswer }) {
   const poll = await getPollBySession(sessionId);
   if (poll) {
     const answerText = String(pollAnswer || "").trim();
-    if (!answerText) throw new Error("Buổi này có poll, bạn cần trả lời poll.");
-    await query(
-      `
-      INSERT INTO poll_answers(poll_id, session_id, member_id, member_name, member_name_ci, answer, answered_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7)
-      ON CONFLICT(session_id, member_name_ci) DO UPDATE
-      SET answer = EXCLUDED.answer, answered_at = EXCLUDED.answered_at, poll_id = EXCLUDED.poll_id, member_id = EXCLUDED.member_id
-      `,
-      [poll.pollId, sessionId, member.member_id, member.name, safeLower(member.name), answerText, ts]
-    );
+    if (answerText) {
+      await query(
+        `
+        INSERT INTO poll_answers(poll_id, session_id, member_id, member_name, member_name_ci, answer, answered_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)
+        ON CONFLICT(session_id, member_name_ci) DO UPDATE
+        SET answer = EXCLUDED.answer, answered_at = EXCLUDED.answered_at, poll_id = EXCLUDED.poll_id, member_id = EXCLUDED.member_id
+        `,
+        [poll.pollId, sessionId, member.member_id, member.name, safeLower(member.name), answerText, ts]
+      );
+    }
   }
 
   return {
     sessionId,
     memberName: member.name,
     status: safeStatus
+  };
+}
+
+async function answerPoll({ sessionId, memberName, answer }) {
+  const answerText = String(answer || "").trim();
+  if (!answerText) throw new Error("Câu trả lời poll không được để trống.");
+
+  const memberResult = await query(`SELECT * FROM members WHERE LOWER(name) = LOWER($1)`, [memberName]);
+  const member = memberResult.rows[0];
+  if (!member) throw new Error("Không tìm thấy thành viên.");
+
+  const poll = await getPollBySession(sessionId);
+  if (!poll) throw new Error("Buổi này không có poll đang mở.");
+
+  const ts = nowIso();
+  await query(
+    `
+    INSERT INTO poll_answers(poll_id, session_id, member_id, member_name, member_name_ci, answer, answered_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7)
+    ON CONFLICT(session_id, member_name_ci) DO UPDATE
+    SET answer = EXCLUDED.answer, answered_at = EXCLUDED.answered_at, poll_id = EXCLUDED.poll_id, member_id = EXCLUDED.member_id
+    `,
+    [poll.pollId, sessionId, member.member_id, member.name, safeLower(member.name), answerText, ts]
+  );
+
+  return {
+    sessionId,
+    pollId: poll.pollId,
+    memberName: member.name,
+    answer: answerText,
+    answeredAt: ts
   };
 }
 
@@ -823,6 +918,79 @@ async function recordMatchPairs(sessionId, rounds, buildPairKey) {
   }
 }
 
+async function replaceGeneratedMatchesForDate(sessionId, matchDate, rounds) {
+  const date = String(matchDate || "").trim();
+  if (!date) throw new Error("Thiếu matchDate để lưu lịch trận.");
+
+  await query(`DELETE FROM generated_matches WHERE match_date = $1`, [date]);
+  let inserted = 0;
+  for (const roundItem of rounds || []) {
+    const roundNo = Number(roundItem.round || 1);
+    const matches = Array.isArray(roundItem.matches) ? roundItem.matches : [];
+    for (let i = 0; i < matches.length; i += 1) {
+      const match = matches[i];
+      await query(
+        `
+        INSERT INTO generated_matches(
+          match_date, session_id, round, match_no, court_no, match_time, team_a_json, team_b_json, level_diff, status, created_at, updated_at
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,'scheduled',$10,$10)
+        ON CONFLICT(match_date, round, match_no) DO UPDATE
+        SET session_id = EXCLUDED.session_id,
+            court_no = EXCLUDED.court_no,
+            match_time = EXCLUDED.match_time,
+            team_a_json = EXCLUDED.team_a_json,
+            team_b_json = EXCLUDED.team_b_json,
+            level_diff = EXCLUDED.level_diff,
+            status = EXCLUDED.status,
+            updated_at = EXCLUDED.updated_at
+        `,
+        [
+          date,
+          sessionId,
+          roundNo,
+          i + 1,
+          i + 1,
+          "",
+          JSON.stringify(match.teamA || []),
+          JSON.stringify(match.teamB || []),
+          Number(match.levelDiff || 0),
+          nowIso()
+        ]
+      );
+      inserted += 1;
+    }
+  }
+  return { matchDate: date, inserted };
+}
+
+async function getGeneratedMatchesByDate(matchDate) {
+  const date = String(matchDate || "").trim();
+  if (!date) return [];
+  const result = await query(
+    `
+    SELECT *
+    FROM generated_matches
+    WHERE match_date = $1
+    ORDER BY round ASC, match_no ASC
+    `,
+    [date]
+  );
+  return result.rows.map((row) => ({
+    matchDate: row.match_date,
+    sessionId: row.session_id,
+    round: Number(row.round || 1),
+    matchNo: Number(row.match_no || 1),
+    courtNo: Number(row.court_no || 1),
+    matchTime: row.match_time || "",
+    teamA: Array.isArray(row.team_a_json) ? row.team_a_json : [],
+    teamB: Array.isArray(row.team_b_json) ? row.team_b_json : [],
+    levelDiff: Number(row.level_diff || 0),
+    status: row.status || "scheduled",
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
+  }));
+}
+
 async function getMonthlyReport(month) {
   const safeMonth = parseCsvMonth(month);
   const [members, sessionsResult, participantsResult, paymentsResult, debts] = await Promise.all([
@@ -892,7 +1060,7 @@ async function getMonthlyReport(month) {
 }
 
 async function getSnapshotForSheetSync() {
-  const [settings, members, sessions, participants, sessionParticipants, polls, pollAnswers, payments, debts, pairHistory] =
+  const [settings, members, sessions, participants, sessionParticipants, polls, pollAnswers, payments, debts, pairHistory, generatedMatches] =
     await Promise.all([
       getSettings(),
       query(`SELECT * FROM members ORDER BY name ASC`),
@@ -903,7 +1071,8 @@ async function getSnapshotForSheetSync() {
       query(`SELECT * FROM poll_answers ORDER BY id ASC`),
       query(`SELECT * FROM payments ORDER BY created_at ASC`),
       query(`SELECT * FROM debts ORDER BY member_name ASC`),
-      query(`SELECT * FROM match_pair_history ORDER BY id ASC`)
+      query(`SELECT * FROM match_pair_history ORDER BY id ASC`),
+      query(`SELECT * FROM generated_matches ORDER BY match_date ASC, round ASC, match_no ASC`)
     ]);
 
   return {
@@ -988,6 +1157,20 @@ async function getSnapshotForSheetSync() {
       memberA: row.member_a,
       memberB: row.member_b,
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+    })),
+    generatedMatches: generatedMatches.rows.map((row) => ({
+      matchDate: row.match_date,
+      sessionId: row.session_id,
+      round: toNumber(row.round),
+      matchNo: toNumber(row.match_no),
+      courtNo: toNumber(row.court_no),
+      matchTime: row.match_time || "",
+      teamA: row.team_a_json || [],
+      teamB: row.team_b_json || [],
+      levelDiff: toNumber(row.level_diff),
+      status: row.status || "scheduled",
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
     }))
   };
 }
@@ -996,6 +1179,7 @@ async function replaceAllDataFromSnapshot(snapshot) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await client.query("DELETE FROM generated_matches");
     await client.query("DELETE FROM match_pair_history");
     await client.query("DELETE FROM debts");
     await client.query("DELETE FROM payments");
@@ -1177,6 +1361,31 @@ async function replaceAllDataFromSnapshot(snapshot) {
       );
     }
 
+    for (const row of snapshot.generatedMatches || []) {
+      await client.query(
+        `
+        INSERT INTO generated_matches(
+          match_date, session_id, round, match_no, court_no, match_time, team_a_json, team_b_json, level_diff, status, created_at, updated_at
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12)
+        `,
+        [
+          String(row.matchDate || "").trim(),
+          String(row.sessionId || "").trim(),
+          Math.round(toNumber(row.round)),
+          Math.round(toNumber(row.matchNo)),
+          Math.round(toNumber(row.courtNo, 1)),
+          String(row.matchTime || "").trim(),
+          JSON.stringify(row.teamA || []),
+          JSON.stringify(row.teamB || []),
+          Math.round(toNumber(row.levelDiff)),
+          String(row.status || "scheduled"),
+          String(row.createdAt || nowIso()),
+          String(row.updatedAt || nowIso())
+        ]
+      );
+    }
+
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
@@ -1195,6 +1404,7 @@ module.exports = {
   getSessionById,
   getSessionParticipants,
   getPollBySession,
+  getActivePollForMember,
   getPollAnswersBySession,
   getUpcomingSessionForMember,
   createSession,
@@ -1202,6 +1412,7 @@ module.exports = {
   upsertMemberContact,
   updateMemberLevel,
   respondToSession,
+  answerPoll,
   addGuestToSession,
   addPayment,
   recomputeDebts,
@@ -1210,6 +1421,8 @@ module.exports = {
   getMemberHistory,
   getPairHistoryCount,
   recordMatchPairs,
+  replaceGeneratedMatchesForDate,
+  getGeneratedMatchesByDate,
   getMonthlyReport,
   getSnapshotForSheetSync,
   replaceAllDataFromSnapshot

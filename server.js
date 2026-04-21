@@ -12,8 +12,10 @@ const {
   getActiveFixedMembers,
   getMembers,
   getRecentSessions,
+  getSessionById,
   getSessionParticipants,
   getPollBySession,
+  getActivePollForMember,
   getPollAnswersBySession,
   getUpcomingSessionForMember,
   createSession,
@@ -21,9 +23,12 @@ const {
   upsertMemberContact,
   updateMemberLevel,
   respondToSession,
+  answerPoll,
   addGuestToSession,
   getPairHistoryCount,
   recordMatchPairs,
+  replaceGeneratedMatchesForDate,
+  getGeneratedMatchesByDate,
   getMonthlyReport,
   getMemberHistory,
   getPayments,
@@ -185,16 +190,21 @@ app.get("/api/bootstrap", requireAuth, async (req, res) => {
       });
     }
 
-    const [upcomingSession, debts, history, payments] = await Promise.all([
+    const today = new Date().toISOString().slice(0, 10);
+    const [upcomingSession, debts, history, payments, activeVote, todaysMatches] = await Promise.all([
       getUpcomingSessionForMember(memberName),
       getDebts(),
       getMemberHistory(memberName, 20),
-      getPayments(200)
+      getPayments(200),
+      getActivePollForMember(memberName),
+      getGeneratedMatchesByDate(today)
     ]);
 
     return res.json({
       auth: { role, memberName },
       upcomingSession,
+      activeVote,
+      todaysMatches,
       myDebt: debts.find((item) => item.memberName.toLowerCase() === memberName.toLowerCase()) || null,
       myHistory: history,
       myPayments: payments.filter((item) => item.memberName.toLowerCase() === memberName.toLowerCase()).slice(0, 20)
@@ -318,6 +328,18 @@ app.post("/api/sessions/:sessionId/respond", requireAuth, requireRole(["user", "
   }
 });
 
+app.post("/api/sessions/:sessionId/poll-answer", requireAuth, requireRole(["user", "admin"]), async (req, res) => {
+  try {
+    const sessionId = String(req.params.sessionId || "").trim();
+    const memberName = req.session.role === "admin" ? String(req.body?.memberName || "").trim() : req.session.memberName;
+    const answer = String(req.body?.answer || "").trim();
+    const result = await answerPoll({ sessionId, memberName, answer });
+    return res.json({ ok: true, result, message: "Đã ghi nhận phiếu vote." });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
 app.get("/api/sessions/:sessionId/poll", requireAuth, async (req, res) => {
   try {
     const sessionId = String(req.params.sessionId || "").trim();
@@ -376,11 +398,18 @@ app.post("/api/sessions/:sessionId/guests", requireAuth, requireRole(["admin"]),
 app.post("/api/sessions/:sessionId/matches", requireAuth, requireRole(["admin"]), async (req, res) => {
   try {
     const sessionId = String(req.params.sessionId || "").trim();
-    const [participants, allMembers, pairHistory] = await Promise.all([
+    if (!sessionId) {
+      return res.status(400).json({ message: "Thiếu sessionId để generate trận." });
+    }
+    const [sessionItem, participants, allMembers, pairHistory] = await Promise.all([
+      getSessionById(sessionId),
       getSessionParticipants(sessionId),
       getMembers(),
       getPairHistoryCount()
     ]);
+    if (!sessionItem) {
+      return res.status(404).json({ message: "Không tìm thấy session để generate trận." });
+    }
 
     const levelByName = {};
     allMembers.forEach((member) => {
@@ -396,12 +425,28 @@ app.post("/api/sessions/:sessionId/matches", requireAuth, requireRole(["admin"])
             ? Number(item.level)
             : levelByName[item.memberName.toLowerCase()] || 5
       }));
+    if (players.length < 4) {
+      return res.status(400).json({
+        message: `Cần ít nhất 4 người xác nhận 'Có tham gia' để generate trận. Hiện tại chỉ có ${players.length}.`
+      });
+    }
 
     const roundCount = Math.max(1, Number(req.body?.roundCount || 2));
     const rounds = generateMatchPlan(players, pairHistory, roundCount);
     await recordMatchPairs(sessionId, rounds, buildPairKey);
+    await replaceGeneratedMatchesForDate(sessionId, sessionItem.date, rounds);
 
-    return res.json({ ok: true, rounds });
+    return res.json({ ok: true, matchDate: sessionItem.date, rounds });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.get("/api/matches", requireAuth, async (req, res) => {
+  try {
+    const date = String(req.query.date || "").trim() || new Date().toISOString().slice(0, 10);
+    const matches = await getGeneratedMatchesByDate(date);
+    return res.json({ date, matches });
   } catch (error) {
     return res.status(400).json({ message: error.message });
   }

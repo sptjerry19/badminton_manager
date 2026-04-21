@@ -281,20 +281,46 @@
           <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
             <h3 class="mb-3 text-lg font-semibold">Buổi upcoming (bắt buộc phản hồi)</h3>
             <div id="upcomingInfo" class="mb-3 text-sm text-slate-600"></div>
-            <form id="respondForm" class="space-y-3">
-              <select id="attendanceInput" class="w-full rounded-lg border border-slate-300 px-3 py-2">
-                <option value="yes">Có tham gia</option>
-                <option value="no">Không tham gia</option>
-              </select>
-              <input id="pollAnswerInput" placeholder="Câu trả lời poll (nếu có)" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
-              <button class="rounded-lg bg-emerald-600 px-4 py-2 text-white">Gửi phản hồi</button>
-              <p id="respondMessage" class="text-sm"></p>
-            </form>
+            <p class="text-sm text-slate-500">
+              Khi có buổi cần phản hồi, hệ thống sẽ tự bật popup để bạn chọn nhanh bằng nút.
+            </p>
           </section>
 
           <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
             <h3 class="mb-3 text-lg font-semibold">Công nợ cá nhân</h3>
             <div id="myDebtCard" class="text-sm"></div>
+            <div id="myDebtQrActions" class="mt-3"></div>
+          </section>
+
+          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+            <h3 class="mb-3 text-lg font-semibold">Trận đấu hôm nay</h3>
+            <div class="mb-3 flex flex-wrap items-center gap-2">
+              <label for="userMatchDateSelect" class="text-sm text-slate-600">Chọn buổi:</label>
+              <select
+                id="userMatchDateSelect"
+                class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              ></select>
+              <button
+                id="reloadUserMatchesBtn"
+                class="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100"
+              >
+                Xem trận
+              </button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="min-w-full border border-slate-200 text-sm">
+                <thead class="bg-slate-100">
+                  <tr>
+                    <th class="border border-slate-200 px-2 py-1 text-left">Round</th>
+                    <th class="border border-slate-200 px-2 py-1 text-left">Sân</th>
+                    <th class="border border-slate-200 px-2 py-1 text-left">Đội 1</th>
+                    <th class="border border-slate-200 px-2 py-1 text-left">Đội 2</th>
+                    <th class="border border-slate-200 px-2 py-1 text-left">Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody id="todayMatchesTableBody"></tbody>
+              </table>
+            </div>
           </section>
 
           <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
@@ -339,6 +365,53 @@
       <div class="flex items-center gap-3 rounded-xl bg-white px-5 py-4 shadow-lg">
         <div class="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600"></div>
         <p class="text-sm font-medium text-slate-700">Đang xử lý, vui lòng chờ...</p>
+      </div>
+    </div>
+
+    <div id="voteModal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4">
+      <div class="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl">
+        <h3 class="text-lg font-semibold">Vote hôm nay</h3>
+        <p id="voteSessionText" class="mt-1 text-sm text-slate-500"></p>
+        <p id="voteQuestionText" class="mt-3 rounded-lg bg-slate-100 p-3 text-sm"></p>
+        <textarea
+          id="voteAnswerInput"
+          rows="3"
+          placeholder="Nhập câu trả lời của bạn"
+          class="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        ></textarea>
+        <p id="voteMessage" class="mt-2 text-sm"></p>
+        <div class="mt-4 flex flex-wrap justify-end gap-2">
+          <button id="voteSkipBtn" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">Bỏ qua</button>
+          <button id="voteCloseBtn" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">Đóng</button>
+          <button id="voteSubmitBtn" class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">Gửi vote</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="qrModal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4">
+      <div class="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+        <h3 class="text-lg font-semibold">Thanh toán công nợ qua QR</h3>
+        <p id="qrDebtInfo" class="mt-1 text-sm text-slate-500"></p>
+        <div class="mt-3 flex justify-center">
+          <img id="qrImage" alt="VietQR thanh toán công nợ" class="h-64 w-64 rounded border border-slate-200 object-contain" />
+        </div>
+        <div class="mt-4 flex justify-end gap-2">
+          <button id="qrCloseBtn" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">Đóng</button>
+          <a id="qrOpenTabLink" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">Mở tab mới</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="attendanceModal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4">
+      <div class="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl">
+        <h3 class="text-lg font-semibold">Xác nhận buổi upcoming</h3>
+        <p id="attendanceModalInfo" class="mt-2 text-sm text-slate-600"></p>
+        <p id="attendanceModalMessage" class="mt-2 text-sm"></p>
+        <div class="mt-4 flex flex-wrap justify-end gap-2">
+          <button id="attendanceCloseBtn" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">Đóng</button>
+          <button id="attendanceNoBtn" class="rounded-lg bg-rose-600 px-4 py-2 text-sm text-white">Không tham gia</button>
+          <button id="attendanceYesBtn" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white">Có tham gia</button>
+        </div>
       </div>
     </div>
 

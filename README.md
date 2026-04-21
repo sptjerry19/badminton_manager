@@ -93,7 +93,10 @@ Backend sẽ tự tạo sheet và header nếu chưa có:
   - Endpoint này mới là nơi tính phí và cập nhật công nợ
 
 - `POST /api/sessions/:sessionId/respond`
-  - User trả lời bắt buộc tham gia `yes/no` + poll answer (nếu có poll)
+  - User trả lời tham gia `yes/no`
+
+- `POST /api/sessions/:sessionId/poll-answer`
+  - User/admin gửi câu trả lời poll riêng (modal vote)
 
 - `POST /api/sessions/:sessionId/guests`
   - Admin thêm GL vào danh sách điểm danh trước buổi (`guestName`, `level`, `status`)
@@ -101,6 +104,10 @@ Backend sẽ tự tạo sheet và header nếu chưa có:
 
 - `POST /api/sessions/:sessionId/matches`
   - Admin generate Round 1..N cho đánh đôi theo level
+  - Dữ liệu được lưu theo `match_date` để reload không bị mất
+
+- `GET /api/matches?date=YYYY-MM-DD`
+  - Lấy lịch trận đã generate theo ngày (admin + user)
 
 - `PATCH /api/members/level`
   - Admin update level member (1-10)
@@ -298,11 +305,30 @@ Thêm các biến:
    - Tỷ lệ tham gia từng member
    - Top nợ / top thanh toán
 
+## 7) Cập nhật mới (Vote modal + QR + Match persistence)
+
+1. **Modal vote trên User Dashboard**
+   - Nếu hôm nay có poll active, user sẽ thấy popup ngay khi vào trang.
+   - Vote không hiển thị trực tiếp trong card upcoming nữa.
+   - Modal có nút `Đóng`, `Bỏ qua`, `Gửi vote`.
+
+2. **Thanh toán công nợ bằng VietQR**
+   - Trong `Công nợ cá nhân`, nếu `balance > 0` sẽ hiện nút `Thanh toán bằng QR`.
+   - Click mở modal QR động theo số tiền nợ hiện tại.
+
+3. **Fix generate trận đấu**
+   - Tạo mới hoặc update theo `match_date` (không trùng lặp khi generate lại cùng ngày).
+   - Reload trang vẫn hiển thị lịch trận đã generate.
+
+4. **Hiển thị lịch trận trên User**
+   - User có section `Trận đấu hôm nay`.
+   - Hiển thị round, sân, đội 1/đội 2, trạng thái.
+
 ---
 
-## 7) Ghi chú vận hành
+## 8) Ghi chú vận hành
 
 - Ứng dụng ưu tiên sự đơn giản và dễ bảo trì:
-  - Không cần DB riêng, chỉ dùng Google Sheets
+  - Primary DB là Postgres, Google Sheets là lớp mirror/backup
   - Deploy dễ trên Vercel/Render/Railway
-- Nếu số dữ liệu tăng lớn (vài chục ngàn dòng), cân nhắc chuyển sang Postgres.
+- Khi dữ liệu tăng lớn, nên tối ưu thêm index cho bảng `session_participants`, `participants`, `generated_matches`.

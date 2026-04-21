@@ -3,11 +3,35 @@ const state = {
   auth: null,
   sessions: [],
   members: [],
+  activeVote: null,
+  upcomingSessionId: "",
+  selectedUserMatchDate: "",
   pendingApiCalls: 0
+};
+
+const VIETQR = {
+  bankBin: "970422",
+  accountNo: "011911142003",
+  accountName: "PHAM DUY LINH",
+  template: "compact2"
 };
 
 function formatMoney(value) {
   return new Intl.NumberFormat("vi-VN").format(Number(value || 0));
+}
+
+function buildVietQrUrl(memberName, amount) {
+  const safeAmount = Math.max(0, Math.round(Number(amount || 0)));
+  const addInfo = encodeURIComponent(`Thu cong no cau long - ${memberName}`);
+  const accountName = encodeURIComponent(VIETQR.accountName);
+  return `https://img.vietqr.io/image/${VIETQR.bankBin}-${VIETQR.accountNo}-${VIETQR.template}.png?amount=${safeAmount}&addInfo=${addInfo}&accountName=${accountName}`;
+}
+
+function toggleModal(id, isOpen) {
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.classList.toggle("hidden", !isOpen);
+  modal.classList.toggle("flex", isOpen);
 }
 
 function setLoading(isLoading) {
@@ -164,32 +188,41 @@ function renderSessionSelect(sessions) {
 
 function renderUpcoming(session) {
   const info = document.getElementById("upcomingInfo");
-  const pollInput = document.getElementById("pollAnswerInput");
   if (!session) {
     info.textContent = "Hiện chưa có buổi upcoming.";
-    pollInput.placeholder = "Không có poll";
-    pollInput.disabled = true;
+    state.upcomingSessionId = "";
+    toggleModal("attendanceModal", false);
     return;
   }
+  state.upcomingSessionId = session.sessionId;
   info.innerHTML = [
     `Buổi: ${session.date} ${session.time}`,
     session.location ? `Địa điểm: ${session.location}` : "",
-    `Trạng thái hiện tại: ${session.myStatus || "pending"}`,
-    session.poll ? `Poll: ${session.poll.question}` : "Không có poll"
+    `Trạng thái hiện tại: ${session.myStatus || "pending"}`
   ]
     .filter(Boolean)
     .join(" | ");
-  document.getElementById("attendanceInput").value = session.myStatus === "no" ? "no" : "yes";
-  pollInput.disabled = !session.poll;
-  pollInput.placeholder = session.poll ? "Nhập câu trả lời poll" : "Không có poll";
-  pollInput.value = session.poll?.myAnswer || "";
-  pollInput.dataset.sessionId = session.sessionId;
+  document.getElementById("attendanceModalInfo").textContent = [
+    `Buổi: ${session.date} ${session.time}`,
+    session.location ? `Địa điểm: ${session.location}` : "",
+    session.note ? `Ghi chú: ${session.note}` : ""
+  ]
+    .filter(Boolean)
+    .join(" | ");
+
+  if (String(session.myStatus || "pending").toLowerCase() === "pending") {
+    toggleModal("attendanceModal", true);
+  } else {
+    toggleModal("attendanceModal", false);
+  }
 }
 
 function renderUserDebt(myDebt) {
   const el = document.getElementById("myDebtCard");
+  const actionEl = document.getElementById("myDebtQrActions");
   if (!myDebt) {
     el.textContent = "Chưa có dữ liệu công nợ.";
+    actionEl.innerHTML = "";
     return;
   }
   el.innerHTML = `
@@ -197,6 +230,78 @@ function renderUserDebt(myDebt) {
     <div>Đã thanh toán: <strong>${formatMoney(myDebt.totalPaid)}</strong></div>
     <div>Số dư: <strong class="${myDebt.balance > 0 ? "text-red-600" : "text-emerald-600"}">${formatMoney(myDebt.balance)}</strong></div>
   `;
+  if (Number(myDebt.balance || 0) > 0) {
+    actionEl.innerHTML = `<button id="openQrBtn" class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">Thanh toán bằng QR</button>`;
+  } else {
+    actionEl.innerHTML = `<p class="text-sm text-slate-500">Bạn không có công nợ cần thanh toán.</p>`;
+  }
+}
+
+function renderTodayMatches(rows = [], memberName = "") {
+  const tbody = document.getElementById("todayMatchesTableBody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  if (!rows.length) {
+    tbody.innerHTML =
+      '<tr><td colspan="5" class="border border-slate-200 px-2 py-2 text-center text-slate-500">Hôm nay chưa có lịch trận được generate.</td></tr>';
+    return;
+  }
+  const memberNameCi = String(memberName || "").trim().toLowerCase();
+  rows.forEach((match) => {
+    const teamA = `${match.teamA?.[0]?.name || "-"} + ${match.teamA?.[1]?.name || "-"}`;
+    const teamB = `${match.teamB?.[0]?.name || "-"} + ${match.teamB?.[1]?.name || "-"}`;
+    const allPlayers = [...(match.teamA || []), ...(match.teamB || [])]
+      .map((p) => String(p?.name || "").trim().toLowerCase())
+      .filter(Boolean);
+    const isMyMatch = memberNameCi && allPlayers.includes(memberNameCi);
+    const tr = document.createElement("tr");
+    tr.className = isMyMatch ? "bg-amber-50" : "";
+    tr.innerHTML = `
+      <td class="border border-slate-200 px-2 py-1">Round ${match.round}${isMyMatch ? ' <span class="rounded bg-amber-200 px-1.5 py-0.5 text-xs font-medium text-amber-900">Trận của bạn</span>' : ""}</td>
+      <td class="border border-slate-200 px-2 py-1">Sân ${match.courtNo || 1}${match.matchTime ? ` - ${match.matchTime}` : ""}</td>
+      <td class="border border-slate-200 px-2 py-1">${teamA}</td>
+      <td class="border border-slate-200 px-2 py-1">${teamB}</td>
+      <td class="border border-slate-200 px-2 py-1">${match.status || "scheduled"}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function openVoteModal(vote) {
+  if (!vote) return;
+  state.activeVote = vote;
+  document.getElementById("voteSessionText").textContent = `Phiên: ${vote.date} ${vote.time || ""} ${vote.location ? `- ${vote.location}` : ""}`;
+  document.getElementById("voteQuestionText").textContent = vote.question || "Bạn vui lòng bỏ phiếu.";
+  document.getElementById("voteAnswerInput").value = vote.myAnswer || "";
+  setMessage("voteMessage", "");
+  toggleModal("voteModal", true);
+}
+
+function openQrModal(memberName, balance) {
+  const qrUrl = buildVietQrUrl(memberName, balance);
+  document.getElementById("qrDebtInfo").textContent = `${memberName} - Số tiền cần thanh toán: ${formatMoney(balance)} VNĐ`;
+  document.getElementById("qrImage").src = qrUrl;
+  document.getElementById("qrOpenTabLink").href = qrUrl;
+  toggleModal("qrModal", true);
+}
+
+async function submitAttendance(status) {
+  const sessionId = state.upcomingSessionId;
+  if (!sessionId) {
+    setMessage("attendanceModalMessage", "Chưa có buổi upcoming để phản hồi.", true);
+    return;
+  }
+  try {
+    await api(`/api/sessions/${encodeURIComponent(sessionId)}/respond`, {
+      method: "POST",
+      body: JSON.stringify({ status })
+    });
+    setMessage("attendanceModalMessage", "Đã gửi phản hồi.");
+    setTimeout(() => toggleModal("attendanceModal", false), 500);
+    await loadUserDashboard();
+  } catch (error) {
+    setMessage("attendanceModalMessage", error.message, true);
+  }
 }
 
 function formatAttendanceStatus(status) {
@@ -273,6 +378,64 @@ function renderMatchTables(rounds = []) {
     `;
     container.appendChild(wrapper);
   });
+}
+
+function groupMatchesToRounds(matches = []) {
+  const map = new Map();
+  matches.forEach((match) => {
+    const key = Number(match.round || 1);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push({
+      teamA: match.teamA || [],
+      teamB: match.teamB || [],
+      levelDiff: Number(match.levelDiff || 0)
+    });
+  });
+  return Array.from(map.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([round, matchRows]) => ({
+      round,
+      matches: matchRows,
+      waiting: []
+    }));
+}
+
+async function loadMatchesForDate(date) {
+  if (!date) return [];
+  const data = await api(`/api/matches?date=${encodeURIComponent(date)}`);
+  return data.matches || [];
+}
+
+function renderUserMatchDateOptions(upcomingSession, myHistory = []) {
+  const select = document.getElementById("userMatchDateSelect");
+  if (!select) return;
+  const dateSet = new Set();
+  if (upcomingSession?.date) dateSet.add(upcomingSession.date);
+  (myHistory || []).forEach((item) => {
+    if (item?.date) dateSet.add(item.date);
+  });
+  const dates = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
+  if (!dates.length) {
+    dates.push(new Date().toISOString().slice(0, 10));
+  }
+  const previous = state.selectedUserMatchDate;
+  select.innerHTML = "";
+  dates.forEach((date) => {
+    const option = document.createElement("option");
+    option.value = date;
+    option.textContent = date;
+    select.appendChild(option);
+  });
+  state.selectedUserMatchDate = dates.includes(previous) ? previous : dates[0];
+  select.value = state.selectedUserMatchDate;
+}
+
+async function loadUserMatchesBySelectedDate(memberName = "") {
+  const select = document.getElementById("userMatchDateSelect");
+  const date = select?.value || state.selectedUserMatchDate || new Date().toISOString().slice(0, 10);
+  state.selectedUserMatchDate = date;
+  const matches = await loadMatchesForDate(date);
+  renderTodayMatches(matches, memberName);
 }
 
 function renderReportTables(report) {
@@ -388,6 +551,14 @@ async function loadAdminDashboard() {
   renderMemberLevels(state.members);
   renderSettleFixedMembers(state.members);
   renderSessionSelect(data.sessions || []);
+  const selectedSessionId = document.getElementById("matchSessionSelect")?.value || "";
+  const selectedSession = state.sessions.find((item) => item.sessionId === selectedSessionId);
+  if (selectedSession?.date) {
+    const matches = await loadMatchesForDate(selectedSession.date);
+    renderMatchTables(groupMatchesToRounds(matches));
+  } else {
+    renderMatchTables([]);
+  }
   await loadAdminAttendanceTable();
   document.getElementById("preDateInput").value = new Date().toISOString().slice(0, 10);
   document.getElementById("paymentDateInput").value = new Date().toISOString().slice(0, 10);
@@ -398,8 +569,13 @@ async function loadUserDashboard() {
   renderRoleHeader(data.auth);
   renderUpcoming(data.upcomingSession);
   renderUserDebt(data.myDebt);
+  renderUserMatchDateOptions(data.upcomingSession, data.myHistory || []);
+  await loadUserMatchesBySelectedDate(data.auth.memberName || "");
   renderMyHistoryTable(data.myHistory || []);
   renderMyPaymentsTable(data.myPayments || []);
+  if (data.activeVote) {
+    openVoteModal(data.activeVote);
+  }
 }
 
 async function loadDashboard() {
@@ -411,6 +587,14 @@ async function loadDashboard() {
     renderMemberLevels(state.members);
     renderSettleFixedMembers(state.members);
     renderSessionSelect(data.sessions || []);
+    const selectedSessionId = document.getElementById("matchSessionSelect")?.value || "";
+    const selectedSession = state.sessions.find((item) => item.sessionId === selectedSessionId);
+    if (selectedSession?.date) {
+      const matches = await loadMatchesForDate(selectedSession.date);
+      renderMatchTables(groupMatchesToRounds(matches));
+    } else {
+      renderMatchTables([]);
+    }
     await loadAdminAttendanceTable();
     document.getElementById("preDateInput").value = new Date().toISOString().slice(0, 10);
     document.getElementById("paymentDateInput").value = new Date().toISOString().slice(0, 10);
@@ -418,8 +602,13 @@ async function loadDashboard() {
     renderRoleHeader(data.auth);
     renderUpcoming(data.upcomingSession);
     renderUserDebt(data.myDebt);
+    renderUserMatchDateOptions(data.upcomingSession, data.myHistory || []);
+    await loadUserMatchesBySelectedDate(data.auth.memberName || "");
     renderMyHistoryTable(data.myHistory || []);
     renderMyPaymentsTable(data.myPayments || []);
+    if (data.activeVote) {
+      openVoteModal(data.activeVote);
+    }
   }
 }
 
@@ -601,7 +790,22 @@ function bindEvents() {
         body: JSON.stringify({ roundCount })
       });
       renderMatchTables(data.rounds || []);
-      setMessage("matchMessage", "Đã generate xếp trận.");
+      setMessage("matchMessage", `Đã generate xếp trận cho ngày ${data.matchDate}.`);
+    } catch (error) {
+      renderMatchTables([]);
+      setMessage("matchMessage", error.message, true);
+    }
+  });
+  document.getElementById("matchSessionSelect")?.addEventListener("change", async () => {
+    try {
+      const sessionId = document.getElementById("matchSessionSelect").value;
+      const selectedSession = state.sessions.find((item) => item.sessionId === sessionId);
+      if (!selectedSession?.date) {
+        renderMatchTables([]);
+        return;
+      }
+      const matches = await loadMatchesForDate(selectedSession.date);
+      renderMatchTables(groupMatchesToRounds(matches));
     } catch (error) {
       renderMatchTables([]);
       setMessage("matchMessage", error.message, true);
@@ -645,26 +849,62 @@ function bindEvents() {
     window.open(`/api/reports/monthly?month=${encodeURIComponent(month)}&format=csv`, "_blank");
   });
 
-  document.getElementById("respondForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const pollInput = document.getElementById("pollAnswerInput");
-    const sessionId = pollInput.dataset.sessionId;
-    if (!sessionId) {
-      setMessage("respondMessage", "Chưa có buổi upcoming để phản hồi.", true);
+  document.getElementById("attendanceCloseBtn")?.addEventListener("click", () => toggleModal("attendanceModal", false));
+  document.getElementById("attendanceYesBtn")?.addEventListener("click", () => submitAttendance("yes"));
+  document.getElementById("attendanceNoBtn")?.addEventListener("click", () => submitAttendance("no"));
+
+  document.getElementById("myDebtQrActions")?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.id !== "openQrBtn") return;
+    const data = await api("/api/bootstrap");
+    const myDebt = data.myDebt;
+    if (myDebt && Number(myDebt.balance || 0) > 0) {
+      openQrModal(data.auth.memberName, myDebt.balance);
+    }
+  });
+
+  document.getElementById("qrCloseBtn")?.addEventListener("click", () => toggleModal("qrModal", false));
+
+  document.getElementById("userMatchDateSelect")?.addEventListener("change", async () => {
+    if (state.auth?.role !== "user") return;
+    try {
+      await loadUserMatchesBySelectedDate(state.auth.memberName || "");
+    } catch (error) {
+      console.error(error);
+    }
+  });
+  document.getElementById("reloadUserMatchesBtn")?.addEventListener("click", async () => {
+    if (state.auth?.role !== "user") return;
+    try {
+      await loadUserMatchesBySelectedDate(state.auth.memberName || "");
+    } catch (error) {
+      console.error(error);
+    }
+  });
+
+  document.getElementById("voteCloseBtn")?.addEventListener("click", () => toggleModal("voteModal", false));
+  document.getElementById("voteSkipBtn")?.addEventListener("click", () => toggleModal("voteModal", false));
+  document.getElementById("voteSubmitBtn")?.addEventListener("click", async () => {
+    if (!state.activeVote?.sessionId) {
+      setMessage("voteMessage", "Không có vote đang mở.", true);
+      return;
+    }
+    const answer = document.getElementById("voteAnswerInput").value.trim();
+    if (!answer) {
+      setMessage("voteMessage", "Bạn cần nhập câu trả lời trước khi gửi.", true);
       return;
     }
     try {
-      await api(`/api/sessions/${encodeURIComponent(sessionId)}/respond`, {
+      await api(`/api/sessions/${encodeURIComponent(state.activeVote.sessionId)}/poll-answer`, {
         method: "POST",
-        body: JSON.stringify({
-          status: document.getElementById("attendanceInput").value,
-          pollAnswer: pollInput.value.trim()
-        })
+        body: JSON.stringify({ answer })
       });
-      setMessage("respondMessage", "Đã gửi phản hồi.");
+      setMessage("voteMessage", "Đã ghi nhận vote.");
+      setTimeout(() => toggleModal("voteModal", false), 500);
       await loadUserDashboard();
     } catch (error) {
-      setMessage("respondMessage", error.message, true);
+      setMessage("voteMessage", error.message, true);
     }
   });
 }

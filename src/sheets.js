@@ -639,24 +639,23 @@ async function respondToSession({ sessionId, memberName, status, pollAnswer }) {
   const poll = await getPollBySession(sessionId);
   if (poll) {
     const answerText = String(pollAnswer || "").trim();
-    if (!answerText) {
-      throw new Error("Buổi này có poll, bạn cần trả lời poll.");
+    if (answerText) {
+      const answerRows = rowsToObjects(await readRows(`${SHEETS.pollAnswers}!A1:F30000`));
+      const answerIdx = answerRows.findIndex(
+        (row) => String(row.sessionId || "").trim() === sessionId && safeLower(row.memberName) === safeLower(memberName)
+      );
+      const answerRow = {
+        pollId: poll.pollId,
+        sessionId,
+        memberId: member.memberId,
+        memberName: member.name,
+        answer: answerText,
+        answeredAt: respondedAt
+      };
+      if (answerIdx >= 0) answerRows[answerIdx] = answerRow;
+      else answerRows.push(answerRow);
+      await rewriteSheet(SHEETS.pollAnswers, HEADERS.PollAnswers, answerRows);
     }
-    const answerRows = rowsToObjects(await readRows(`${SHEETS.pollAnswers}!A1:F30000`));
-    const answerIdx = answerRows.findIndex(
-      (row) => String(row.sessionId || "").trim() === sessionId && safeLower(row.memberName) === safeLower(memberName)
-    );
-    const answerRow = {
-      pollId: poll.pollId,
-      sessionId,
-      memberId: member.memberId,
-      memberName: member.name,
-      answer: answerText,
-      answeredAt: respondedAt
-    };
-    if (answerIdx >= 0) answerRows[answerIdx] = answerRow;
-    else answerRows.push(answerRow);
-    await rewriteSheet(SHEETS.pollAnswers, HEADERS.PollAnswers, answerRows);
   }
 
   await recomputeDebts();
