@@ -125,15 +125,22 @@
           <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
             <div class="mb-3 flex items-center justify-between">
               <h3 class="text-lg font-semibold">Level thành viên</h3>
-              <button id="refreshMembersBtn" class="rounded-lg border border-slate-300 px-3 py-1 text-sm">Reload</button>
+              <div class="flex items-center gap-2">
+                <button id="openAddMemberBtn" class="rounded-lg bg-indigo-600 px-3 py-1 text-sm text-white">+ Thêm member</button>
+                <button id="refreshMembersBtn" class="rounded-lg border border-slate-300 px-3 py-1 text-sm">Reload</button>
+              </div>
             </div>
+            <p id="memberManageMessage" class="mb-2 text-sm"></p>
             <div class="overflow-x-auto">
               <table class="min-w-full border border-slate-200 text-sm">
                 <thead class="bg-slate-100">
                   <tr>
                     <th class="border border-slate-200 px-2 py-1 text-left">Tên</th>
+                    <th class="border border-slate-200 px-2 py-1 text-left">Loại</th>
+                    <th class="border border-slate-200 px-2 py-1 text-left">Giới tính</th>
                     <th class="border border-slate-200 px-2 py-1 text-left">SĐT</th>
                     <th class="border border-slate-200 px-2 py-1 text-left">Level</th>
+                    <th class="border border-slate-200 px-2 py-1 text-left">Active</th>
                     <th class="border border-slate-200 px-2 py-1 text-left">Thao tác</th>
                   </tr>
                 </thead>
@@ -413,6 +420,53 @@
           <button id="attendanceNoBtn" class="rounded-lg bg-rose-600 px-4 py-2 text-sm text-white">Không tham gia</button>
           <button id="attendanceYesBtn" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white">Có tham gia</button>
         </div>
+      </div>
+    </div>
+
+    <div id="memberModal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4">
+      <div class="w-full max-w-xl rounded-xl bg-white p-5 shadow-xl">
+        <h3 id="memberModalTitle" class="text-lg font-semibold">Thêm member</h3>
+        <form id="memberForm" class="mt-3 space-y-3">
+          <input id="memberModalIdInput" type="hidden" />
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label class="text-sm">
+              <span class="mb-1 block font-medium">Tên</span>
+              <input id="memberNameInput" required class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
+            <label class="text-sm">
+              <span class="mb-1 block font-medium">Loại</span>
+              <select id="memberTypeInput" class="w-full rounded-lg border border-slate-300 px-3 py-2">
+                <option value="Cố định">Cố định</option>
+                <option value="GL">GL</option>
+              </select>
+            </label>
+            <label class="text-sm">
+              <span class="mb-1 block font-medium">Giới tính</span>
+              <select id="memberGenderInput" class="w-full rounded-lg border border-slate-300 px-3 py-2">
+                <option value="">-</option>
+                <option value="Nam">Nam</option>
+                <option value="Nữ">Nữ</option>
+              </select>
+            </label>
+            <label class="text-sm">
+              <span class="mb-1 block font-medium">Số điện thoại</span>
+              <input id="memberPhoneInput" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
+            <label class="text-sm">
+              <span class="mb-1 block font-medium">Level</span>
+              <input id="memberLevelInput" type="number" min="1" max="10" value="5" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+            </label>
+            <label class="flex items-center gap-2 pt-6 text-sm">
+              <input id="memberActiveInput" type="checkbox" checked />
+              <span>Đang hoạt động</span>
+            </label>
+          </div>
+          <p id="memberModalMessage" class="text-sm"></p>
+          <div class="flex flex-wrap justify-end gap-2">
+            <button id="memberModalCloseBtn" type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">Đóng</button>
+            <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">Lưu</button>
+          </div>
+        </form>
       </div>
     </div>
 

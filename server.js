@@ -22,6 +22,8 @@ const {
   settleSession,
   upsertMemberContact,
   updateMemberLevel,
+  createMember,
+  updateMemberProfile,
   respondToSession,
   answerPoll,
   addGuestToSession,
@@ -108,11 +110,12 @@ app.use("/api", async (req, res, next) => {
 app.get("/api/login-options", async (_req, res) => {
   try {
     await ensureInitialized();
-    const members = await getActiveFixedMembers();
+    const members = (await getMembers()).filter((member) => member.active);
     return res.json({
       members: members.map((member) => ({
         memberId: member.memberId,
         name: member.name,
+        type: member.type || "GL",
         phoneNumber: member.phoneNumber || ""
       }))
     });
@@ -146,7 +149,7 @@ app.post("/api/login", (req, res) => {
       if (!memberName || !phoneNumber) {
         return res.status(400).json({ message: "Bạn cần chọn thành viên và nhập số điện thoại." });
       }
-      const members = await getActiveFixedMembers();
+      const members = (await getMembers()).filter((member) => member.active);
       const member = members.find((item) => item.name.toLowerCase() === memberName.toLowerCase());
       if (!member) return res.status(404).json({ message: "Thành viên không tồn tại hoặc đã bị khóa." });
 
@@ -262,6 +265,39 @@ app.patch("/api/members/level", requireAuth, requireRole(["admin"]), async (req,
     const level = Number(req.body?.level);
     const member = await updateMemberLevel(memberName, level);
     return res.json({ ok: true, member });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.post("/api/members", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const member = await createMember({
+      name: req.body?.name,
+      type: req.body?.type,
+      gender: req.body?.gender,
+      phoneNumber: req.body?.phoneNumber,
+      level: req.body?.level,
+      active: req.body?.active
+    });
+    return res.json({ ok: true, member, message: "Đã thêm thành viên mới." });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.patch("/api/members/:memberId", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const memberId = String(req.params.memberId || "").trim();
+    const member = await updateMemberProfile(memberId, {
+      name: req.body?.name,
+      type: req.body?.type,
+      gender: req.body?.gender,
+      phoneNumber: req.body?.phoneNumber,
+      level: req.body?.level,
+      active: req.body?.active
+    });
+    return res.json({ ok: true, member, message: "Đã cập nhật thông tin thành viên." });
   } catch (error) {
     return res.status(400).json({ message: error.message });
   }

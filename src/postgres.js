@@ -40,7 +40,23 @@ function normalizeGender(gender) {
   const value = String(gender || "").trim().toLowerCase();
   if (value === "nam" || value === "male" || value === "m") return "Nam";
   if (value === "nu" || value === "nữ" || value === "female" || value === "f") return "Nữ";
-  return "Nam";
+  return "";
+}
+
+function normalizeMemberType(type) {
+  const value = String(type || "").trim().toLowerCase();
+  if (value === "cố định" || value === "co dinh" || value === "fixed") return "Cố định";
+  if (value === "gl" || value === "giao lưu" || value === "giao luu" || value === "guest") return "GL";
+  return "GL";
+}
+
+function buildMemberIdUnique(name) {
+  const slug = String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `m_${slug || "member"}_${Date.now().toString(36)}`;
 }
 
 function buildMemberId(name, index = 0) {
@@ -649,6 +665,96 @@ async function updateMemberLevel(memberName, level) {
   const row = result.rows[0];
   if (!row) throw new Error("Không tìm thấy thành viên.");
   return mapMember(row);
+}
+
+async function createMember({ name, type, gender, phoneNumber, level, active = true }) {
+  const safeName = String(name || "").trim();
+  if (!safeName) throw new Error("Tên thành viên không được để trống.");
+  const memberType = normalizeMemberType(type);
+  const memberGender = normalizeGender(gender);
+  const safePhone = normalizePhone(phoneNumber);
+  const safeLevel = normalizeLevel(level);
+  const memberId = buildMemberIdUnique(safeName);
+  const ts = nowIso();
+
+  const result = await query(
+    `
+    INSERT INTO members(member_id, name, type, gender, level, active, phone_number, created_at, updated_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
+    RETURNING *
+    `,
+    [memberId, safeName, memberType, memberGender, safeLevel, Boolean(active), safePhone, ts]
+  );
+  return mapMember(result.rows[0]);
+}
+
+async function updateMemberProfile(memberId, payload) {
+  const safeMemberId = String(memberId || "").trim();
+  if (!safeMemberId) throw new Error("Thiếu memberId.");
+  const existingResult = await query(`SELECT * FROM members WHERE member_id = $1`, [safeMemberId]);
+  const existing = existingResult.rows[0];
+  if (!existing) throw new Error("Không tìm thấy thành viên cần cập nhật.");
+
+  const oldName = String(existing.name || "").trim();
+  const newName = String(payload?.name || oldName).trim();
+  if (!newName) throw new Error("Tên thành viên không được để trống.");
+
+  const nextType = normalizeMemberType(payload?.type || existing.type || "GL");
+  const nextGender = normalizeGender(payload?.gender ?? existing.gender ?? "");
+  const nextPhone = normalizePhone(payload?.phoneNumber ?? existing.phone_number ?? "");
+  const nextLevel = normalizeLevel(payload?.level ?? existing.level ?? 5);
+  const nextActive =
+    payload?.active === undefined ? Boolean(existing.active) : String(payload.active).toLowerCase() !== "false";
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const updatedMemberResult = await client.query(
+      `
+      UPDATE members
+      SET name = $2,
+          type = $3,
+          gender = $4,
+          level = $5,
+          active = $6,
+          phone_number = $7,
+          updated_at = NOW()
+      WHERE member_id = $1
+      RETURNING *
+      `,
+      [safeMemberId, newName, nextType, nextGender, nextLevel, nextActive, nextPhone]
+    );
+    await client.query(
+      `
+      UPDATE session_participants
+      SET member_name = $2,
+          member_name_ci = $3
+      WHERE member_id = $1
+      `,
+      [safeMemberId, newName, safeLower(newName)]
+    );
+    await client.query(
+      `
+      UPDATE poll_answers
+      SET member_name = $2,
+          member_name_ci = $3
+      WHERE member_id = $1
+      `,
+      [safeMemberId, newName, safeLower(newName)]
+    );
+    await client.query(`UPDATE payments SET member_name = $2 WHERE member_id = $1`, [safeMemberId, newName]);
+    await client.query(`UPDATE debts SET member_name = $2 WHERE member_id = $1`, [safeMemberId, newName]);
+    if (oldName !== newName) {
+      await client.query(`UPDATE participants SET name = $2 WHERE LOWER(name) = LOWER($1)`, [oldName, newName]);
+    }
+    await client.query("COMMIT");
+    return mapMember(updatedMemberResult.rows[0]);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function respondToSession({ sessionId, memberName, status, pollAnswer }) {
@@ -1411,6 +1517,8 @@ module.exports = {
   settleSession,
   upsertMemberContact,
   updateMemberLevel,
+  createMember,
+  updateMemberProfile,
   respondToSession,
   answerPoll,
   addGuestToSession,

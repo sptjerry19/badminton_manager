@@ -90,7 +90,7 @@ function renderLoginOptions() {
   state.loginOptions.forEach((member) => {
     const option = document.createElement("option");
     option.value = member.name;
-    option.textContent = member.name;
+    option.textContent = `${member.name} (${member.type || "GL"})`;
     select.appendChild(option);
   });
 }
@@ -142,21 +142,50 @@ function renderSettleFixedMembers(members) {
 function renderMemberLevels(members) {
   const tbody = document.getElementById("memberLevelTable");
   tbody.innerHTML = "";
-  members
-    .filter((member) => member.active && member.type === "Cố định")
-    .forEach((member) => {
-      const tr = document.createElement("tr");
-      const options = Array.from({ length: 10 }, (_, index) => index + 1)
-        .map((level) => `<option value="${level}" ${Number(member.level) === level ? "selected" : ""}>${level}</option>`)
-        .join("");
-      tr.innerHTML = `
-        <td class="border border-slate-200 px-2 py-1">${member.name}</td>
-        <td class="border border-slate-200 px-2 py-1">${member.phoneNumber || "-"}</td>
-        <td class="border border-slate-200 px-2 py-1"><select data-name="${member.name}" class="member-level-input rounded border border-slate-300 px-2 py-1">${options}</select></td>
-        <td class="border border-slate-200 px-2 py-1"><button data-name="${member.name}" class="save-level-btn rounded bg-blue-600 px-2 py-1 text-white">Lưu</button></td>
-      `;
-      tbody.appendChild(tr);
-    });
+  members.forEach((member) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="border border-slate-200 px-2 py-1">${member.name}</td>
+      <td class="border border-slate-200 px-2 py-1">${member.type || "-"}</td>
+      <td class="border border-slate-200 px-2 py-1">${member.gender || "-"}</td>
+      <td class="border border-slate-200 px-2 py-1">${member.phoneNumber || "-"}</td>
+      <td class="border border-slate-200 px-2 py-1">${member.level ?? "-"}</td>
+      <td class="border border-slate-200 px-2 py-1">${member.active ? "TRUE" : "FALSE"}</td>
+      <td class="border border-slate-200 px-2 py-1">
+        <button data-member-id="${member.memberId}" class="edit-member-btn rounded bg-blue-600 px-2 py-1 text-white">Sửa</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function resetMemberModal() {
+  document.getElementById("memberModalTitle").textContent = "Thêm member";
+  document.getElementById("memberModalIdInput").value = "";
+  document.getElementById("memberNameInput").value = "";
+  document.getElementById("memberTypeInput").value = "Cố định";
+  document.getElementById("memberGenderInput").value = "";
+  document.getElementById("memberPhoneInput").value = "";
+  document.getElementById("memberLevelInput").value = "5";
+  document.getElementById("memberActiveInput").checked = true;
+  setMessage("memberModalMessage", "");
+}
+
+function openMemberModal(member = null) {
+  if (!member) {
+    resetMemberModal();
+  } else {
+    document.getElementById("memberModalTitle").textContent = `Sửa member: ${member.name}`;
+    document.getElementById("memberModalIdInput").value = member.memberId || "";
+    document.getElementById("memberNameInput").value = member.name || "";
+    document.getElementById("memberTypeInput").value = member.type || "GL";
+    document.getElementById("memberGenderInput").value = member.gender || "";
+    document.getElementById("memberPhoneInput").value = member.phoneNumber || "";
+    document.getElementById("memberLevelInput").value = String(member.level ?? 5);
+    document.getElementById("memberActiveInput").checked = Boolean(member.active);
+    setMessage("memberModalMessage", "");
+  }
+  toggleModal("memberModal", true);
 }
 
 function renderSessionSelect(sessions) {
@@ -767,21 +796,52 @@ function bindEvents() {
     document.getElementById("settleGuestContainer")?.appendChild(createGuestRow());
   });
 
-  document.getElementById("memberLevelTable").addEventListener("click", async (event) => {
+  document.getElementById("openAddMemberBtn")?.addEventListener("click", () => openMemberModal(null));
+  document.getElementById("memberModalCloseBtn")?.addEventListener("click", () => toggleModal("memberModal", false));
+  document.getElementById("memberLevelTable").addEventListener("click", (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLElement) || !target.classList.contains("save-level-btn")) return;
-    const memberName = target.dataset.name;
-    const select = document.querySelector(`select.member-level-input[data-name="${memberName}"]`);
-    const level = Number(select?.value || 5);
+    if (!(target instanceof HTMLElement) || !target.classList.contains("edit-member-btn")) return;
+    const memberId = String(target.dataset.memberId || "");
+    const member = state.members.find((item) => item.memberId === memberId);
+    if (!member) {
+      setMessage("memberManageMessage", "Không tìm thấy thông tin member để chỉnh sửa.", true);
+      return;
+    }
+    openMemberModal(member);
+  });
+  document.getElementById("memberForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const memberId = document.getElementById("memberModalIdInput").value.trim();
+    const payload = {
+      name: document.getElementById("memberNameInput").value.trim(),
+      type: document.getElementById("memberTypeInput").value,
+      gender: document.getElementById("memberGenderInput").value,
+      phoneNumber: document.getElementById("memberPhoneInput").value.trim(),
+      level: Number(document.getElementById("memberLevelInput").value || 5),
+      active: document.getElementById("memberActiveInput").checked
+    };
     try {
-      await api("/api/members/level", {
-        method: "PATCH",
-        body: JSON.stringify({ memberName, level })
-      });
-      setMessage("preSessionMessage", `Đã cập nhật level cho ${memberName}.`);
+      if (!payload.name) {
+        setMessage("memberModalMessage", "Tên member không được để trống.", true);
+        return;
+      }
+      if (memberId) {
+        await api(`/api/members/${encodeURIComponent(memberId)}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload)
+        });
+        setMessage("memberManageMessage", `Đã cập nhật member ${payload.name}.`);
+      } else {
+        await api("/api/members", {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        setMessage("memberManageMessage", `Đã thêm member ${payload.name}.`);
+      }
+      toggleModal("memberModal", false);
       await loadAdminDashboard();
     } catch (error) {
-      setMessage("preSessionMessage", error.message, true);
+      setMessage("memberModalMessage", error.message, true);
     }
   });
 
