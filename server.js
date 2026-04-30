@@ -24,6 +24,11 @@ const {
   updateMemberLevel,
   createMember,
   updateMemberProfile,
+  createBirthdayEvent,
+  getBirthdayEvents,
+  getBirthdayEventDetail,
+  upsertBirthdayDrinkSelection,
+  getBirthdayEventAdminView,
   respondToSession,
   answerPoll,
   addGuestToSession,
@@ -180,12 +185,13 @@ app.get("/api/bootstrap", requireAuth, async (req, res) => {
     const role = req.session.role;
     const memberName = req.session.memberName || "";
     if (role === "admin") {
-      const [members, debts, sessions, payments, expenses] = await Promise.all([
+      const [members, debts, sessions, payments, expenses, birthdayEvents] = await Promise.all([
         getMembers(),
         getDebts(),
         getRecentSessions(30),
         getPayments(100),
-        getExpenses(100)
+        getExpenses(100),
+        getBirthdayEvents(50)
       ]);
       return res.json({
         auth: { role },
@@ -193,18 +199,20 @@ app.get("/api/bootstrap", requireAuth, async (req, res) => {
         debts,
         sessions,
         payments,
-        expenses
+        expenses,
+        birthdayEvents
       });
     }
 
     const today = new Date().toISOString().slice(0, 10);
-    const [upcomingSession, debts, history, payments, activeVote, todaysMatches] = await Promise.all([
+    const [upcomingSession, debts, history, payments, activeVote, todaysMatches, birthdayEvents] = await Promise.all([
       getUpcomingSessionForMember(memberName),
       getDebts(),
       getMemberHistory(memberName, 20),
       getPayments(200),
       getActivePollForMember(memberName),
-      getGeneratedMatchesByDate(today)
+      getGeneratedMatchesByDate(today),
+      getBirthdayEvents(20)
     ]);
 
     return res.json({
@@ -212,6 +220,7 @@ app.get("/api/bootstrap", requireAuth, async (req, res) => {
       upcomingSession,
       activeVote,
       todaysMatches,
+      birthdayEvents,
       myDebt: debts.find((item) => item.memberName.toLowerCase() === memberName.toLowerCase()) || null,
       myHistory: history,
       myPayments: payments.filter((item) => item.memberName.toLowerCase() === memberName.toLowerCase()).slice(0, 20)
@@ -280,6 +289,7 @@ app.post("/api/members", requireAuth, requireRole(["admin"]), async (req, res) =
       name: req.body?.name,
       type: req.body?.type,
       gender: req.body?.gender,
+      birthday: req.body?.birthday,
       phoneNumber: req.body?.phoneNumber,
       level: req.body?.level,
       active: req.body?.active
@@ -297,6 +307,7 @@ app.patch("/api/members/:memberId", requireAuth, requireRole(["admin"]), async (
       name: req.body?.name,
       type: req.body?.type,
       gender: req.body?.gender,
+      birthday: req.body?.birthday,
       phoneNumber: req.body?.phoneNumber,
       level: req.body?.level,
       active: req.body?.active
@@ -523,6 +534,67 @@ app.post("/api/expenses", requireAuth, requireRole(["admin"]), async (req, res) 
     };
     const expense = await addExpense(payload);
     return res.json({ ok: true, message: "Đã ghi nhận chi phí phát sinh.", expense });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.get("/api/birthday-events", requireAuth, async (req, res) => {
+  try {
+    const events = await getBirthdayEvents(100);
+    return res.json({ events });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.post("/api/birthday-events", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const event = await createBirthdayEvent(
+      {
+        eventName: req.body?.eventName,
+        date: req.body?.date,
+        description: req.body?.description,
+        brands: req.body?.brands,
+        drinks: req.body?.drinks
+      },
+      req.session.username || "admin"
+    );
+    return res.json({ ok: true, event, message: "Đã tạo birthday event." });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.get("/api/birthday-events/:eventId", requireAuth, async (req, res) => {
+  try {
+    const eventId = String(req.params.eventId || "").trim();
+    const memberName = req.session.role === "admin" ? String(req.query.memberName || "").trim() : req.session.memberName;
+    const event = await getBirthdayEventDetail(eventId, memberName);
+    return res.json({ event });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.post("/api/birthday-events/:eventId/select-drink", requireAuth, requireRole(["user", "admin"]), async (req, res) => {
+  try {
+    const eventId = String(req.params.eventId || "").trim();
+    const memberName = req.session.role === "admin" ? String(req.body?.memberName || "").trim() : req.session.memberName;
+    const drinkId = String(req.body?.drinkId || "").trim();
+    const quantity = req.body?.quantity;
+    const selection = await upsertBirthdayDrinkSelection({ eventId, memberName, drinkId, quantity });
+    return res.json({ ok: true, selection, message: "Đã cập nhật lựa chọn món." });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.get("/api/birthday-events/:eventId/admin-view", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const eventId = String(req.params.eventId || "").trim();
+    const result = await getBirthdayEventAdminView(eventId);
+    return res.json(result);
   } catch (error) {
     return res.status(400).json({ message: error.message });
   }

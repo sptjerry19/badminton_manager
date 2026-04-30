@@ -6,6 +6,11 @@ const state = {
   adminPayments: [],
   adminExpenses: [],
   adminExpenseExtraGuests: [],
+  birthdayEvents: [],
+  birthdayEventDetail: null,
+  birthdayAdminView: null,
+  selectedBirthdayEventId: "",
+  selectedBirthdayBrand: "",
   activeAdminTab: "court",
   activeVote: null,
   upcomingSessionId: "",
@@ -161,6 +166,7 @@ function renderMemberLevels(members) {
       <td class="border border-slate-200 px-2 py-1">${member.name}</td>
       <td class="border border-slate-200 px-2 py-1">${member.type || "-"}</td>
       <td class="border border-slate-200 px-2 py-1">${member.gender || "-"}</td>
+      <td class="border border-slate-200 px-2 py-1">${member.birthday || "-"}</td>
       <td class="border border-slate-200 px-2 py-1">${member.phoneNumber || "-"}</td>
       <td class="border border-slate-200 px-2 py-1">${member.level ?? "-"}</td>
       <td class="border border-slate-200 px-2 py-1">${member.active ? "TRUE" : "FALSE"}</td>
@@ -178,6 +184,7 @@ function resetMemberModal() {
   document.getElementById("memberNameInput").value = "";
   document.getElementById("memberTypeInput").value = "Cố định";
   document.getElementById("memberGenderInput").value = "";
+  document.getElementById("memberBirthdayInput").value = "";
   document.getElementById("memberPhoneInput").value = "";
   document.getElementById("memberLevelInput").value = "5";
   document.getElementById("memberActiveInput").checked = true;
@@ -193,6 +200,7 @@ function openMemberModal(member = null) {
     document.getElementById("memberNameInput").value = member.name || "";
     document.getElementById("memberTypeInput").value = member.type || "GL";
     document.getElementById("memberGenderInput").value = member.gender || "";
+    document.getElementById("memberBirthdayInput").value = member.birthday || "";
     document.getElementById("memberPhoneInput").value = member.phoneNumber || "";
     document.getElementById("memberLevelInput").value = String(member.level ?? 5);
     document.getElementById("memberActiveInput").checked = Boolean(member.active);
@@ -650,6 +658,161 @@ function renderAdminExpensesTable(rows = []) {
   });
 }
 
+function renderBirthdayEventOptions(events = [], role = "admin") {
+  const selectId = role === "admin" ? "birthdayAdminEventSelect" : "birthdayUserEventSelect";
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  select.innerHTML = "";
+  if (!events.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "Chưa có event";
+    select.appendChild(option);
+    return;
+  }
+  events.forEach((event) => {
+    const option = document.createElement("option");
+    option.value = event.eventId;
+    option.textContent = `${event.date} - ${event.eventName}`;
+    select.appendChild(option);
+  });
+  const eventIds = events.map((item) => item.eventId);
+  state.selectedBirthdayEventId = eventIds.includes(state.selectedBirthdayEventId) ? state.selectedBirthdayEventId : events[0].eventId;
+  select.value = state.selectedBirthdayEventId;
+}
+
+function renderBirthdayAdminSummary(summary) {
+  const container = document.getElementById("birthdayAdminSummary");
+  if (!container) return;
+  container.innerHTML = "";
+  if (!summary) {
+    container.innerHTML = '<p class="text-sm text-slate-500">Chưa có dữ liệu tổng hợp.</p>';
+    return;
+  }
+  if (!summary.groupedByBrand?.length) {
+    container.innerHTML = '<p class="text-sm text-slate-500">Event này chưa có ai chọn đồ uống.</p>';
+    return;
+  }
+  summary.groupedByBrand.forEach((group) => {
+    const block = document.createElement("div");
+    block.className = "rounded-lg border border-slate-200";
+    const drinksRows = (group.drinks || [])
+      .map((drink) => `<tr><td class="border border-slate-200 px-2 py-1">${drink.drinkName}</td><td class="border border-slate-200 px-2 py-1 text-right">${drink.totalQuantity}</td></tr>`)
+      .join("");
+    const usersRows = (group.users || [])
+      .map((user) => `<tr><td class="border border-slate-200 px-2 py-1">${user.memberName}</td><td class="border border-slate-200 px-2 py-1">${user.drinkName}</td><td class="border border-slate-200 px-2 py-1 text-right">${user.quantity}</td></tr>`)
+      .join("");
+    block.innerHTML = `
+      <div class="bg-slate-100 px-3 py-2 text-sm font-medium">${group.brandName} - Tổng ly: ${group.totalQuantity}</div>
+      <div class="grid grid-cols-1 gap-3 p-3 lg:grid-cols-2">
+        <div class="overflow-x-auto">
+          <div class="mb-1 text-xs font-medium text-slate-600">Tổng theo món</div>
+          <table class="min-w-full border border-slate-200 text-sm"><thead class="bg-slate-50"><tr><th class="border border-slate-200 px-2 py-1 text-left">Món</th><th class="border border-slate-200 px-2 py-1 text-right">SL</th></tr></thead><tbody>${drinksRows || '<tr><td colspan="2" class="border border-slate-200 px-2 py-1 text-center text-slate-500">-</td></tr>'}</tbody></table>
+        </div>
+        <div class="overflow-x-auto">
+          <div class="mb-1 text-xs font-medium text-slate-600">Chi tiết user</div>
+          <table class="min-w-full border border-slate-200 text-sm"><thead class="bg-slate-50"><tr><th class="border border-slate-200 px-2 py-1 text-left">User</th><th class="border border-slate-200 px-2 py-1 text-left">Món</th><th class="border border-slate-200 px-2 py-1 text-right">SL</th></tr></thead><tbody>${usersRows || '<tr><td colspan="3" class="border border-slate-200 px-2 py-1 text-center text-slate-500">-</td></tr>'}</tbody></table>
+        </div>
+      </div>
+    `;
+    container.appendChild(block);
+  });
+}
+
+function renderBirthdayUserEventDetail(detail) {
+  const info = document.getElementById("birthdayUserEventInfo");
+  const tabs = document.getElementById("birthdayBrandTabs");
+  const grid = document.getElementById("birthdayDrinkGrid");
+  if (!info || !tabs || !grid) return;
+  tabs.innerHTML = "";
+  grid.innerHTML = "";
+  if (!detail) {
+    info.textContent = "Hiện chưa có birthday event.";
+    return;
+  }
+  info.textContent = `${detail.eventName} - ${detail.date}${detail.description ? ` | ${detail.description}` : ""}`;
+  const brands = detail.brands || [];
+  if (!brands.length) {
+    grid.innerHTML = '<p class="text-sm text-slate-500">Event chưa có brand/menu.</p>';
+    return;
+  }
+  state.selectedBirthdayBrand = brands.includes(state.selectedBirthdayBrand) ? state.selectedBirthdayBrand : brands[0];
+  brands.forEach((brand) => {
+    const btn = document.createElement("button");
+    const active = brand === state.selectedBirthdayBrand;
+    btn.type = "button";
+    btn.className = `rounded-full border px-3 py-1 text-sm whitespace-nowrap ${active ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300 bg-white text-slate-700"}`;
+    btn.dataset.brand = brand;
+    btn.textContent = brand;
+    tabs.appendChild(btn);
+  });
+  const drinks = (detail.drinks || []).filter((item) => item.brandName === state.selectedBirthdayBrand && item.isActive);
+  if (!drinks.length) {
+    grid.innerHTML = '<p class="text-sm text-slate-500">Brand này chưa có món.</p>';
+    return;
+  }
+  drinks.forEach((drink) => {
+    const isSelected = detail.selectedOrder?.drinkId === drink.drinkId;
+    const card = document.createElement("div");
+    card.className = "rounded-xl border border-slate-200 bg-white p-3";
+    card.innerHTML = `
+      <img src="${drink.imageUrl || "https://images.unsplash.com/photo-1577805947697-89e18249d767?auto=format&fit=crop&w=600&q=80"}" alt="${drink.drinkName}" class="h-36 w-full rounded-lg object-cover" />
+      <div class="mt-2 font-medium">${drink.drinkName}</div>
+      <div class="text-sm text-slate-500">${drink.price ? `${formatMoney(drink.price)} đ` : "Giá cập nhật sau"}</div>
+      <button data-drink-id="${drink.drinkId}" class="mt-3 w-full rounded-lg px-3 py-2 text-sm ${isSelected ? "bg-emerald-600 text-white" : "bg-indigo-600 text-white"}">${isSelected ? "Đã chọn" : "Chọn món này"}</button>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function parseBirthdayMenuInput(rawText, brands) {
+  const rows = String(rawText || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const fallbackBrand = brands[0] || "";
+  return rows
+    .map((line, index) => {
+      const [brandNameRaw, drinkNameRaw, priceRaw, imageUrlRaw] = line.split("|");
+      const brandName = String(brandNameRaw || fallbackBrand).trim();
+      const drinkName = String(drinkNameRaw || "").trim();
+      const parsedPrice = String(priceRaw || "").trim();
+      return {
+        brandName,
+        drinkName,
+        price: parsedPrice ? Number(parsedPrice) : null,
+        imageUrl: String(imageUrlRaw || "").trim(),
+        sortOrder: index
+      };
+    })
+    .filter((item) => item.brandName && item.drinkName);
+}
+
+async function loadBirthdayAdminView() {
+  const eventId = document.getElementById("birthdayAdminEventSelect")?.value || "";
+  if (!eventId) {
+    renderBirthdayAdminSummary(null);
+    return;
+  }
+  state.selectedBirthdayEventId = eventId;
+  const data = await api(`/api/birthday-events/${encodeURIComponent(eventId)}/admin-view`);
+  state.birthdayAdminView = data;
+  renderBirthdayAdminSummary(data);
+}
+
+async function loadBirthdayUserEvent() {
+  const eventId = document.getElementById("birthdayUserEventSelect")?.value || "";
+  if (!eventId) {
+    state.birthdayEventDetail = null;
+    renderBirthdayUserEventDetail(null);
+    return;
+  }
+  state.selectedBirthdayEventId = eventId;
+  const data = await api(`/api/birthday-events/${encodeURIComponent(eventId)}`);
+  state.birthdayEventDetail = data.event || null;
+  renderBirthdayUserEventDetail(state.birthdayEventDetail);
+}
+
 function activateAdminTab(tabId) {
   state.activeAdminTab = tabId;
 
@@ -801,6 +964,7 @@ async function loadAdminDashboard() {
   state.members = data.members || [];
   state.adminPayments = data.payments || [];
   state.adminExpenses = data.expenses || [];
+  state.birthdayEvents = data.birthdayEvents || [];
   renderRoleHeader(data.auth);
   renderMemberLevels(state.members);
   renderSettleFixedMembers(state.members);
@@ -812,7 +976,9 @@ async function loadAdminDashboard() {
   }
 
   renderAdminExpensesTable(state.adminExpenses || []);
+  renderBirthdayEventOptions(state.birthdayEvents, "admin");
   activateAdminTab(state.activeAdminTab || "court");
+  await loadBirthdayAdminView().catch(() => renderBirthdayAdminSummary(null));
 
   const selectedSessionId = document.getElementById("matchSessionSelect")?.value || "";
   const selectedSession = state.sessions.find((item) => item.sessionId === selectedSessionId);
@@ -830,6 +996,7 @@ async function loadAdminDashboard() {
 
 async function loadUserDashboard() {
   const data = await api("/api/bootstrap");
+  state.birthdayEvents = data.birthdayEvents || [];
   renderRoleHeader(data.auth);
   renderUpcoming(data.upcomingSession);
   renderUserDebt(data.myDebt);
@@ -837,6 +1004,8 @@ async function loadUserDashboard() {
   await loadUserMatchesBySelectedDate(data.auth.memberName || "");
   renderMyHistoryTable(data.myHistory || []);
   renderMyPaymentsTable(data.myPayments || []);
+  renderBirthdayEventOptions(state.birthdayEvents, "user");
+  await loadBirthdayUserEvent().catch(() => renderBirthdayUserEventDetail(null));
   if (data.activeVote) {
     openVoteModal(data.activeVote);
   }
@@ -849,6 +1018,7 @@ async function loadDashboard() {
     state.members = data.members || [];
     state.adminPayments = data.payments || [];
     state.adminExpenses = data.expenses || [];
+    state.birthdayEvents = data.birthdayEvents || [];
     renderRoleHeader(data.auth);
     renderMemberLevels(state.members);
     renderSettleFixedMembers(state.members);
@@ -860,7 +1030,9 @@ async function loadDashboard() {
     }
 
     renderAdminExpensesTable(state.adminExpenses || []);
+    renderBirthdayEventOptions(state.birthdayEvents, "admin");
     activateAdminTab(state.activeAdminTab || "court");
+    await loadBirthdayAdminView().catch(() => renderBirthdayAdminSummary(null));
 
     const selectedSessionId = document.getElementById("matchSessionSelect")?.value || "";
     const selectedSession = state.sessions.find((item) => item.sessionId === selectedSessionId);
@@ -875,6 +1047,7 @@ async function loadDashboard() {
     document.getElementById("preDateInput").value = new Date().toISOString().slice(0, 10);
     document.getElementById("paymentDateInput").value = new Date().toISOString().slice(0, 10);
   } else {
+    state.birthdayEvents = data.birthdayEvents || [];
     renderRoleHeader(data.auth);
     renderUpcoming(data.upcomingSession);
     renderUserDebt(data.myDebt);
@@ -882,6 +1055,8 @@ async function loadDashboard() {
     await loadUserMatchesBySelectedDate(data.auth.memberName || "");
     renderMyHistoryTable(data.myHistory || []);
     renderMyPaymentsTable(data.myPayments || []);
+    renderBirthdayEventOptions(state.birthdayEvents, "user");
+    await loadBirthdayUserEvent().catch(() => renderBirthdayUserEventDetail(null));
     if (data.activeVote) {
       openVoteModal(data.activeVote);
     }
@@ -928,6 +1103,49 @@ function bindEvents() {
   document.getElementById("adminTabToolsBtn")?.addEventListener("click", () => activateAdminTab("tools"));
 
   document.getElementById("refreshMembersBtn")?.addEventListener("click", loadAdminDashboard);
+  document.getElementById("birthdayEventForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const eventName = document.getElementById("birthdayEventNameInput")?.value?.trim() || "";
+      const date = document.getElementById("birthdayEventDateInput")?.value || "";
+      const description = document.getElementById("birthdayEventDescriptionInput")?.value?.trim() || "";
+      const brands = String(document.getElementById("birthdayEventBrandsInput")?.value || "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const drinks = parseBirthdayMenuInput(document.getElementById("birthdayEventMenuInput")?.value || "", brands);
+      if (!eventName || !date) throw new Error("Vui lòng nhập tên event và ngày.");
+      if (!brands.length) throw new Error("Vui lòng nhập ít nhất 1 brand.");
+      if (!drinks.length) throw new Error("Vui lòng nhập ít nhất 1 món trong menu.");
+      await api("/api/birthday-events", {
+        method: "POST",
+        body: JSON.stringify({ eventName, date, description, brands, drinks })
+      });
+      setMessage("birthdayEventMessage", "Đã tạo birthday event.");
+      document.getElementById("birthdayEventNameInput").value = "";
+      document.getElementById("birthdayEventDateInput").value = "";
+      document.getElementById("birthdayEventDescriptionInput").value = "";
+      document.getElementById("birthdayEventBrandsInput").value = "";
+      document.getElementById("birthdayEventMenuInput").value = "";
+      await loadAdminDashboard();
+    } catch (error) {
+      setMessage("birthdayEventMessage", error.message, true);
+    }
+  });
+  document.getElementById("birthdayAdminEventSelect")?.addEventListener("change", async () => {
+    try {
+      await loadBirthdayAdminView();
+    } catch (error) {
+      setMessage("birthdayEventMessage", error.message, true);
+    }
+  });
+  document.getElementById("loadBirthdayAdminViewBtn")?.addEventListener("click", async () => {
+    try {
+      await loadBirthdayAdminView();
+    } catch (error) {
+      setMessage("birthdayEventMessage", error.message, true);
+    }
+  });
   document.getElementById("migrateSheetsBtn")?.addEventListener("click", async () => {
     const ok = window.confirm(
       "Migrate từ Google Sheets sẽ ghi đè dữ liệu hiện có trong Postgres. Bạn có chắc muốn tiếp tục?"
@@ -1051,6 +1269,7 @@ function bindEvents() {
       name: document.getElementById("memberNameInput").value.trim(),
       type: document.getElementById("memberTypeInput").value,
       gender: document.getElementById("memberGenderInput").value,
+      birthday: document.getElementById("memberBirthdayInput").value,
       phoneNumber: document.getElementById("memberPhoneInput").value.trim(),
       level: Number(document.getElementById("memberLevelInput").value || 5),
       active: document.getElementById("memberActiveInput").checked
@@ -1390,6 +1609,44 @@ function bindEvents() {
       await loadUserMatchesBySelectedDate(state.auth.memberName || "");
     } catch (error) {
       console.error(error);
+    }
+  });
+  document.getElementById("birthdayUserEventSelect")?.addEventListener("change", async () => {
+    try {
+      await loadBirthdayUserEvent();
+    } catch (error) {
+      setMessage("birthdayUserMessage", error.message, true);
+    }
+  });
+  document.getElementById("reloadBirthdayEventBtn")?.addEventListener("click", async () => {
+    try {
+      await loadBirthdayUserEvent();
+    } catch (error) {
+      setMessage("birthdayUserMessage", error.message, true);
+    }
+  });
+  document.getElementById("birthdayBrandTabs")?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const brand = String(target.dataset.brand || "").trim();
+    if (!brand || !state.birthdayEventDetail) return;
+    state.selectedBirthdayBrand = brand;
+    renderBirthdayUserEventDetail(state.birthdayEventDetail);
+  });
+  document.getElementById("birthdayDrinkGrid")?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const drinkId = String(target.dataset.drinkId || "").trim();
+    if (!drinkId || !state.selectedBirthdayEventId) return;
+    try {
+      await api(`/api/birthday-events/${encodeURIComponent(state.selectedBirthdayEventId)}/select-drink`, {
+        method: "POST",
+        body: JSON.stringify({ drinkId, quantity: 1 })
+      });
+      setMessage("birthdayUserMessage", "Đã lưu món bạn chọn.");
+      await loadBirthdayUserEvent();
+    } catch (error) {
+      setMessage("birthdayUserMessage", error.message, true);
     }
   });
 

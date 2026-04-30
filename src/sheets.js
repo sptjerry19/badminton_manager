@@ -21,12 +21,16 @@ const SHEETS = {
   debts: "Debts",
   expenses: "Expenses",
   expenseParticipants: "ExpenseParticipants",
-  matchPairHistory: "MatchPairHistory"
+  matchPairHistory: "MatchPairHistory",
+  birthdayEvents: "BirthdayEvents",
+  birthdayEventBrands: "BirthdayEventBrands",
+  birthdayEventDrinks: "BirthdayEventDrinks",
+  birthdayDrinkOrders: "BirthdayDrinkOrders"
 };
 
 const HEADERS = {
   Config: ["key", "value"],
-  Members: ["memberId", "name", "type", "gender", "level", "active", "phoneNumber", "zaloId", "createdAt", "updatedAt"],
+  Members: ["memberId", "name", "type", "gender", "birthday", "level", "active", "phoneNumber", "zaloId", "createdAt", "updatedAt"],
   Sessions: [
     "sessionId",
     "date",
@@ -48,7 +52,22 @@ const HEADERS = {
   Debts: ["memberId", "memberName", "totalDue", "totalPaid", "balance", "lastUpdated"],
   Expenses: ["expenseId", "sessionId", "date", "name", "totalAmount", "splitMethod", "note", "createdAt"],
   ExpenseParticipants: ["expenseId", "memberId", "memberName", "memberNameCi", "shareAmount", "splitMethod", "createdAt"],
-  MatchPairHistory: ["sessionId", "round", "pairKey", "memberA", "memberB", "createdAt"]
+  MatchPairHistory: ["sessionId", "round", "pairKey", "memberA", "memberB", "createdAt"],
+  BirthdayEvents: ["eventId", "eventName", "date", "description", "createdBy", "createdAt", "updatedAt"],
+  BirthdayEventBrands: ["eventId", "brandName", "sortOrder"],
+  BirthdayEventDrinks: [
+    "drinkId",
+    "eventId",
+    "brandName",
+    "drinkName",
+    "price",
+    "imageUrl",
+    "isActive",
+    "sortOrder",
+    "createdAt",
+    "updatedAt"
+  ],
+  BirthdayDrinkOrders: ["eventId", "memberId", "memberName", "drinkId", "quantity", "updatedAt"]
 };
 
 function nowIso() {
@@ -240,7 +259,7 @@ async function rewriteSheet(title, header, rows) {
 }
 
 async function getMembers() {
-  const rows = rowsToObjects(await readRows(`${SHEETS.members}!A1:J5000`));
+  const rows = rowsToObjects(await readRows(`${SHEETS.members}!A1:K5000`));
   return rows
     .map((row, index) => {
       const name = String(row.name || row.memberName || "").trim();
@@ -250,6 +269,7 @@ async function getMembers() {
         name,
         type: String(row.type || "Cố định").trim() || "Cố định",
         gender: String(row.gender || "").trim(),
+        birthday: String(row.birthday || row.birthDay || "").trim(),
         level: normalizeLevel(row.level),
         active: String(row.active || "TRUE").toUpperCase() !== "FALSE",
         phoneNumber: normalizePhone(row.phoneNumber || row.phone_number),
@@ -280,7 +300,11 @@ async function initializeSpreadsheet() {
     ensureHeader(SHEETS.debts, HEADERS.Debts),
     ensureHeader(SHEETS.expenses, HEADERS.Expenses),
     ensureHeader(SHEETS.expenseParticipants, HEADERS.ExpenseParticipants),
-    ensureHeader(SHEETS.matchPairHistory, HEADERS.MatchPairHistory)
+    ensureHeader(SHEETS.matchPairHistory, HEADERS.MatchPairHistory),
+    ensureHeader(SHEETS.birthdayEvents, HEADERS.BirthdayEvents),
+    ensureHeader(SHEETS.birthdayEventBrands, HEADERS.BirthdayEventBrands),
+    ensureHeader(SHEETS.birthdayEventDrinks, HEADERS.BirthdayEventDrinks),
+    ensureHeader(SHEETS.birthdayDrinkOrders, HEADERS.BirthdayDrinkOrders)
   ]);
 
   const configRows = rowsToObjects(await readRows(`${SHEETS.config}!A1:B200`));
@@ -297,6 +321,7 @@ async function initializeSpreadsheet() {
       name,
       type: "Cố định",
       gender: "",
+      birthday: "",
       level: 5,
       active: "TRUE",
       phoneNumber: "",
@@ -940,7 +965,7 @@ async function getSnapshotFromSheets() {
   await initializeSpreadsheet();
   return {
     config: rowsToObjects(await readRows(`${SHEETS.config}!A1:B1000`)),
-    members: rowsToObjects(await readRows(`${SHEETS.members}!A1:J10000`)),
+    members: rowsToObjects(await readRows(`${SHEETS.members}!A1:K10000`)),
     sessions: rowsToObjects(await readRows(`${SHEETS.sessions}!A1:K50000`)),
     participants: rowsToObjects(await readRows(`${SHEETS.participants}!A1:H100000`)),
     sessionParticipants: rowsToObjects(await readRows(`${SHEETS.sessionParticipants}!A1:E100000`)),
@@ -950,7 +975,11 @@ async function getSnapshotFromSheets() {
     debts: rowsToObjects(await readRows(`${SHEETS.debts}!A1:F100000`)),
     expenses: rowsToObjects(await readRows(`${SHEETS.expenses}!A1:H100000`)),
     expenseParticipants: rowsToObjects(await readRows(`${SHEETS.expenseParticipants}!A1:G100000`)),
-    matchPairHistory: rowsToObjects(await readRows(`${SHEETS.matchPairHistory}!A1:F100000`))
+    matchPairHistory: rowsToObjects(await readRows(`${SHEETS.matchPairHistory}!A1:F100000`)),
+    birthdayEvents: rowsToObjects(await readRows(`${SHEETS.birthdayEvents}!A1:G100000`)),
+    birthdayEventBrands: rowsToObjects(await readRows(`${SHEETS.birthdayEventBrands}!A1:C100000`)),
+    birthdayEventDrinks: rowsToObjects(await readRows(`${SHEETS.birthdayEventDrinks}!A1:J100000`)),
+    birthdayDrinkOrders: rowsToObjects(await readRows(`${SHEETS.birthdayDrinkOrders}!A1:F100000`))
   };
 }
 
@@ -980,6 +1009,10 @@ async function syncSnapshotToSheets(snapshot) {
     HEADERS.MatchPairHistory,
     snapshot.matchPairHistory || []
   );
+  await rewriteSheet(SHEETS.birthdayEvents, HEADERS.BirthdayEvents, snapshot.birthdayEvents || []);
+  await rewriteSheet(SHEETS.birthdayEventBrands, HEADERS.BirthdayEventBrands, snapshot.birthdayEventBrands || []);
+  await rewriteSheet(SHEETS.birthdayEventDrinks, HEADERS.BirthdayEventDrinks, snapshot.birthdayEventDrinks || []);
+  await rewriteSheet(SHEETS.birthdayDrinkOrders, HEADERS.BirthdayDrinkOrders, snapshot.birthdayDrinkOrders || []);
 }
 
 module.exports = {

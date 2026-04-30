@@ -23,6 +23,15 @@ function normalizePhone(value) {
   return String(value || "").trim();
 }
 
+function normalizeBirthday(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    throw new Error("Ngày sinh phải có định dạng YYYY-MM-DD.");
+  }
+  return text;
+}
+
 function safeLower(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -93,6 +102,7 @@ async function initializeDatabase() {
       name TEXT NOT NULL UNIQUE,
       type TEXT NOT NULL DEFAULT 'Cố định',
       gender TEXT NOT NULL DEFAULT '',
+      birthday TEXT NOT NULL DEFAULT '',
       level INTEGER NOT NULL DEFAULT 5,
       active BOOLEAN NOT NULL DEFAULT TRUE,
       phone_number TEXT NOT NULL DEFAULT '',
@@ -227,6 +237,47 @@ async function initializeDatabase() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE (match_date, round, match_no)
     );
+
+    CREATE TABLE IF NOT EXISTS birthday_events (
+      event_id TEXT PRIMARY KEY,
+      event_name TEXT NOT NULL,
+      event_date TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL DEFAULT 'admin',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS birthday_event_brands (
+      id BIGSERIAL PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      brand_name TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS birthday_event_drinks (
+      drink_id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      brand_name TEXT NOT NULL,
+      drink_name TEXT NOT NULL,
+      price INTEGER,
+      image_url TEXT NOT NULL DEFAULT '',
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS birthday_drink_orders (
+      id BIGSERIAL PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      member_id TEXT NOT NULL,
+      member_name TEXT NOT NULL,
+      drink_id TEXT NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(event_id, member_id)
+    );
   `);
 
   await query(`
@@ -237,6 +288,30 @@ async function initializeDatabase() {
     ALTER TABLE session_participants
     ADD COLUMN IF NOT EXISTS participant_level INTEGER;
   `);
+  await query(`
+    ALTER TABLE members
+    ADD COLUMN IF NOT EXISTS birthday TEXT NOT NULL DEFAULT '';
+  `);
+  await query(`
+    ALTER TABLE birthday_event_brands
+    ADD CONSTRAINT birthday_event_brands_event_fk
+    FOREIGN KEY (event_id) REFERENCES birthday_events(event_id) ON DELETE CASCADE;
+  `).catch(() => {});
+  await query(`
+    ALTER TABLE birthday_event_drinks
+    ADD CONSTRAINT birthday_event_drinks_event_fk
+    FOREIGN KEY (event_id) REFERENCES birthday_events(event_id) ON DELETE CASCADE;
+  `).catch(() => {});
+  await query(`
+    ALTER TABLE birthday_drink_orders
+    ADD CONSTRAINT birthday_drink_orders_event_fk
+    FOREIGN KEY (event_id) REFERENCES birthday_events(event_id) ON DELETE CASCADE;
+  `).catch(() => {});
+  await query(`
+    ALTER TABLE birthday_drink_orders
+    ADD CONSTRAINT birthday_drink_orders_drink_fk
+    FOREIGN KEY (drink_id) REFERENCES birthday_event_drinks(drink_id) ON DELETE CASCADE;
+  `).catch(() => {});
 
   for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
     await query(
@@ -283,6 +358,7 @@ function mapMember(row) {
     name: row.name,
     type: row.type,
     gender: row.gender || "",
+    birthday: row.birthday || "",
     level: normalizeLevel(row.level),
     active: Boolean(row.active),
     phoneNumber: row.phone_number || "",
@@ -690,11 +766,12 @@ async function updateMemberLevel(memberName, level) {
   return mapMember(row);
 }
 
-async function createMember({ name, type, gender, phoneNumber, level, active = true }) {
+async function createMember({ name, type, gender, birthday, phoneNumber, level, active = true }) {
   const safeName = String(name || "").trim();
   if (!safeName) throw new Error("Tên thành viên không được để trống.");
   const memberType = normalizeMemberType(type);
   const memberGender = normalizeGender(gender);
+  const safeBirthday = normalizeBirthday(birthday);
   const safePhone = normalizePhone(phoneNumber);
   const safeLevel = normalizeLevel(level);
   const memberId = buildMemberIdUnique(safeName);
@@ -702,11 +779,11 @@ async function createMember({ name, type, gender, phoneNumber, level, active = t
 
   const result = await query(
     `
-    INSERT INTO members(member_id, name, type, gender, level, active, phone_number, created_at, updated_at)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
+    INSERT INTO members(member_id, name, type, gender, birthday, level, active, phone_number, created_at, updated_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)
     RETURNING *
     `,
-    [memberId, safeName, memberType, memberGender, safeLevel, Boolean(active), safePhone, ts]
+    [memberId, safeName, memberType, memberGender, safeBirthday, safeLevel, Boolean(active), safePhone, ts]
   );
   return mapMember(result.rows[0]);
 }
@@ -724,6 +801,7 @@ async function updateMemberProfile(memberId, payload) {
 
   const nextType = normalizeMemberType(payload?.type || existing.type || "GL");
   const nextGender = normalizeGender(payload?.gender ?? existing.gender ?? "");
+  const nextBirthday = normalizeBirthday(payload?.birthday ?? existing.birthday ?? "");
   const nextPhone = normalizePhone(payload?.phoneNumber ?? existing.phone_number ?? "");
   const nextLevel = normalizeLevel(payload?.level ?? existing.level ?? 5);
   const nextActive =
@@ -738,14 +816,15 @@ async function updateMemberProfile(memberId, payload) {
       SET name = $2,
           type = $3,
           gender = $4,
-          level = $5,
-          active = $6,
-          phone_number = $7,
+          birthday = $5,
+          level = $6,
+          active = $7,
+          phone_number = $8,
           updated_at = NOW()
       WHERE member_id = $1
       RETURNING *
       `,
-      [safeMemberId, newName, nextType, nextGender, nextLevel, nextActive, nextPhone]
+      [safeMemberId, newName, nextType, nextGender, nextBirthday, nextLevel, nextActive, nextPhone]
     );
     await client.query(
       `
@@ -778,6 +857,264 @@ async function updateMemberProfile(memberId, payload) {
   } finally {
     client.release();
   }
+}
+
+function normalizeBirthdayEventDate(value) {
+  const text = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    throw new Error("event date phải có định dạng YYYY-MM-DD.");
+  }
+  return text;
+}
+
+function normalizeBirthdayEventBrands(value) {
+  const list = Array.isArray(value) ? value : [];
+  const brands = list
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .filter((item, idx, arr) => arr.findIndex((v) => safeLower(v) === safeLower(item)) === idx);
+  if (!brands.length) throw new Error("Cần ít nhất 1 brand cho birthday event.");
+  return brands;
+}
+
+function normalizeBirthdayEventDrinks(value) {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .map((item, index) => ({
+      brandName: String(item?.brandName || "").trim(),
+      drinkName: String(item?.drinkName || "").trim(),
+      price:
+        item?.price === null || item?.price === undefined || String(item.price).trim() === ""
+          ? null
+          : Math.max(0, Math.round(toNumber(item.price))),
+      imageUrl: String(item?.imageUrl || "").trim(),
+      sortOrder: Math.max(0, Math.round(toNumber(item?.sortOrder, index)))
+    }))
+    .filter((item) => item.brandName && item.drinkName);
+}
+
+async function createBirthdayEvent(payload, createdBy = "admin") {
+  const eventName = String(payload?.eventName || "").trim();
+  if (!eventName) throw new Error("event_name không được để trống.");
+  const eventDate = normalizeBirthdayEventDate(payload?.date);
+  const description = String(payload?.description || "").trim();
+  const brands = normalizeBirthdayEventBrands(payload?.brands);
+  const drinks = normalizeBirthdayEventDrinks(payload?.drinks);
+  if (!drinks.length) throw new Error("Cần ít nhất 1 món nước.");
+
+  const brandSet = new Set(brands.map((item) => safeLower(item)));
+  const invalidDrink = drinks.find((item) => !brandSet.has(safeLower(item.brandName)));
+  if (invalidDrink) {
+    throw new Error(`Món ${invalidDrink.drinkName} dùng brand không nằm trong danh sách được chọn.`);
+  }
+
+  const eventId = `BE_${Date.now().toString(36)}_${Math.floor(Math.random() * 1000)}`;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `
+      INSERT INTO birthday_events(event_id, event_name, event_date, description, created_by, created_at, updated_at)
+      VALUES ($1,$2,$3,$4,$5,NOW(),NOW())
+      `,
+      [eventId, eventName, eventDate, description, createdBy]
+    );
+    for (let i = 0; i < brands.length; i += 1) {
+      await client.query(
+        `
+        INSERT INTO birthday_event_brands(event_id, brand_name, sort_order)
+        VALUES ($1,$2,$3)
+        `,
+        [eventId, brands[i], i]
+      );
+    }
+    for (let i = 0; i < drinks.length; i += 1) {
+      const drink = drinks[i];
+      const drinkId = `BD_${Date.now().toString(36)}_${i}_${Math.floor(Math.random() * 1000)}`;
+      await client.query(
+        `
+        INSERT INTO birthday_event_drinks(drink_id, event_id, brand_name, drink_name, price, image_url, is_active, sort_order, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,TRUE,$7,NOW(),NOW())
+        `,
+        [drinkId, eventId, drink.brandName, drink.drinkName, drink.price, drink.imageUrl, drink.sortOrder]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+  return getBirthdayEventDetail(eventId, "");
+}
+
+async function getBirthdayEvents(limit = 50) {
+  const result = await query(
+    `
+    SELECT event_id, event_name, event_date, description, created_by, created_at, updated_at
+    FROM birthday_events
+    ORDER BY event_date DESC, created_at DESC
+    LIMIT $1
+    `,
+    [Math.max(1, Number(limit || 50))]
+  );
+  return result.rows.map((row) => ({
+    eventId: row.event_id,
+    eventName: row.event_name,
+    date: row.event_date,
+    description: row.description || "",
+    createdBy: row.created_by || "admin",
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
+  }));
+}
+
+async function getBirthdayEventDetail(eventId, memberName = "") {
+  const safeEventId = String(eventId || "").trim();
+  if (!safeEventId) throw new Error("Thiếu eventId.");
+  const [eventResult, brandResult, drinkResult, orderResult] = await Promise.all([
+    query(`SELECT * FROM birthday_events WHERE event_id = $1`, [safeEventId]),
+    query(
+      `SELECT brand_name, sort_order FROM birthday_event_brands WHERE event_id = $1 ORDER BY sort_order ASC, brand_name ASC`,
+      [safeEventId]
+    ),
+    query(
+      `SELECT drink_id, brand_name, drink_name, price, image_url, is_active, sort_order FROM birthday_event_drinks WHERE event_id = $1 ORDER BY brand_name ASC, sort_order ASC, drink_name ASC`,
+      [safeEventId]
+    ),
+    query(
+      `
+      SELECT o.member_id, o.member_name, o.drink_id, o.quantity, o.updated_at, d.brand_name, d.drink_name
+      FROM birthday_drink_orders o
+      LEFT JOIN birthday_event_drinks d ON d.drink_id = o.drink_id
+      WHERE o.event_id = $1
+      `,
+      [safeEventId]
+    )
+  ]);
+  const event = eventResult.rows[0];
+  if (!event) throw new Error("Không tìm thấy birthday event.");
+  const brands = brandResult.rows.map((row) => row.brand_name);
+  const drinks = drinkResult.rows.map((row) => ({
+    drinkId: row.drink_id,
+    brandName: row.brand_name,
+    drinkName: row.drink_name,
+    price: row.price === null || row.price === undefined ? null : Math.round(toNumber(row.price)),
+    imageUrl: row.image_url || "",
+    isActive: Boolean(row.is_active),
+    sortOrder: Math.round(toNumber(row.sort_order))
+  }));
+  const orders = orderResult.rows.map((row) => ({
+    memberId: row.member_id,
+    memberName: row.member_name,
+    drinkId: row.drink_id,
+    drinkName: row.drink_name || "",
+    brandName: row.brand_name || "",
+    quantity: Math.max(1, Math.round(toNumber(row.quantity, 1))),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
+  }));
+  const selectedOrder = orders.find((item) => safeLower(item.memberName) === safeLower(memberName)) || null;
+  return {
+    eventId: event.event_id,
+    eventName: event.event_name,
+    date: event.event_date,
+    description: event.description || "",
+    createdBy: event.created_by || "admin",
+    createdAt: event.created_at ? new Date(event.created_at).toISOString() : "",
+    updatedAt: event.updated_at ? new Date(event.updated_at).toISOString() : "",
+    brands,
+    drinks,
+    selectedOrder,
+    orders
+  };
+}
+
+async function upsertBirthdayDrinkSelection({ eventId, memberName, drinkId, quantity = 1 }) {
+  const safeEventId = String(eventId || "").trim();
+  const safeDrinkId = String(drinkId || "").trim();
+  const safeMemberName = String(memberName || "").trim();
+  if (!safeEventId) throw new Error("Thiếu eventId.");
+  if (!safeDrinkId) throw new Error("Thiếu drinkId.");
+  if (!safeMemberName) throw new Error("Thiếu memberName.");
+  const safeQuantity = Math.max(1, Math.round(toNumber(quantity, 1)));
+
+  const [memberResult, drinkResult] = await Promise.all([
+    query(`SELECT member_id, name FROM members WHERE LOWER(name) = LOWER($1)`, [safeMemberName]),
+    query(
+      `SELECT drink_id, event_id, brand_name, drink_name FROM birthday_event_drinks WHERE drink_id = $1 AND event_id = $2 AND is_active = TRUE`,
+      [safeDrinkId, safeEventId]
+    )
+  ]);
+  const member = memberResult.rows[0];
+  if (!member) throw new Error("Không tìm thấy member.");
+  const drink = drinkResult.rows[0];
+  if (!drink) throw new Error("Không tìm thấy món nước hợp lệ cho event.");
+
+  const result = await query(
+    `
+    INSERT INTO birthday_drink_orders(event_id, member_id, member_name, drink_id, quantity, updated_at)
+    VALUES ($1,$2,$3,$4,$5,NOW())
+    ON CONFLICT(event_id, member_id) DO UPDATE
+    SET member_name = EXCLUDED.member_name,
+        drink_id = EXCLUDED.drink_id,
+        quantity = EXCLUDED.quantity,
+        updated_at = EXCLUDED.updated_at
+    RETURNING *
+    `,
+    [safeEventId, member.member_id, member.name, safeDrinkId, safeQuantity]
+  );
+  const row = result.rows[0];
+  return {
+    eventId: row.event_id,
+    memberId: row.member_id,
+    memberName: row.member_name,
+    drinkId: row.drink_id,
+    quantity: Math.max(1, Math.round(toNumber(row.quantity, 1))),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : "",
+    drinkName: drink.drink_name,
+    brandName: drink.brand_name
+  };
+}
+
+async function getBirthdayEventAdminView(eventId) {
+  const detail = await getBirthdayEventDetail(eventId, "");
+  const grouped = {};
+  detail.orders.forEach((order) => {
+    const brand = order.brandName || "Khác";
+    if (!grouped[brand]) grouped[brand] = { brandName: brand, totalQuantity: 0, drinks: {}, users: [] };
+    grouped[brand].totalQuantity += order.quantity;
+    grouped[brand].users.push({
+      memberId: order.memberId,
+      memberName: order.memberName,
+      drinkId: order.drinkId,
+      drinkName: order.drinkName,
+      quantity: order.quantity,
+      updatedAt: order.updatedAt
+    });
+    if (!grouped[brand].drinks[order.drinkId]) {
+      grouped[brand].drinks[order.drinkId] = {
+        drinkId: order.drinkId,
+        drinkName: order.drinkName,
+        totalQuantity: 0
+      };
+    }
+    grouped[brand].drinks[order.drinkId].totalQuantity += order.quantity;
+  });
+  const groupedByBrand = Object.values(grouped).map((item) => ({
+    brandName: item.brandName,
+    totalQuantity: item.totalQuantity,
+    drinks: Object.values(item.drinks).sort((a, b) => b.totalQuantity - a.totalQuantity),
+    users: item.users.sort((a, b) => a.memberName.localeCompare(b.memberName))
+  }));
+  return {
+    eventId: detail.eventId,
+    eventName: detail.eventName,
+    date: detail.date,
+    description: detail.description,
+    groupedByBrand,
+    allOrders: detail.orders.sort((a, b) => a.memberName.localeCompare(b.memberName))
+  };
 }
 
 async function respondToSession({ sessionId, memberName, status, pollAnswer }) {
@@ -1339,7 +1676,25 @@ async function getMonthlyReport(month) {
 }
 
 async function getSnapshotForSheetSync() {
-  const [settings, members, sessions, participants, sessionParticipants, polls, pollAnswers, payments, expenses, expenseParticipants, debts, pairHistory, generatedMatches] =
+  const [
+    settings,
+    members,
+    sessions,
+    participants,
+    sessionParticipants,
+    polls,
+    pollAnswers,
+    payments,
+    expenses,
+    expenseParticipants,
+    debts,
+    pairHistory,
+    generatedMatches,
+    birthdayEvents,
+    birthdayEventBrands,
+    birthdayEventDrinks,
+    birthdayDrinkOrders
+  ] =
     await Promise.all([
       getSettings(),
       query(`SELECT * FROM members ORDER BY name ASC`),
@@ -1353,7 +1708,11 @@ async function getSnapshotForSheetSync() {
       query(`SELECT * FROM expense_participants ORDER BY id ASC`),
       query(`SELECT * FROM debts ORDER BY member_name ASC`),
       query(`SELECT * FROM match_pair_history ORDER BY id ASC`),
-      query(`SELECT * FROM generated_matches ORDER BY match_date ASC, round ASC, match_no ASC`)
+      query(`SELECT * FROM generated_matches ORDER BY match_date ASC, round ASC, match_no ASC`),
+      query(`SELECT * FROM birthday_events ORDER BY event_date DESC, created_at DESC`),
+      query(`SELECT * FROM birthday_event_brands ORDER BY event_id ASC, sort_order ASC, id ASC`),
+      query(`SELECT * FROM birthday_event_drinks ORDER BY event_id ASC, brand_name ASC, sort_order ASC, drink_name ASC`),
+      query(`SELECT * FROM birthday_drink_orders ORDER BY event_id ASC, member_name ASC`)
     ]);
 
   return {
@@ -1363,6 +1722,7 @@ async function getSnapshotForSheetSync() {
       name: row.name,
       type: row.type,
       gender: row.gender || "",
+      birthday: row.birthday || "",
       level: normalizeLevel(row.level),
       active: row.active ? "TRUE" : "FALSE",
       phoneNumber: row.phone_number || "",
@@ -1471,6 +1831,42 @@ async function getSnapshotForSheetSync() {
       status: row.status || "scheduled",
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
       updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
+    })),
+    birthdayEvents: birthdayEvents.rows.map((row) => ({
+      eventId: row.event_id,
+      eventName: row.event_name,
+      date: row.event_date,
+      description: row.description || "",
+      createdBy: row.created_by || "admin",
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
+    })),
+    birthdayEventBrands: birthdayEventBrands.rows.map((row) => ({
+      id: toNumber(row.id),
+      eventId: row.event_id,
+      brandName: row.brand_name,
+      sortOrder: toNumber(row.sort_order)
+    })),
+    birthdayEventDrinks: birthdayEventDrinks.rows.map((row) => ({
+      drinkId: row.drink_id,
+      eventId: row.event_id,
+      brandName: row.brand_name,
+      drinkName: row.drink_name,
+      price: row.price === null || row.price === undefined ? null : toNumber(row.price),
+      imageUrl: row.image_url || "",
+      isActive: row.is_active ? "TRUE" : "FALSE",
+      sortOrder: toNumber(row.sort_order),
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
+    })),
+    birthdayDrinkOrders: birthdayDrinkOrders.rows.map((row) => ({
+      id: toNumber(row.id),
+      eventId: row.event_id,
+      memberId: row.member_id,
+      memberName: row.member_name,
+      drinkId: row.drink_id,
+      quantity: toNumber(row.quantity, 1),
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
     }))
   };
 }
@@ -1480,6 +1876,10 @@ async function replaceAllDataFromSnapshot(snapshot) {
   try {
     await client.query("BEGIN");
     await client.query("DELETE FROM generated_matches");
+    await client.query("DELETE FROM birthday_drink_orders");
+    await client.query("DELETE FROM birthday_event_drinks");
+    await client.query("DELETE FROM birthday_event_brands");
+    await client.query("DELETE FROM birthday_events");
     await client.query("DELETE FROM match_pair_history");
     await client.query("DELETE FROM debts");
     await client.query("DELETE FROM payments");
@@ -1503,14 +1903,15 @@ async function replaceAllDataFromSnapshot(snapshot) {
     for (const row of snapshot.members || []) {
       await client.query(
         `
-        INSERT INTO members(member_id, name, type, gender, level, active, phone_number, zalo_id, created_at, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        INSERT INTO members(member_id, name, type, gender, birthday, level, active, phone_number, zalo_id, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
         `,
         [
           String(row.memberId || "").trim() || buildMemberId(row.name || "", 0),
           String(row.name || "").trim(),
           String(row.type || "Cố định").trim() || "Cố định",
           String(row.gender || "").trim(),
+          normalizeBirthday(row.birthday || row.birthDay),
           normalizeLevel(row.level),
           String(row.active || "TRUE").toUpperCase() !== "FALSE",
           normalizePhone(row.phoneNumber || row.phone_number),
@@ -1725,6 +2126,72 @@ async function replaceAllDataFromSnapshot(snapshot) {
       );
     }
 
+    for (const row of snapshot.birthdayEvents || []) {
+      await client.query(
+        `
+        INSERT INTO birthday_events(event_id, event_name, event_date, description, created_by, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `,
+        [
+          String(row.eventId || "").trim(),
+          String(row.eventName || "").trim(),
+          String(row.date || "").trim(),
+          String(row.description || "").trim(),
+          String(row.createdBy || "admin").trim() || "admin",
+          String(row.createdAt || nowIso()),
+          String(row.updatedAt || nowIso())
+        ]
+      );
+    }
+
+    for (const row of snapshot.birthdayEventBrands || []) {
+      await client.query(
+        `
+        INSERT INTO birthday_event_brands(event_id, brand_name, sort_order)
+        VALUES ($1,$2,$3)
+        `,
+        [String(row.eventId || "").trim(), String(row.brandName || "").trim(), Math.round(toNumber(row.sortOrder))]
+      );
+    }
+
+    for (const row of snapshot.birthdayEventDrinks || []) {
+      await client.query(
+        `
+        INSERT INTO birthday_event_drinks(drink_id, event_id, brand_name, drink_name, price, image_url, is_active, sort_order, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        `,
+        [
+          String(row.drinkId || "").trim(),
+          String(row.eventId || "").trim(),
+          String(row.brandName || "").trim(),
+          String(row.drinkName || "").trim(),
+          row.price === null || row.price === undefined || String(row.price).trim() === "" ? null : Math.round(toNumber(row.price)),
+          String(row.imageUrl || row.image_url || "").trim(),
+          String(row.isActive || "TRUE").toUpperCase() !== "FALSE",
+          Math.round(toNumber(row.sortOrder)),
+          String(row.createdAt || nowIso()),
+          String(row.updatedAt || nowIso())
+        ]
+      );
+    }
+
+    for (const row of snapshot.birthdayDrinkOrders || []) {
+      await client.query(
+        `
+        INSERT INTO birthday_drink_orders(event_id, member_id, member_name, drink_id, quantity, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6)
+        `,
+        [
+          String(row.eventId || "").trim(),
+          String(row.memberId || "").trim(),
+          String(row.memberName || "").trim(),
+          String(row.drinkId || "").trim(),
+          Math.max(1, Math.round(toNumber(row.quantity, 1))),
+          String(row.updatedAt || nowIso())
+        ]
+      );
+    }
+
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
@@ -1752,6 +2219,11 @@ module.exports = {
   updateMemberLevel,
   createMember,
   updateMemberProfile,
+  createBirthdayEvent,
+  getBirthdayEvents,
+  getBirthdayEventDetail,
+  upsertBirthdayDrinkSelection,
+  getBirthdayEventAdminView,
   respondToSession,
   answerPoll,
   addGuestToSession,

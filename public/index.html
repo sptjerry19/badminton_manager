@@ -154,6 +154,7 @@
                     <th class="border border-slate-200 px-2 py-1 text-left">Tên</th>
                     <th class="border border-slate-200 px-2 py-1 text-left">Loại</th>
                     <th class="border border-slate-200 px-2 py-1 text-left">Giới tính</th>
+                    <th class="border border-slate-200 px-2 py-1 text-left">Birthday</th>
                     <th class="border border-slate-200 px-2 py-1 text-left">SĐT</th>
                     <th class="border border-slate-200 px-2 py-1 text-left">Level</th>
                     <th class="border border-slate-200 px-2 py-1 text-left">Active</th>
@@ -163,6 +164,32 @@
                 <tbody id="memberLevelTable"></tbody>
               </table>
             </div>
+          </section>
+
+          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+            <h3 class="mb-3 text-lg font-semibold">Birthday Drink Event</h3>
+            <form id="birthdayEventForm" class="space-y-3">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <input id="birthdayEventNameInput" placeholder="Tên event (VD: Sinh nhật tháng 5)" class="rounded-lg border border-slate-300 px-3 py-2" required />
+                <input id="birthdayEventDateInput" type="date" class="rounded-lg border border-slate-300 px-3 py-2" required />
+                <input id="birthdayEventBrandsInput" placeholder="Brands, cách nhau dấu phẩy" class="rounded-lg border border-slate-300 px-3 py-2" />
+              </div>
+              <textarea id="birthdayEventDescriptionInput" rows="2" placeholder="Mô tả (optional)" class="w-full rounded-lg border border-slate-300 px-3 py-2"></textarea>
+              <textarea
+                id="birthdayEventMenuInput"
+                rows="6"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
+                placeholder="Mỗi dòng: Brand|Tên món|Giá|ImageURL&#10;VD: Highlands Coffee|Freeze Trà Xanh|55000|https://images.unsplash.com/..."
+              ></textarea>
+              <button class="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white">Tạo Birthday Event</button>
+              <p id="birthdayEventMessage" class="text-sm"></p>
+            </form>
+
+            <div class="mt-4 flex flex-wrap items-center gap-2">
+              <select id="birthdayAdminEventSelect" class="rounded-lg border border-slate-300 px-3 py-2 text-sm"></select>
+              <button id="loadBirthdayAdminViewBtn" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">Xem tổng hợp</button>
+            </div>
+            <div id="birthdayAdminSummary" class="mt-3 space-y-3"></div>
           </section>
 
           <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
@@ -477,6 +504,18 @@
           </section>
 
           <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+            <h3 class="mb-3 text-lg font-semibold">Birthday Drink Event</h3>
+            <div class="mb-3 flex flex-wrap items-center gap-2">
+              <select id="birthdayUserEventSelect" class="rounded-lg border border-slate-300 px-3 py-2 text-sm"></select>
+              <button id="reloadBirthdayEventBtn" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">Reload</button>
+            </div>
+            <p id="birthdayUserEventInfo" class="text-sm text-slate-600"></p>
+            <div id="birthdayBrandTabs" class="mt-3 flex gap-2 overflow-x-auto pb-1"></div>
+            <div id="birthdayDrinkGrid" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"></div>
+            <p id="birthdayUserMessage" class="mt-2 text-sm"></p>
+          </section>
+
+          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
             <h3 class="mb-3 text-lg font-semibold">Công nợ cá nhân</h3>
             <div id="myDebtCard" class="text-sm"></div>
             <div id="myDebtQrActions" class="mt-3"></div>
@@ -629,6 +668,10 @@
                 <option value="Nam">Nam</option>
                 <option value="Nữ">Nữ</option>
               </select>
+            </label>
+            <label class="text-sm">
+              <span class="mb-1 block font-medium">Birthday</span>
+              <input id="memberBirthdayInput" type="date" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
             </label>
             <label class="text-sm">
               <span class="mb-1 block font-medium">Số điện thoại</span>
