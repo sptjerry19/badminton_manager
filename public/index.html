@@ -69,6 +69,22 @@
         </section>
 
         <section id="adminSection" class="hidden space-y-5">
+          <div class="mb-2 flex flex-wrap items-center gap-2">
+            <button id="adminTabCourtBtn" type="button" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">
+              Court
+            </button>
+            <button id="adminTabExpensesBtn" type="button" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">
+              Expenses
+            </button>
+            <button id="adminTabGamesBtn" type="button" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">
+              Games
+            </button>
+            <button id="adminTabToolsBtn" type="button" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">
+              Tools
+            </button>
+          </div>
+
+          <div id="courtTabContent" class="space-y-5">
           <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
             <h3 class="mb-3 text-lg font-semibold">Quản trị dữ liệu</h3>
             <div class="flex flex-wrap gap-3">
@@ -208,7 +224,87 @@
             <div id="matchResultTables" class="mt-3 space-y-3"></div>
           </section>
 
-          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+          </div>
+
+          <div id="expensesTabContent" class="hidden space-y-5">
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-3 text-lg font-semibold">Chi phí phát sinh</h3>
+              <form id="expenseForm" class="space-y-3">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <select id="expenseSessionSelect" class="rounded-lg border border-slate-300 px-3 py-2"></select>
+                  <input
+                    id="expenseNameInput"
+                    placeholder="Tên chi phí (vd: nhậu, nước)"
+                    class="rounded-lg border border-slate-300 px-3 py-2"
+                    required
+                  />
+                  <input
+                    id="expenseTotalAmountInput"
+                    type="number"
+                    min="1"
+                    placeholder="Tổng tiền"
+                    class="rounded-lg border border-slate-300 px-3 py-2"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <h4 class="mb-2 font-medium">Participants</h4>
+                  <div id="expenseParticipantsContainer" class="grid grid-cols-1 gap-2 sm:grid-cols-2"></div>
+                  <div class="mt-3 flex flex-wrap items-end gap-2">
+                    <input
+                      id="expenseGuestNameInput"
+                      placeholder="Tên GL cần chia tiền"
+                      class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    />
+                    <button
+                      id="addExpenseGuestBtn"
+                      type="button"
+                      class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                    >
+                      + Thêm GL
+                    </button>
+                  </div>
+                  <p class="mt-2 text-sm text-slate-500">Mặc định sẽ chọn tất cả participants của buổi.</p>
+                </div>
+
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div class="rounded-lg bg-slate-100 p-3 text-sm">
+                    <div class="text-xs text-slate-600">Split method</div>
+                    <select id="expenseSplitMethodInput" disabled class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                      <option value="equal">Equal split</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap justify-end gap-2">
+                  <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                    Lưu chi phí
+                  </button>
+                </div>
+                <p id="expenseMessage" class="text-sm"></p>
+              </form>
+            </section>
+
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-3 text-lg font-semibold">Lịch sử chi phí phát sinh</h3>
+              <div class="mt-2 overflow-x-auto">
+                <table class="min-w-full border border-slate-200 text-sm">
+                  <thead class="bg-slate-100">
+                    <tr>
+                      <th class="border border-slate-200 px-2 py-1 text-left">Ngày</th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">Nội dung</th>
+                      <th class="border border-slate-200 px-2 py-1 text-right">Tổng</th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">Participants</th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">Tạo lúc</th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminExpensesTableBody"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
             <h3 class="mb-3 text-lg font-semibold">Ghi nhận thanh toán</h3>
             <form id="paymentForm" class="grid grid-cols-1 gap-3 sm:grid-cols-5">
               <input id="paymentDateInput" type="date" class="rounded-lg border border-slate-300 px-3 py-2" required />
@@ -218,6 +314,21 @@
               <button class="rounded-lg bg-indigo-600 px-4 py-2 text-white">Lưu</button>
             </form>
             <p id="paymentMessage" class="mt-2 text-sm"></p>
+            <div class="mt-4 overflow-x-auto">
+              <h4 class="mb-2 font-medium">Lịch sử thanh toán</h4>
+              <table class="min-w-full border border-slate-200 text-sm">
+                <thead class="bg-slate-100">
+                  <tr>
+                    <th class="border border-slate-200 px-2 py-1 text-left">Ngày</th>
+                    <th class="border border-slate-200 px-2 py-1 text-left">Thành viên</th>
+                    <th class="border border-slate-200 px-2 py-1 text-right">Số tiền</th>
+                    <th class="border border-slate-200 px-2 py-1 text-left">Ghi chú</th>
+                    <th class="border border-slate-200 px-2 py-1 text-left">Tạo lúc</th>
+                  </tr>
+                </thead>
+                <tbody id="adminPaymentsTableBody"></tbody>
+              </table>
+            </div>
           </section>
 
           <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
@@ -283,6 +394,77 @@
               </div>
             </div>
           </section>
+          </div>
+
+          <div id="gamesTabContent" class="hidden space-y-5">
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-2 text-lg font-semibold">Games</h3>
+              <p class="text-sm text-slate-600">Chưa có module game nào trong hệ thống (placeholder).</p>
+              <div class="mt-3 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                Empty state: danh sách games đang trống.
+              </div>
+            </section>
+          </div>
+
+          <div id="toolsTabContent" class="hidden space-y-5">
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-3 text-lg font-semibold">Tools - Convert HTML to Ink Button</h3>
+              <form id="htmlConvertForm" class="space-y-3">
+                <div>
+                  <label for="htmlConvertInput" class="mb-1 block text-sm font-medium">HTML input</label>
+                  <textarea
+                    id="htmlConvertInput"
+                    rows="8"
+                    placeholder="<div>...</div>"
+                    class="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
+                    required
+                  ></textarea>
+                </div>
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label for="htmlConvertTextInputCTA1" class="mb-1 block text-sm font-medium">Text cần chuyển thành button CTA 1</label>
+                    <input
+                      id="htmlConvertTextInputCTA1"
+                      placeholder="Mua ngay"
+                      class="w-full rounded-lg border border-slate-300 px-3 py-2"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label for="htmlConvertTextInputCTA2" class="mb-1 block text-sm font-medium">Text cần chuyển thành button CTA 2</label>
+                    <input
+                      id="htmlConvertTextInputCTA2"
+                      placeholder="Mua ngay"
+                      class="w-full rounded-lg border border-slate-300 px-3 py-2"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label for="htmlConvertVariantIdInput" class="mb-1 block text-sm font-medium">Variant ID</label>
+                    <input
+                      id="htmlConvertVariantIdInput"
+                      placeholder="51183887417659"
+                      class="w-full rounded-lg border border-slate-300 px-3 py-2"
+                      required
+                    />
+                  </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <button id="htmlConvertBtn" type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white">Convert</button>
+                </div>
+              </form>
+              <p id="htmlConvertMessage" class="mt-2 text-sm"></p>
+              <div class="mt-3">
+                <label for="htmlConvertOutput" class="mb-1 block text-sm font-medium">Output HTML</label>
+                <textarea
+                  id="htmlConvertOutput"
+                  rows="14"
+                  readonly
+                  class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-sm"
+                ></textarea>
+              </div>
+            </section>
+          </div>
         </section>
 
         <section id="userSection" class="hidden space-y-5">

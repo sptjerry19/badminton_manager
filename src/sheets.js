@@ -19,6 +19,8 @@ const SHEETS = {
   pollAnswers: "PollAnswers",
   payments: "Payments",
   debts: "Debts",
+  expenses: "Expenses",
+  expenseParticipants: "ExpenseParticipants",
   matchPairHistory: "MatchPairHistory"
 };
 
@@ -44,6 +46,8 @@ const HEADERS = {
   PollAnswers: ["pollId", "sessionId", "memberId", "memberName", "answer", "answeredAt"],
   Payments: ["paymentId", "date", "memberId", "memberName", "amount", "note", "createdAt"],
   Debts: ["memberId", "memberName", "totalDue", "totalPaid", "balance", "lastUpdated"],
+  Expenses: ["expenseId", "sessionId", "date", "name", "totalAmount", "splitMethod", "note", "createdAt"],
+  ExpenseParticipants: ["expenseId", "memberId", "memberName", "memberNameCi", "shareAmount", "splitMethod", "createdAt"],
   MatchPairHistory: ["sessionId", "round", "pairKey", "memberA", "memberB", "createdAt"]
 };
 
@@ -78,6 +82,12 @@ function buildMemberId(name, index = 0) {
 
 function safeLower(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function buildDebtMemberIdFromName(name) {
+  const key = safeLower(name);
+  const hash = crypto.createHash("sha1").update(key).digest("hex");
+  return `d_${hash.slice(0, 12)}`;
 }
 
 function dateTimeKey(date, time = "00:00") {
@@ -268,6 +278,8 @@ async function initializeSpreadsheet() {
     ensureHeader(SHEETS.pollAnswers, HEADERS.PollAnswers),
     ensureHeader(SHEETS.payments, HEADERS.Payments),
     ensureHeader(SHEETS.debts, HEADERS.Debts),
+    ensureHeader(SHEETS.expenses, HEADERS.Expenses),
+    ensureHeader(SHEETS.expenseParticipants, HEADERS.ExpenseParticipants),
     ensureHeader(SHEETS.matchPairHistory, HEADERS.MatchPairHistory)
   ]);
 
@@ -691,11 +703,12 @@ async function addPayment({ date, memberName, amount, note }) {
 }
 
 async function recomputeDebts() {
-  const [allMembers, activeFixedMembers, legacyParticipants, paymentRows] = await Promise.all([
+  const [allMembers, activeFixedMembers, legacyParticipants, paymentRows, expenseParticipantRows] = await Promise.all([
     getMembers(),
     getActiveFixedMembers(),
     rowsToObjects(await readRows(`${SHEETS.participants}!A1:H50000`)),
-    rowsToObjects(await readRows(`${SHEETS.payments}!A1:G30000`))
+    rowsToObjects(await readRows(`${SHEETS.payments}!A1:G30000`)),
+    rowsToObjects(await readRows(`${SHEETS.expenseParticipants}!A1:G30000`))
   ]);
 
   const memberById = {};
@@ -712,6 +725,13 @@ async function recomputeDebts() {
     const present = String(row.present || "TRUE").toUpperCase() !== "FALSE";
     if (!present) return;
     dueByName[name] = (dueByName[name] || 0) + Math.round(toNumber(row.amount));
+  });
+
+  // Expense phát sinh: shareAmount sẽ được cộng vào debt system.
+  expenseParticipantRows.forEach((row) => {
+    const name = String(row.memberName || "").trim() || String(row.member_name || "").trim();
+    if (!name) return;
+    dueByName[name] = (dueByName[name] || 0) + Math.round(toNumber(row.shareAmount));
   });
 
   const paidByName = {};
@@ -733,7 +753,7 @@ async function recomputeDebts() {
       const totalDue = Math.round(dueByName[name] || 0);
       const totalPaid = Math.round(paidByName[name] || 0);
       return {
-        memberId: member?.memberId || "",
+        memberId: member?.memberId || buildDebtMemberIdFromName(name),
         memberName: member?.name || name,
         totalDue,
         totalPaid,
@@ -834,12 +854,13 @@ async function recordMatchPairs(sessionId, rounds, buildPairKey) {
 
 async function getMonthlyReport(month) {
   const safeMonth = parseCsvMonth(month);
-  const [members, sessions, settlementParticipants, payments, debts] = await Promise.all([
+  const [members, sessions, settlementParticipants, payments, debts, expenses] = await Promise.all([
     getActiveFixedMembers(),
     rowsToObjects(await readRows(`${SHEETS.sessions}!A1:K10000`)),
     rowsToObjects(await readRows(`${SHEETS.participants}!A1:H50000`)),
     rowsToObjects(await readRows(`${SHEETS.payments}!A1:G30000`)),
-    getDebts()
+    getDebts(),
+    rowsToObjects(await readRows(`${SHEETS.expenses}!A1:H100000`))
   ]);
 
   const settlementCountBySession = {};
@@ -855,7 +876,11 @@ async function getMonthlyReport(month) {
   );
   const monthlySessionIds = new Set(monthlySessions.map((session) => String(session.sessionId || "").trim()));
   const totalSessions = monthlySessions.length;
-  const totalMonthlyCost = monthlySessions.reduce((sum, session) => sum + Math.round(toNumber(session.totalCost)), 0);
+  const totalCourtCost = monthlySessions.reduce((sum, session) => sum + Math.round(toNumber(session.totalCost)), 0);
+  const totalExpensesCost = expenses
+    .filter((exp) => String(exp.date || "").startsWith(safeMonth))
+    .reduce((sum, exp) => sum + Math.round(toNumber(exp.totalAmount)), 0);
+  const totalMonthlyCost = totalCourtCost + totalExpensesCost;
 
   const attendanceYesByMember = {};
   settlementParticipants.forEach((item) => {
@@ -923,6 +948,8 @@ async function getSnapshotFromSheets() {
     pollAnswers: rowsToObjects(await readRows(`${SHEETS.pollAnswers}!A1:F100000`)),
     payments: rowsToObjects(await readRows(`${SHEETS.payments}!A1:G100000`)),
     debts: rowsToObjects(await readRows(`${SHEETS.debts}!A1:F100000`)),
+    expenses: rowsToObjects(await readRows(`${SHEETS.expenses}!A1:H100000`)),
+    expenseParticipants: rowsToObjects(await readRows(`${SHEETS.expenseParticipants}!A1:G100000`)),
     matchPairHistory: rowsToObjects(await readRows(`${SHEETS.matchPairHistory}!A1:F100000`))
   };
 }
@@ -942,6 +969,12 @@ async function syncSnapshotToSheets(snapshot) {
   await rewriteSheet(SHEETS.pollAnswers, HEADERS.PollAnswers, snapshot.pollAnswers || []);
   await rewriteSheet(SHEETS.payments, HEADERS.Payments, snapshot.payments || []);
   await rewriteSheet(SHEETS.debts, HEADERS.Debts, snapshot.debts || []);
+  await rewriteSheet(SHEETS.expenses, HEADERS.Expenses, snapshot.expenses || []);
+  await rewriteSheet(
+    SHEETS.expenseParticipants,
+    HEADERS.ExpenseParticipants,
+    snapshot.expenseParticipants || []
+  );
   await rewriteSheet(
     SHEETS.matchPairHistory,
     HEADERS.MatchPairHistory,

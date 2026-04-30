@@ -3,6 +3,10 @@ const state = {
   auth: null,
   sessions: [],
   members: [],
+  adminPayments: [],
+  adminExpenses: [],
+  adminExpenseExtraGuests: [],
+  activeAdminTab: "court",
   activeVote: null,
   upcomingSessionId: "",
   selectedUserMatchDate: "",
@@ -76,6 +80,15 @@ function setMessage(id, message, isError = false) {
   if (!el) return;
   el.textContent = message || "";
   el.className = `text-sm ${isError ? "text-red-600" : "text-emerald-600"}`;
+}
+
+function escapeHtmlText(text) {
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function toggleLoginMode() {
@@ -193,9 +206,11 @@ function renderSessionSelect(sessions) {
   const matchSelect = document.getElementById("matchSessionSelect");
   const settleSelect = document.getElementById("settleSessionSelect");
   const attendanceSelect = document.getElementById("attendanceSessionSelect");
+  const expenseSelect = document.getElementById("expenseSessionSelect");
   matchSelect.innerHTML = "";
   settleSelect.innerHTML = "";
   attendanceSelect.innerHTML = "";
+  if (expenseSelect) expenseSelect.innerHTML = "";
   sessions.forEach((session) => {
     const optionText = `${session.date} ${session.time} - ${session.sessionId}${session.settled ? " (đã chốt)" : ""}`;
     const matchOption = document.createElement("option");
@@ -212,6 +227,13 @@ function renderSessionSelect(sessions) {
     attendanceOption.value = session.sessionId;
     attendanceOption.textContent = optionText;
     attendanceSelect.appendChild(attendanceOption);
+
+    if (expenseSelect) {
+      const expenseOption = document.createElement("option");
+      expenseOption.value = session.sessionId;
+      expenseOption.textContent = optionText;
+      expenseSelect.appendChild(expenseOption);
+    }
   });
 }
 
@@ -567,6 +589,190 @@ function renderMyPaymentsTable(rows = []) {
   });
 }
 
+function renderAdminPaymentsTable(rows = []) {
+  const tbody = document.getElementById("adminPaymentsTableBody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  if (!rows.length) {
+    tbody.innerHTML =
+      '<tr><td colspan="5" class="border border-slate-200 px-2 py-2 text-center text-slate-500">Chưa có dữ liệu.</td></tr>';
+    return;
+  }
+  rows.forEach((item) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="border border-slate-200 px-2 py-1">${item.date || "-"}</td>
+      <td class="border border-slate-200 px-2 py-1">${item.memberName || "-"}</td>
+      <td class="border border-slate-200 px-2 py-1 text-right">${formatMoney(item.amount || 0)}</td>
+      <td class="border border-slate-200 px-2 py-1">${item.note || "-"}</td>
+      <td class="border border-slate-200 px-2 py-1">${item.createdAt || "-"}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function getAdminPaymentsFilteredByInput() {
+  const all = state.adminPayments || [];
+  const memberName = String(document.getElementById("paymentMemberInput")?.value || "").trim().toLowerCase();
+  if (!memberName) return all;
+  return all.filter((p) => String(p.memberName || "").toLowerCase() === memberName);
+}
+
+function renderAdminPaymentsTableForCurrentInput() {
+  renderAdminPaymentsTable(getAdminPaymentsFilteredByInput());
+}
+
+function renderAdminExpensesTable(rows = []) {
+  const tbody = document.getElementById("adminExpensesTableBody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  if (!rows.length) {
+    tbody.innerHTML =
+      '<tr><td colspan="5" class="border border-slate-200 px-2 py-2 text-center text-slate-500">Chưa có dữ liệu.</td></tr>';
+    return;
+  }
+
+  rows.forEach((item) => {
+    const participantsText = (item.participants || [])
+      .map((p) => p.memberName)
+      .filter(Boolean)
+      .join(", ");
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="border border-slate-200 px-2 py-1">${item.date || "-"}</td>
+      <td class="border border-slate-200 px-2 py-1">${item.name || "-"}</td>
+      <td class="border border-slate-200 px-2 py-1 text-right">${formatMoney(item.totalAmount || 0)}</td>
+      <td class="border border-slate-200 px-2 py-1">${participantsText || "-"}</td>
+      <td class="border border-slate-200 px-2 py-1">${item.createdAt || "-"}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function activateAdminTab(tabId) {
+  state.activeAdminTab = tabId;
+
+  const contentDefs = {
+    court: "courtTabContent",
+    expenses: "expensesTabContent",
+    games: "gamesTabContent",
+    tools: "toolsTabContent"
+  };
+  Object.entries(contentDefs).forEach(([key, contentId]) => {
+    const el = document.getElementById(contentId);
+    if (!el) return;
+    el.classList.toggle("hidden", key !== tabId);
+  });
+
+  const btnDefs = {
+    court: "adminTabCourtBtn",
+    expenses: "adminTabExpensesBtn",
+    games: "adminTabGamesBtn",
+    tools: "adminTabToolsBtn"
+  };
+  Object.entries(btnDefs).forEach(([key, btnId]) => {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    const active = key === tabId;
+
+    btn.classList.toggle("bg-indigo-600", active);
+    btn.classList.toggle("text-white", active);
+    btn.classList.toggle("border-indigo-600", active);
+
+    btn.classList.toggle("border-slate-300", !active);
+    if (!active) {
+      btn.classList.add("bg-white", "text-slate-800");
+      btn.classList.remove("bg-indigo-600", "text-white");
+    } else {
+      btn.classList.remove("bg-white", "text-slate-800");
+      btn.classList.add("text-white");
+    }
+  });
+
+  if (tabId === "expenses") {
+    renderAdminPaymentsTableForCurrentInput();
+    renderAdminExpensesTable(state.adminExpenses || []);
+  }
+}
+
+async function loadExpenseParticipantsOptions(sessionId) {
+  const container = document.getElementById("expenseParticipantsContainer");
+  if (!container) return;
+  if (!sessionId) {
+    container.innerHTML = "";
+    return;
+  }
+
+  container.innerHTML = '<p class="text-sm text-slate-500">Đang tải participants...</p>';
+  try {
+    const data = await api(`/api/sessions/${encodeURIComponent(sessionId)}/participants`);
+    const sessionParticipants = data.participants || [];
+
+    const fixedOptions = (state.members || [])
+      .filter((m) => m.active && m.type === "Cố định")
+      .map((m) => ({
+        name: m.name,
+        label: "TV cố định"
+      }));
+
+    const glNames = sessionParticipants
+      .filter((p) => p.participantType === "GL")
+      .map((p) => p.memberName)
+      .filter(Boolean);
+
+    const byLower = new Map();
+    const toLower = (s) => String(s || "").trim().toLowerCase();
+    fixedOptions.forEach((opt) => byLower.set(toLower(opt.name), opt));
+    glNames.forEach((name) => {
+      const key = toLower(name);
+      if (!byLower.has(key)) byLower.set(key, { name, label: "GL" });
+    });
+
+    const options = Array.from(byLower.values());
+    const extra = Array.isArray(state.adminExpenseExtraGuests) ? state.adminExpenseExtraGuests : [];
+    extra.forEach((name) => {
+      const n = String(name || "").trim();
+      if (!n) return;
+      const key = toLower(n);
+      if (!byLower.has(key)) byLower.set(key, { name: n, label: "GL (manual)" });
+    });
+
+    const finalOptions = Array.from(byLower.values());
+
+    if (!finalOptions.length) {
+      container.innerHTML = '<p class="text-sm text-slate-500">Chưa có participants để chia chi phí.</p>';
+      return;
+    }
+
+    container.innerHTML = "";
+    finalOptions.forEach((opt) => {
+      const label = document.createElement("label");
+      label.className = "flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm";
+
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.name = "expenseParticipant";
+      input.value = opt.name;
+      input.checked = true; // default: chọn tất cả
+
+      const nameSpan = document.createElement("span");
+      nameSpan.textContent = opt.name;
+
+      const badge = document.createElement("span");
+      badge.className = "text-xs text-slate-500";
+      badge.textContent = `(${opt.label})`;
+
+      label.appendChild(input);
+      label.appendChild(nameSpan);
+      label.appendChild(badge);
+      container.appendChild(label);
+    });
+  } catch (error) {
+    container.innerHTML = `<p class="text-sm text-red-600">${error.message}</p>`;
+  }
+}
+
 async function loadAdminAttendanceTable() {
   const sessionId = document.getElementById("attendanceSessionSelect")?.value;
   if (!sessionId) {
@@ -593,10 +799,21 @@ async function loadLoginOptions() {
 async function loadAdminDashboard() {
   const data = await api("/api/bootstrap");
   state.members = data.members || [];
+  state.adminPayments = data.payments || [];
+  state.adminExpenses = data.expenses || [];
   renderRoleHeader(data.auth);
   renderMemberLevels(state.members);
   renderSettleFixedMembers(state.members);
   renderSessionSelect(data.sessions || []);
+
+  const expenseSessionId = document.getElementById("expenseSessionSelect")?.value || "";
+  if (expenseSessionId) {
+    await loadExpenseParticipantsOptions(expenseSessionId);
+  }
+
+  renderAdminExpensesTable(state.adminExpenses || []);
+  activateAdminTab(state.activeAdminTab || "court");
+
   const selectedSessionId = document.getElementById("matchSessionSelect")?.value || "";
   const selectedSession = state.sessions.find((item) => item.sessionId === selectedSessionId);
   if (selectedSession?.date) {
@@ -606,6 +823,7 @@ async function loadAdminDashboard() {
     renderMatchTables([]);
   }
   await loadAdminAttendanceTable();
+  renderAdminPaymentsTableForCurrentInput();
   document.getElementById("preDateInput").value = new Date().toISOString().slice(0, 10);
   document.getElementById("paymentDateInput").value = new Date().toISOString().slice(0, 10);
 }
@@ -629,10 +847,21 @@ async function loadDashboard() {
   state.auth = data.auth;
   if (data.auth.role === "admin") {
     state.members = data.members || [];
+    state.adminPayments = data.payments || [];
+    state.adminExpenses = data.expenses || [];
     renderRoleHeader(data.auth);
     renderMemberLevels(state.members);
     renderSettleFixedMembers(state.members);
     renderSessionSelect(data.sessions || []);
+
+    const expenseSessionId = document.getElementById("expenseSessionSelect")?.value || "";
+    if (expenseSessionId) {
+      await loadExpenseParticipantsOptions(expenseSessionId);
+    }
+
+    renderAdminExpensesTable(state.adminExpenses || []);
+    activateAdminTab(state.activeAdminTab || "court");
+
     const selectedSessionId = document.getElementById("matchSessionSelect")?.value || "";
     const selectedSession = state.sessions.find((item) => item.sessionId === selectedSessionId);
     if (selectedSession?.date) {
@@ -642,6 +871,7 @@ async function loadDashboard() {
       renderMatchTables([]);
     }
     await loadAdminAttendanceTable();
+    renderAdminPaymentsTableForCurrentInput();
     document.getElementById("preDateInput").value = new Date().toISOString().slice(0, 10);
     document.getElementById("paymentDateInput").value = new Date().toISOString().slice(0, 10);
   } else {
@@ -691,6 +921,11 @@ function bindEvents() {
     await api("/api/logout", { method: "POST" });
     showLoginMode();
   });
+
+  document.getElementById("adminTabCourtBtn")?.addEventListener("click", () => activateAdminTab("court"));
+  document.getElementById("adminTabExpensesBtn")?.addEventListener("click", () => activateAdminTab("expenses"));
+  document.getElementById("adminTabGamesBtn")?.addEventListener("click", () => activateAdminTab("games"));
+  document.getElementById("adminTabToolsBtn")?.addEventListener("click", () => activateAdminTab("tools"));
 
   document.getElementById("refreshMembersBtn")?.addEventListener("click", loadAdminDashboard);
   document.getElementById("migrateSheetsBtn")?.addEventListener("click", async () => {
@@ -932,6 +1167,120 @@ function bindEvents() {
     }
   });
 
+  document.getElementById("expenseSessionSelect")?.addEventListener("change", async () => {
+    state.adminExpenseExtraGuests = [];
+    document.getElementById("expenseGuestNameInput") && (document.getElementById("expenseGuestNameInput").value = "");
+    const sessionId = document.getElementById("expenseSessionSelect").value;
+    await loadExpenseParticipantsOptions(sessionId);
+  });
+
+  document.getElementById("addExpenseGuestBtn")?.addEventListener("click", () => {
+    const nameInput = document.getElementById("expenseGuestNameInput");
+    const name = String(nameInput?.value || "").trim();
+    if (!name) {
+      setMessage("expenseMessage", "Vui lòng nhập tên GL.", true);
+      return;
+    }
+
+    const container = document.getElementById("expenseParticipantsContainer");
+    if (!container) return;
+
+    const key = String(name || "").trim().toLowerCase();
+    const existing = Array.from(container.querySelectorAll('input[name="expenseParticipant"]')).find(
+      (el) => String(el.value || "").trim().toLowerCase() === key
+    );
+    if (existing) {
+      existing.checked = true;
+      nameInput.value = "";
+      return;
+    }
+
+    state.adminExpenseExtraGuests = Array.isArray(state.adminExpenseExtraGuests) ? state.adminExpenseExtraGuests : [];
+    state.adminExpenseExtraGuests.push(name);
+
+    const label = document.createElement("label");
+    label.className = "flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = "expenseParticipant";
+    input.value = name;
+    input.checked = true;
+
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = name;
+
+    const badge = document.createElement("span");
+    badge.className = "text-xs text-slate-500";
+    badge.textContent = "(GL)";
+
+    label.appendChild(input);
+    label.appendChild(nameSpan);
+    label.appendChild(badge);
+    container.appendChild(label);
+
+    nameInput.value = "";
+    setMessage("expenseMessage", "", false);
+  });
+
+  document.getElementById("htmlConvertForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    try {
+      const htmlInput = document.getElementById("htmlConvertInput")?.value || "";
+      const buttonTextCTA1 = document.getElementById("htmlConvertTextInputCTA1")?.value?.trim() || "";
+      const buttonTextCTA2 = document.getElementById("htmlConvertTextInputCTA2")?.value?.trim() || "";
+      const variantId = document.getElementById("htmlConvertVariantIdInput")?.value?.trim() || "";
+
+      if (!htmlInput.trim()) throw new Error("Vui lòng nhập HTML input.");
+      if (!buttonTextCTA1) throw new Error("Vui lòng nhập text button CTA 1.");
+      if (!buttonTextCTA2) throw new Error("Vui lòng nhập text button CTA 2.");
+      if (!variantId) throw new Error("Vui lòng nhập variant ID.");
+
+      const safeTextCTA1 = escapeHtmlText(buttonTextCTA1);
+      const safeTextCTA2 = escapeHtmlText(buttonTextCTA2);
+      const safeVariantId = escapeHtmlText(variantId);
+
+      const buttonBlockCTA1 = `<button class="cta ink-button ink-button-yellow ink-animate-custom" data-variant-id="${safeVariantId}" data-qty="1" onclick="addToCart(this)">\n  <span class="ink-text">${safeTextCTA1}</span>\n  <span class="ink-loading" style="display:none;">\n    <span class="ink-spinner"></span>\n  </span>\n</button>`;
+      const buttonBlockCTA2 = `<button class="cta ink-button ink-button-yellow ink-animate-custom" data-variant-id="${safeVariantId}" data-qty="1" onclick="addToCart(this)">\n  <span class="ink-text">${safeTextCTA2}</span>\n  <span class="ink-loading" style="display:none;">\n    <span class="ink-spinner"></span>\n  </span>\n</button>`;
+
+      const scriptBlock = `<script>\nfunction addToCart(btn) {\n  const variantId = btn.dataset.variantId;\n  const qty = btn.dataset.qty || 1;\n  if (!variantId) {\n    console.error('Missing variant ID');\n    return;\n  }\n\n  // loading UI\n  const text = btn.querySelector('.ink-text');\n  const loading = btn.querySelector('.ink-loading');\n  if (text) text.style.display = 'none';\n  if (loading) loading.style.display = 'inline-flex';\n  btn.disabled = true;\n\n  fetch('/cart/add.js', {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({ id: variantId, quantity: qty })\n  })\n    .then(res => res.json())\n    .then(() => {\n      // 👉 mở cart hoặc redirect\n      window.location.href = '/cart';\n    })\n    .catch(err => {\n      console.error(err);\n    })\n    .finally(() => {\n      if (text) text.style.display = 'inline';\n      if (loading) loading.style.display = 'none';\n      btn.disabled = false;\n    });\n}\n</script>`;
+
+      // Ưu tiên thay đúng block có comment CTA: <!-- CTA #x --> + <a class="cta">...</a>
+      const ctaWithCommentPattern =
+        /(<!--\s*CTA\s*#\d+\s*-->)\s*<a\b[^>]*class=["'][^"']*\bcta\b[^"']*["'][^>]*>[\s\S]*?<\/a>/gi;
+      let replacedCount = 0;
+      let transformedHtml = htmlInput.replace(ctaWithCommentPattern, (_match, comment) => {
+        replacedCount += 1;
+        if (replacedCount === 1) {
+          return `${comment}\n${buttonBlockCTA1}`;
+        } else {
+          return `${comment}\n${buttonBlockCTA2}`;
+        }
+      });
+
+      // Fallback: nếu không có comment CTA thì thay toàn bộ <a class="cta">...</a>
+      if (replacedCount === 0) {
+        const ctaAnchorPattern = /<a\b[^>]*class=["'][^"']*\bcta\b[^"']*["'][^>]*>[\s\S]*?<\/a>/gi;
+        transformedHtml = transformedHtml.replace(ctaAnchorPattern, () => {
+          replacedCount += 1;
+          return buttonBlock;
+        });
+      }
+
+      const output = `${transformedHtml.trim()}\n\n${scriptBlock}`;
+      const outEl = document.getElementById("htmlConvertOutput");
+      if (outEl) outEl.value = output;
+      setMessage(
+        "htmlConvertMessage",
+        replacedCount > 0
+          ? `Đã convert thành công. Đã thay ${replacedCount} CTA.`
+          : "Không tìm thấy thẻ <a class=\"cta\"> nào để thay thế."
+      );
+    } catch (error) {
+      setMessage("htmlConvertMessage", error.message || "Convert thất bại.", true);
+    }
+  });
+
   document.getElementById("paymentForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
@@ -947,9 +1296,50 @@ function bindEvents() {
       setMessage("paymentMessage", "Đã lưu thanh toán.");
       document.getElementById("paymentAmountInput").value = "";
       document.getElementById("paymentNoteInput").value = "";
+      await loadAdminDashboard();
     } catch (error) {
       setMessage("paymentMessage", error.message, true);
     }
+  });
+
+  document.getElementById("expenseForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const sessionId = document.getElementById("expenseSessionSelect").value;
+      const name = document.getElementById("expenseNameInput").value.trim();
+      const totalAmount = Number(document.getElementById("expenseTotalAmountInput").value || 0);
+      const participants = Array.from(document.querySelectorAll('input[name="expenseParticipant"]:checked')).map(
+        (el) => el.value
+      );
+
+      if (!sessionId) throw new Error("Vui lòng chọn session.");
+      if (!name) throw new Error("Vui lòng nhập tên chi phí.");
+      if (!Number.isFinite(totalAmount) || totalAmount <= 0) throw new Error("Tổng chi phí phải > 0.");
+      if (!participants.length) throw new Error("Vui lòng chọn ít nhất 1 participant.");
+
+      await api("/api/expenses", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionId,
+          name,
+          totalAmount,
+          participants,
+          splitMethod: "equal"
+        })
+      });
+
+      setMessage("expenseMessage", "Đã lưu chi phí phát sinh.");
+      document.getElementById("expenseNameInput").value = "";
+      document.getElementById("expenseTotalAmountInput").value = "";
+
+      await loadAdminDashboard();
+    } catch (error) {
+      setMessage("expenseMessage", error.message, true);
+    }
+  });
+
+  document.getElementById("paymentMemberInput")?.addEventListener("input", () => {
+    if (state.adminPayments?.length) renderAdminPaymentsTableForCurrentInput();
   });
 
   document.getElementById("loadReportBtn").addEventListener("click", async () => {

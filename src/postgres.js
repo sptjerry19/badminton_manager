@@ -169,6 +169,29 @@ async function initializeDatabase() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS expenses (
+      expense_id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      name TEXT NOT NULL,
+      total_amount INTEGER NOT NULL DEFAULT 0,
+      split_method TEXT NOT NULL DEFAULT 'equal',
+      note TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS expense_participants (
+      id BIGSERIAL PRIMARY KEY,
+      expense_id TEXT NOT NULL,
+      member_id TEXT NOT NULL DEFAULT '',
+      member_name TEXT NOT NULL,
+      member_name_ci TEXT NOT NULL,
+      share_amount INTEGER NOT NULL DEFAULT 0,
+      split_method TEXT NOT NULL DEFAULT 'equal',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (expense_id, member_name_ci)
+    );
+
     CREATE TABLE IF NOT EXISTS debts (
       member_id TEXT PRIMARY KEY,
       member_name TEXT NOT NULL,
@@ -891,12 +914,152 @@ async function addPayment({ date, memberName, amount, note }) {
   await recomputeDebts();
 }
 
+function computeEqualShares(totalAmountRounded, participantCount) {
+  const count = Math.max(0, Number(participantCount || 0));
+  if (count <= 0) return [];
+  const base = Math.floor(totalAmountRounded / count);
+  const remainder = totalAmountRounded - base * count;
+  // Distribute remainder (+1) to the first `remainder` participants so that:
+  // sum(shares) == totalAmountRounded
+  return Array.from({ length: count }).map((_item, idx) => base + (idx < remainder ? 1 : 0));
+}
+
+function buildDebtMemberIdFromName(name) {
+  const key = safeLower(name);
+  const hash = crypto.createHash("sha1").update(key).digest("hex");
+  return `d_${hash.slice(0, 12)}`;
+}
+
+async function addExpense({ sessionId, name, totalAmount, participants, splitMethod, note }) {
+  const safeName = String(name || "").trim();
+  if (!safeName) throw new Error("Thiếu tên chi phí.");
+  const safeTotal = toNumber(totalAmount);
+  if (safeTotal <= 0) throw new Error("Tổng chi phí phải lớn hơn 0.");
+
+  const safeSessionId = String(sessionId || "").trim();
+  if (!safeSessionId) throw new Error("Thiếu sessionId cho chi phí.");
+  const targetSession = await getSessionById(safeSessionId);
+  if (!targetSession) throw new Error("Không tìm thấy buổi chơi để gắn chi phí.");
+
+  const safeSplitMethod = String(splitMethod || "equal").trim().toLowerCase();
+  if (safeSplitMethod !== "equal") throw new Error("Chỉ hỗ trợ split method = equal tại thời điểm hiện tại.");
+
+  const participantNames = Array.isArray(participants) ? participants.map((p) => String(p || "").trim()).filter(Boolean) : [];
+  if (!participantNames.length) throw new Error("Danh sách participants không được để trống.");
+
+  const totalRounded = Math.round(safeTotal);
+  const shares = computeEqualShares(totalRounded, participantNames.length);
+
+  const participantNamesLower = participantNames.map((p) => safeLower(p));
+  const membersResult = await query(
+    `SELECT member_id, name FROM members WHERE LOWER(name) = ANY($1::text[])`,
+    [participantNamesLower]
+  );
+
+  const memberByLower = {};
+  membersResult.rows.forEach((row) => {
+    memberByLower[safeLower(row.name)] = row;
+  });
+
+  const expenseId = crypto.randomUUID();
+  const ts = nowIso();
+
+  await query(
+    `
+      INSERT INTO expenses(expense_id, session_id, date, name, total_amount, split_method, note, created_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    `,
+    [expenseId, safeSessionId, targetSession.date, safeName, totalRounded, "equal", String(note || "").trim(), ts]
+  );
+
+  for (let i = 0; i < participantNames.length; i += 1) {
+    const pLower = participantNamesLower[i];
+    const member = memberByLower[pLower];
+    const memberName = participantNames[i];
+    await query(
+      `
+        INSERT INTO expense_participants(expense_id, member_id, member_name, member_name_ci, share_amount, split_method)
+        VALUES ($1,$2,$3,$4,$5,$6)
+        ON CONFLICT(expense_id, member_name_ci) DO UPDATE
+        SET member_id = EXCLUDED.member_id,
+            member_name = EXCLUDED.member_name,
+            share_amount = EXCLUDED.share_amount,
+            split_method = EXCLUDED.split_method
+      `,
+      [expenseId, member?.member_id || "", memberName, pLower, shares[i], "equal"]
+    );
+  }
+
+  await recomputeDebts();
+  return {
+    expenseId,
+    sessionId: safeSessionId,
+    date: targetSession.date,
+    name: safeName,
+    totalAmount: totalRounded,
+    splitMethod: "equal",
+    createdAt: ts
+  };
+}
+
+async function getExpenses(limit = 50) {
+  const safeLimit = Math.max(1, Number(limit || 50));
+  const expensesResult = await query(
+    `
+      SELECT *
+      FROM expenses
+      ORDER BY date DESC, created_at DESC
+      LIMIT $1
+    `,
+    [safeLimit]
+  );
+  const expenses = expensesResult.rows.map((row) => ({
+    expenseId: row.expense_id,
+    sessionId: row.session_id,
+    date: row.date || "",
+    name: row.name || "",
+    totalAmount: Math.round(toNumber(row.total_amount)),
+    splitMethod: row.split_method || "equal",
+    note: row.note || "",
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+  }));
+
+  if (!expenses.length) return [];
+
+  const expenseIds = expenses.map((e) => e.expenseId);
+  const participantsResult = await query(
+    `
+      SELECT expense_id, member_name, share_amount
+      FROM expense_participants
+      WHERE expense_id = ANY($1::text[])
+      ORDER BY created_at ASC
+    `,
+    [expenseIds]
+  );
+
+  const participantsByExpense = {};
+  participantsResult.rows.forEach((row) => {
+    const id = row.expense_id;
+    if (!participantsByExpense[id]) participantsByExpense[id] = [];
+    participantsByExpense[id].push({
+      memberName: row.member_name || "",
+      shareAmount: Math.round(toNumber(row.share_amount))
+    });
+  });
+
+  return expenses.map((e) => ({
+    ...e,
+    participants: participantsByExpense[e.expenseId] || []
+  }));
+}
+
 async function recomputeDebts() {
-  const [allMembers, activeFixedMembers, participantsResult, paymentsResult] = await Promise.all([
+  const [allMembers, activeFixedMembers, participantsResult, paymentsResult, expenseParticipantsResult] = await Promise.all([
     getMembers(),
     getActiveFixedMembers(),
     query(`SELECT * FROM participants`),
-    query(`SELECT * FROM payments`)
+    query(`SELECT * FROM payments`),
+    query(`SELECT * FROM expense_participants`)
   ]);
 
   const memberByName = {};
@@ -910,6 +1073,12 @@ async function recomputeDebts() {
     const name = String(row.name || "").trim();
     if (!name) return;
     dueByName[name] = (dueByName[name] || 0) + Math.round(toNumber(row.amount));
+  });
+
+  expenseParticipantsResult.rows.forEach((row) => {
+    const name = String(row.member_name || "").trim();
+    if (!name) return;
+    dueByName[name] = (dueByName[name] || 0) + Math.round(toNumber(row.share_amount));
   });
 
   const paidByName = {};
@@ -931,12 +1100,13 @@ async function recomputeDebts() {
     const member = memberByName[safeLower(name)] || null;
     const totalDue = Math.round(dueByName[name] || 0);
     const totalPaid = Math.round(paidByName[name] || 0);
+    const debtMemberId = member?.memberId || buildDebtMemberIdFromName(name);
     await query(
       `
       INSERT INTO debts(member_id, member_name, total_due, total_paid, balance, last_updated)
       VALUES ($1,$2,$3,$4,$5,$6)
       `,
-      [member?.memberId || "", member?.name || name, totalDue, totalPaid, totalDue - totalPaid, ts]
+      [debtMemberId, member?.name || name, totalDue, totalPaid, totalDue - totalPaid, ts]
     );
   }
 }
@@ -1099,19 +1269,22 @@ async function getGeneratedMatchesByDate(matchDate) {
 
 async function getMonthlyReport(month) {
   const safeMonth = parseCsvMonth(month);
-  const [members, sessionsResult, participantsResult, paymentsResult, debts] = await Promise.all([
+  const [members, sessionsResult, participantsResult, paymentsResult, debts, expensesResult] = await Promise.all([
     getActiveFixedMembers(),
     query(`SELECT * FROM sessions WHERE date LIKE $1`, [`${safeMonth}%`]),
     query(`SELECT * FROM participants WHERE date LIKE $1`, [`${safeMonth}%`]),
     query(`SELECT * FROM payments WHERE date LIKE $1`, [`${safeMonth}%`]),
-    getDebts()
+    getDebts(),
+    query(`SELECT * FROM expenses WHERE date LIKE $1`, [`${safeMonth}%`])
   ]);
 
   const settledSessionSet = new Set(participantsResult.rows.map((row) => row.session_id));
   const monthlySessions = sessionsResult.rows.filter((session) => settledSessionSet.has(session.session_id));
   const monthlySessionIds = new Set(monthlySessions.map((session) => session.session_id));
   const totalSessions = monthlySessions.length;
-  const totalMonthlyCost = monthlySessions.reduce((sum, session) => sum + Math.round(toNumber(session.total_cost)), 0);
+  const totalCourtCost = monthlySessions.reduce((sum, session) => sum + Math.round(toNumber(session.total_cost)), 0);
+  const totalExpensesCost = expensesResult.rows.reduce((sum, exp) => sum + Math.round(toNumber(exp.total_amount)), 0);
+  const totalMonthlyCost = totalCourtCost + totalExpensesCost;
 
   const attendanceYesByMember = {};
   participantsResult.rows.forEach((item) => {
@@ -1166,7 +1339,7 @@ async function getMonthlyReport(month) {
 }
 
 async function getSnapshotForSheetSync() {
-  const [settings, members, sessions, participants, sessionParticipants, polls, pollAnswers, payments, debts, pairHistory, generatedMatches] =
+  const [settings, members, sessions, participants, sessionParticipants, polls, pollAnswers, payments, expenses, expenseParticipants, debts, pairHistory, generatedMatches] =
     await Promise.all([
       getSettings(),
       query(`SELECT * FROM members ORDER BY name ASC`),
@@ -1176,6 +1349,8 @@ async function getSnapshotForSheetSync() {
       query(`SELECT * FROM polls ORDER BY created_at ASC`),
       query(`SELECT * FROM poll_answers ORDER BY id ASC`),
       query(`SELECT * FROM payments ORDER BY created_at ASC`),
+      query(`SELECT * FROM expenses ORDER BY created_at ASC`),
+      query(`SELECT * FROM expense_participants ORDER BY id ASC`),
       query(`SELECT * FROM debts ORDER BY member_name ASC`),
       query(`SELECT * FROM match_pair_history ORDER BY id ASC`),
       query(`SELECT * FROM generated_matches ORDER BY match_date ASC, round ASC, match_no ASC`)
@@ -1248,6 +1423,25 @@ async function getSnapshotForSheetSync() {
       note: row.note || "",
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
     })),
+    expenses: expenses.rows.map((row) => ({
+      expenseId: row.expense_id,
+      sessionId: row.session_id,
+      date: row.date,
+      name: row.name || "",
+      totalAmount: toNumber(row.total_amount),
+      splitMethod: row.split_method || "equal",
+      note: row.note || "",
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+    })),
+    expenseParticipants: expenseParticipants.rows.map((row) => ({
+      expenseId: row.expense_id,
+      memberId: row.member_id || "",
+      memberName: row.member_name || "",
+      memberNameCi: row.member_name_ci || "",
+      shareAmount: toNumber(row.share_amount),
+      splitMethod: row.split_method || "equal",
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+    })),
     debts: debts.rows.map((row) => ({
       memberId: row.member_id || "",
       memberName: row.member_name,
@@ -1290,6 +1484,8 @@ async function replaceAllDataFromSnapshot(snapshot) {
     await client.query("DELETE FROM debts");
     await client.query("DELETE FROM payments");
     await client.query("DELETE FROM participants");
+    await client.query("DELETE FROM expense_participants");
+    await client.query("DELETE FROM expenses");
     await client.query("DELETE FROM poll_answers");
     await client.query("DELETE FROM polls");
     await client.query("DELETE FROM session_participants");
@@ -1433,6 +1629,43 @@ async function replaceAllDataFromSnapshot(snapshot) {
       );
     }
 
+    for (const row of snapshot.expenses || []) {
+      await client.query(
+        `
+        INSERT INTO expenses(expense_id, session_id, date, name, total_amount, split_method, note, created_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        `,
+        [
+          String(row.expenseId || "").trim() || crypto.randomUUID(),
+          String(row.sessionId || "").trim(),
+          String(row.date || "").trim(),
+          String(row.name || "").trim(),
+          Math.round(toNumber(row.totalAmount)),
+          String(row.splitMethod || "equal").trim().toLowerCase() === "equal" ? "equal" : "equal",
+          String(row.note || "").trim(),
+          String(row.createdAt || nowIso())
+        ]
+      );
+    }
+
+    for (const row of snapshot.expenseParticipants || []) {
+      await client.query(
+        `
+        INSERT INTO expense_participants(expense_id, member_id, member_name, member_name_ci, share_amount, split_method, created_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `,
+        [
+          String(row.expenseId || "").trim(),
+          String(row.memberId || "").trim(),
+          String(row.memberName || "").trim(),
+          String(row.memberNameCi || row.memberName || "").trim().toLowerCase(),
+          Math.round(toNumber(row.shareAmount)),
+          String(row.splitMethod || "equal").trim().toLowerCase() === "equal" ? "equal" : "equal",
+          String(row.createdAt || nowIso())
+        ]
+      );
+    }
+
     for (const row of snapshot.debts || []) {
       await client.query(
         `
@@ -1523,9 +1756,11 @@ module.exports = {
   answerPoll,
   addGuestToSession,
   addPayment,
+  addExpense,
   recomputeDebts,
   getDebts,
   getPayments,
+  getExpenses,
   getMemberHistory,
   getPairHistoryCount,
   recordMatchPairs,

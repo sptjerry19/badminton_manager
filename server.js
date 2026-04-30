@@ -36,6 +36,8 @@ const {
   getPayments,
   getDebts,
   addPayment,
+  addExpense,
+  getExpenses,
   getSnapshotForSheetSync,
   replaceAllDataFromSnapshot
 } = require("./src/postgres");
@@ -178,18 +180,20 @@ app.get("/api/bootstrap", requireAuth, async (req, res) => {
     const role = req.session.role;
     const memberName = req.session.memberName || "";
     if (role === "admin") {
-      const [members, debts, sessions, payments] = await Promise.all([
+      const [members, debts, sessions, payments, expenses] = await Promise.all([
         getMembers(),
         getDebts(),
         getRecentSessions(30),
-        getPayments(100)
+        getPayments(100),
+        getExpenses(100)
       ]);
       return res.json({
         auth: { role },
         members,
         debts,
         sessions,
-        payments
+        payments,
+        expenses
       });
     }
 
@@ -507,6 +511,23 @@ app.post("/api/payments", requireAuth, requireRole(["admin"]), async (req, res) 
   }
 });
 
+app.post("/api/expenses", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const payload = {
+      sessionId: String(req.body?.sessionId || "").trim(),
+      name: String(req.body?.name || "").trim(),
+      totalAmount: req.body?.totalAmount,
+      participants: Array.isArray(req.body?.participants) ? req.body.participants : [],
+      splitMethod: String(req.body?.splitMethod || "equal").trim(),
+      note: String(req.body?.note || "").trim()
+    };
+    const expense = await addExpense(payload);
+    return res.json({ ok: true, message: "Đã ghi nhận chi phí phát sinh.", expense });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
 async function runSyncToSheets() {
   const snapshot = await getSnapshotForSheetSync();
   await syncSnapshotToSheets(snapshot);
@@ -520,6 +541,7 @@ async function runSyncToSheets() {
       polls: snapshot.polls.length,
       pollAnswers: snapshot.pollAnswers.length,
       payments: snapshot.payments.length,
+      expenses: snapshot.expenses?.length || 0,
       debts: snapshot.debts.length,
       matchPairHistory: snapshot.matchPairHistory.length
     }
@@ -550,6 +572,7 @@ app.post("/api/admin/migrate-from-sheets", requireAuth, requireRole(["admin"]), 
         polls: snapshot.polls.length,
         pollAnswers: snapshot.pollAnswers.length,
         payments: snapshot.payments.length,
+        expenses: snapshot.expenses?.length || 0,
         debts: snapshot.debts.length
       }
     });
