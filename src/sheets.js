@@ -939,13 +939,13 @@ async function getMonthlyReport(month) {
 
   const topPayers = Object.entries(paidByMember)
     .map(([memberName, amount]) => ({ memberName, amount }))
-    .sort((a, b) => b.amount - a.amount)
-    .slice(0, 5);
+    .sort((a, b) => b.amount - a.amount);
+    // .slice(0, 5);
 
   const topDebtors = debts
     .filter((item) => item.balance > 0)
     .sort((a, b) => b.balance - a.balance)
-    .slice(0, 5)
+    // .slice(0, 5)
     .map((item) => ({
       memberName: item.memberName,
       balance: item.balance
