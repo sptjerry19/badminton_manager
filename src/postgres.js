@@ -92,6 +92,13 @@ async function query(text, params = []) {
 
 async function initializeDatabase() {
   await query(`
+    CREATE TABLE IF NOT EXISTS login_sessions (
+      sid VARCHAR NOT NULL PRIMARY KEY,
+      sess JSON NOT NULL,
+      expire TIMESTAMP(6) NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS login_sessions_expire_idx ON login_sessions (expire);
+
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -342,6 +349,8 @@ async function initializeDatabase() {
     ADD CONSTRAINT birthday_drink_orders_drink_fk
     FOREIGN KEY (drink_id) REFERENCES birthday_event_drinks(drink_id) ON DELETE CASCADE;
   `).catch(() => {});
+
+  await query(`DELETE FROM login_sessions WHERE expire < NOW()`);
 
   for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
     await query(
@@ -2586,6 +2595,7 @@ async function deleteBasicSession(sessionId) {
 }
 
 module.exports = {
+  pool,
   initializeDatabase,
   getSettings,
   getMembers,

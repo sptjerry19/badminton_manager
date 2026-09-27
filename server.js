@@ -4,6 +4,7 @@ const path = require("path");
 const crypto = require("crypto");
 const express = require("express");
 const session = require("express-session");
+const PgSession = require("connect-pg-simple")(session);
 const { PORT, ADMIN_PASSWORD, SESSION_SECRET } = require("./src/config");
 const { NotificationService } = require("./src/notification");
 const { generateMatchPlan, buildPairKey } = require("./src/matchmaking");
@@ -50,26 +51,36 @@ const {
   setBasicSharePaid,
   settleBasicPerson,
   deleteBasicSession,
-  upsertPushToken
+  upsertPushToken,
+  pool
 } = require("./src/postgres");
 const { syncSnapshotToSheets, getSnapshotFromSheets } = require("./src/sheets");
 
 const app = express();
 let initPromise = null;
 const notificationService = new NotificationService();
+const loginMaxAgeMs = 1000 * 60 * 60 * 24 * 90;
 
+app.set("trust proxy", 1);
 app.use(express.json());
 app.use(
   session({
+    store: new PgSession({
+      pool,
+      tableName: "login_sessions",
+      createTableIfMissing: false,
+      pruneSessionInterval: false
+    }),
     name: "bgm.sid",
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    rolling: true,
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: false,
-      maxAge: 1000 * 60 * 60 * 24 * 7
+      secure: Boolean(process.env.VERCEL),
+      maxAge: loginMaxAgeMs
     }
   })
 );
