@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sổ tiền sân</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Cầu lông" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/basic.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section id="loginView" class="auth">
+        <div class="bezel">
+          <div class="core auth-core">
+            <p class="eyebrow">Sổ riêng</p>
+            <h1>Tiền sân, chia đều.</h1>
+            <p class="lead">Nhập buổi và theo dõi ai đã trả. Sổ này tách khỏi công nợ của app chính.</p>
+            <form id="loginForm" class="stack">
+              <div class="segment" role="tablist" aria-label="Cách đăng nhập">
+                <button type="button" class="segment-btn is-on" data-mode="admin">Admin</button>
+                <button type="button" class="segment-btn" data-mode="user">Thành viên</button>
+              </div>
+              <label class="field" id="adminFields">
+                <span>Mật khẩu admin</span>
+                <input id="passwordInput" type="password" autocomplete="current-password" required />
+              </label>
+              <div id="userFields" class="stack" hidden>
+                <label class="field">
+                  <span>Thành viên</span>
+                  <select id="memberSelect"></select>
+                </label>
+                <label class="field">
+                  <span>Số điện thoại</span>
+                  <input id="phoneInput" type="tel" autocomplete="tel" inputmode="tel" />
+                </label>
+              </div>
+              <button class="pill" type="submit">
+                <span>Vào sổ</span>
+                <span class="pill-mark" aria-hidden="true">→</span>
+              </button>
+              <p id="loginError" class="note is-error" hidden></p>
+            </form>
+            <button type="button" data-push-button data-push-status="#pushLoginStatus" class="ghost">
+              Bật thông báo
+            </button>
+            <p id="pushLoginStatus" class="note" hidden></p>
+          </div>
+        </div>
+      </section>
+
+      <section id="appView" hidden>
+        <header class="top">
+          <div>
+            <p class="eyebrow">Sổ tiền sân</p>
+            <h1 id="identity">Buổi đánh</h1>
+          </div>
+          <div class="stack" style="justify-items: end">
+            <button type="button" data-push-button data-push-status="#pushStatus" class="ghost">Bật thông báo</button>
+            <button id="logoutBtn" class="ghost" type="button">Đăng xuất</button>
+            <p id="pushStatus" class="note" hidden></p>
+          </div>
+        </header>
+
+        <nav class="switch" id="viewSwitch" aria-label="Chức năng">
+          <button type="button" data-view="entry">Nhập buổi</button>
+          <button type="button" data-view="ledger" class="is-on">Tính tiền</button>
+        </nav>
+
+        <div class="stage">
+          <section class="screen" data-screen="entry" hidden>
+            <form id="sessionForm" class="bezel">
+              <div class="core stack">
+                <div class="screen-head">
+                  <h2>Nhập một buổi</h2>
+                  <p>Tổng tiền tự cộng từ tiền sân và tiền cầu, rồi chia đều cho người được chọn.</p>
+                </div>
+                <label class="field">
+                  <span>Ngày đánh</span>
+                  <input id="dateInput" type="date" required />
+                </label>
+                <label class="field">
+                  <span>Sân</span>
+                  <input id="courtInput" type="text" placeholder="Lê Văn Thiêm" autocomplete="off" required />
+                </label>
+                <div class="money-row">
+                  <label class="field">
+                    <span>Tiền sân</span>
+                    <input id="courtFeeInput" inputmode="numeric" autocomplete="off" placeholder="0" />
+                  </label>
+                  <label class="field">
+                    <span>Tiền cầu</span>
+                    <input id="shuttleFeeInput" inputmode="numeric" autocomplete="off" placeholder="0" />
+                  </label>
+                </div>
+                <div class="total-island" aria-live="polite">
+                  <span>Tổng tiền</span>
+                  <strong id="totalValue">0đ</strong>
+                </div>
+                <div class="stack">
+                  <label class="field">
+                    <span>Người tham gia</span>
+                    <input id="memberFilter" type="search" placeholder="Tìm trong danh sách thành viên" autocomplete="off" />
+                  </label>
+                  <div id="memberList" class="chips"></div>
+                  <div class="guest-add">
+                    <input id="guestInput" type="text" maxlength="60" placeholder="Tên người giao lưu" autocomplete="off" />
+                    <button id="addGuestBtn" class="ghost" type="button">Thêm</button>
+                  </div>
+                  <div id="guestList" class="chips"></div>
+                </div>
+                <ul id="sharePreview" class="preview" hidden></ul>
+                <button class="pill" type="submit">
+                  <span>Lưu buổi</span>
+                  <span class="pill-mark" aria-hidden="true">→</span>
+                </button>
+                <p id="formMessage" class="note" hidden></p>
+              </div>
+            </form>
+          </section>
+
+          <section class="screen is-active" data-screen="ledger">
+            <div class="summary bezel">
+              <div class="core summary-core">
+                <p class="eyebrow">Chưa thu</p>
+                <strong id="unpaidValue">0đ</strong>
+                <p id="unpaidMeta">Chưa có buổi nào.</p>
+              </div>
+            </div>
+            <p id="viewerNote" class="note" hidden>Bạn đang xem sổ. Chỉ admin nhập buổi và đánh dấu thanh toán.</p>
+            <div id="sessionList" class="ledger"></div>
+            <section id="peopleTotals" class="totals bezel" hidden>
+              <div class="core">
+                <p class="eyebrow">Tổng kết</p>
+                <h2>Tiền cần thanh toán</h2>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Thành viên</th>
+                        <th>Cần thanh toán</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="peopleTotalsBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+          </section>
+        </div>
+      </section>
+    </main>
+    <script src="/firebase-config.js"></script>
+    <script src="/push.js"></script>
+    <script src="/basic.js"></script>
+  </body>
+</html>

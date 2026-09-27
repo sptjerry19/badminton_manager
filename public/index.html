@@ -4,13 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Quản lý nhóm cầu lông</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#1f6b4a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Cầu lông" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/ui.css" />
   </head>
-  <body class="bg-slate-50 text-slate-800">
-    <div class="mx-auto max-w-6xl p-4 sm:p-6">
-      <header class="mb-4 rounded-xl bg-white p-4 shadow-sm sm:mb-6">
-        <h1 class="text-xl font-bold sm:text-2xl">Quản lý nhóm cầu lông</h1>
-        <p class="mt-1 text-sm text-slate-500">Phase 2: level, RBAC, điểm danh yes/no, poll, xếp trận, báo cáo tháng.</p>
+  <body class="app-shell">
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          <p class="caption">Nhóm cầu lông</p>
+          <h1 class="page-title">Quản lý lịch và phí</h1>
+        </div>
       </header>
 
       <section id="loginSection" class="mx-auto max-w-md rounded-xl bg-white p-5 shadow-sm">
@@ -51,38 +65,50 @@
             Đăng nhập
           </button>
         </form>
+        <button
+          type="button"
+          data-push-button
+          data-push-status="#pushLoginStatus"
+          class="mt-3 w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
+        >
+          Bật thông báo
+        </button>
+        <p id="pushLoginStatus" class="mt-2 text-sm text-slate-500" hidden></p>
         <p id="loginError" class="mt-3 hidden text-sm text-red-600"></p>
       </section>
 
       <main id="appSection" class="hidden space-y-5">
         <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-          <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h2 id="roleTitle" class="text-lg font-semibold"></h2>
-            <button
-              id="logoutBtn"
-              class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
-            >
-              Đăng xuất
-            </button>
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                data-push-button
+                data-push-status="#pushStatus"
+                class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
+              >
+                Bật thông báo
+              </button>
+              <button
+                id="logoutBtn"
+                class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
+              >
+                Đăng xuất
+              </button>
+            </div>
           </div>
+          <p id="pushStatus" class="mb-4 text-sm text-slate-500" hidden></p>
           <p id="loginIdentity" class="text-sm text-slate-500"></p>
         </section>
 
         <section id="adminSection" class="hidden space-y-5">
-          <div class="mb-2 flex flex-wrap items-center gap-2">
-            <button id="adminTabCourtBtn" type="button" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">
-              Court
-            </button>
-            <button id="adminTabExpensesBtn" type="button" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">
-              Expenses
-            </button>
-            <button id="adminTabGamesBtn" type="button" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">
-              Games
-            </button>
-            <button id="adminTabToolsBtn" type="button" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">
-              Tools
-            </button>
-          </div>
+          <nav class="tabs" aria-label="Mục quản trị">
+            <button id="adminTabCourtBtn" type="button" class="tab">Sân</button>
+            <button id="adminTabExpensesBtn" type="button" class="tab">Chi phí</button>
+            <button id="adminTabGamesBtn" type="button" class="tab">Trận</button>
+            <button id="adminTabToolsBtn" type="button" class="tab">Công cụ</button>
+          </nav>
 
           <div id="courtTabContent" class="space-y-5">
           <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
@@ -93,6 +119,9 @@
               </button>
               <button id="syncSheetsBtn" class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
                 Sync sang Sheets ngay
+              </button>
+              <button id="testPushBtn" type="button" class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
+                Gửi nhắc lịch ngay
               </button>
             </div>
             <p id="dataOpsMessage" class="mt-2 text-sm"></p>
@@ -695,6 +724,8 @@
       </div>
     </div>
 
+    <script src="/firebase-config.js"></script>
+    <script src="/push.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

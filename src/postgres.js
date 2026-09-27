@@ -278,6 +278,36 @@ async function initializeDatabase() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE(event_id, member_id)
     );
+
+    CREATE TABLE IF NOT EXISTS basic_sessions (
+      basic_session_id TEXT PRIMARY KEY,
+      play_date TEXT NOT NULL,
+      court TEXT NOT NULL,
+      court_fee INTEGER NOT NULL DEFAULT 0,
+      shuttle_fee INTEGER NOT NULL DEFAULT 0,
+      total_fee INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS basic_shares (
+      id BIGSERIAL PRIMARY KEY,
+      basic_session_id TEXT NOT NULL REFERENCES basic_sessions(basic_session_id) ON DELETE CASCADE,
+      member_id TEXT NOT NULL DEFAULT '',
+      member_name TEXT NOT NULL,
+      member_name_ci TEXT NOT NULL,
+      share_amount INTEGER NOT NULL DEFAULT 0,
+      paid BOOLEAN NOT NULL DEFAULT FALSE,
+      paid_at TIMESTAMPTZ,
+      UNIQUE (basic_session_id, member_name_ci)
+    );
+
+    CREATE TABLE IF NOT EXISTS push_tokens (
+      token TEXT PRIMARY KEY,
+      member_id TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS push_tokens_member_idx ON push_tokens(member_id);
   `);
 
   await query(`
@@ -2201,6 +2231,360 @@ async function replaceAllDataFromSnapshot(snapshot) {
   }
 }
 
+function mapBasicSession(row) {
+  return {
+    id: row.basic_session_id,
+    date: row.play_date || "",
+    court: row.court || "",
+    courtFee: Math.round(toNumber(row.court_fee)),
+    shuttleFee: Math.round(toNumber(row.shuttle_fee)),
+    totalFee: Math.round(toNumber(row.total_fee)),
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+  };
+}
+
+function mapBasicShare(row) {
+  return {
+    id: String(row.id),
+    memberId: row.member_id || "",
+    memberName: row.member_name || "",
+    shareAmount: Math.round(toNumber(row.share_amount)),
+    paid: Boolean(row.paid),
+    paidAt: row.paid_at ? new Date(row.paid_at).toISOString() : ""
+  };
+}
+
+async function getBasicLedger() {
+  const sessionsResult = await query(
+    `
+    SELECT * FROM basic_sessions
+    ORDER BY play_date DESC, created_at DESC
+    `
+  );
+  const sessions = sessionsResult.rows.map(mapBasicSession);
+  if (!sessions.length) return [];
+
+  const sharesResult = await query(
+    `
+    SELECT * FROM basic_shares
+    WHERE basic_session_id = ANY($1::text[])
+    ORDER BY member_name ASC
+    `,
+    [sessions.map((session) => session.id)]
+  );
+
+  const sharesBySession = {};
+  sharesResult.rows.forEach((row) => {
+    const sessionId = row.basic_session_id;
+    if (!sharesBySession[sessionId]) sharesBySession[sessionId] = [];
+    sharesBySession[sessionId].push(mapBasicShare(row));
+  });
+
+  return sessions.map((session) => ({
+    ...session,
+    shares: sharesBySession[session.id] || []
+  }));
+}
+
+function normalizeGuestNames(guestNames) {
+  const raw = Array.isArray(guestNames) ? guestNames : [];
+  const seen = new Set();
+  const names = [];
+  raw.forEach((item) => {
+    const name = String(item || "").trim().replace(/\s+/g, " ");
+    if (!name) return;
+    if (name.length > 60) throw new Error("Tên người giao lưu quá dài.");
+    const key = safeLower(name);
+    if (seen.has(key)) return;
+    seen.add(key);
+    names.push(name);
+  });
+  return names;
+}
+
+async function createBasicSession({ date, court, courtFee, shuttleFee, memberIds, guestNames }) {
+  const playDate = String(date || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(playDate)) {
+    throw new Error("Ngày đánh phải có định dạng YYYY-MM-DD.");
+  }
+
+  const safeCourt = String(court || "").trim();
+  if (!safeCourt) throw new Error("Thiếu tên sân.");
+
+  const safeCourtFee = Math.round(toNumber(courtFee));
+  const safeShuttleFee = Math.round(toNumber(shuttleFee));
+  if (safeCourtFee < 0 || safeShuttleFee < 0) {
+    throw new Error("Tiền sân và tiền cầu không được âm.");
+  }
+
+  const totalFee = safeCourtFee + safeShuttleFee;
+  if (totalFee <= 0) throw new Error("Tổng tiền phải lớn hơn 0.");
+
+  const ids = Array.isArray(memberIds)
+    ? [...new Set(memberIds.map((id) => String(id || "").trim()).filter(Boolean))]
+    : [];
+  const guestsInput = normalizeGuestNames(guestNames);
+
+  let members = [];
+  if (ids.length) {
+    const membersResult = await query(
+      `
+      SELECT member_id, name
+      FROM members
+      WHERE active = TRUE AND member_id = ANY($1::text[])
+      `,
+      [ids]
+    );
+    if (membersResult.rows.length !== ids.length) {
+      throw new Error("Có thành viên không tồn tại hoặc đã bị khóa.");
+    }
+    members = membersResult.rows.map((row) => ({ memberId: row.member_id, name: row.name }));
+  }
+
+  const activeMembers = await query(`SELECT name FROM members WHERE active = TRUE`);
+  const activeNames = new Set(activeMembers.rows.map((row) => safeLower(row.name)));
+  const guests = guestsInput.map((name) => {
+    if (activeNames.has(safeLower(name))) {
+      throw new Error(`"${name}" đã có trong danh sách thành viên. Hãy chọn người đó thay vì thêm giao lưu.`);
+    }
+    return { memberId: "", name };
+  });
+
+  const people = [...members, ...guests].sort((a, b) => a.name.localeCompare(b.name, "vi", { sensitivity: "base" }));
+  if (!people.length) throw new Error("Chọn ít nhất một người tham gia.");
+
+  const shares = computeEqualShares(totalFee, people.length);
+  const sessionId = crypto.randomUUID();
+  const ts = nowIso();
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `
+      INSERT INTO basic_sessions(
+        basic_session_id, play_date, court, court_fee, shuttle_fee, total_fee, created_at
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `,
+      [sessionId, playDate, safeCourt, safeCourtFee, safeShuttleFee, totalFee, ts]
+    );
+
+    for (let i = 0; i < people.length; i += 1) {
+      const member = people[i];
+      await client.query(
+        `
+        INSERT INTO basic_shares(
+          basic_session_id, member_id, member_name, member_name_ci, share_amount, paid
+        )
+        VALUES ($1,$2,$3,$4,$5,FALSE)
+        `,
+        [sessionId, member.memberId, member.name, safeLower(member.name), shares[i]]
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const ledger = await getBasicLedger();
+  return ledger.find((session) => session.id === sessionId) || null;
+}
+
+async function setBasicSharePaid(shareId, paid) {
+  if (typeof paid !== "boolean") throw new Error("Thiếu trạng thái thanh toán.");
+  const id = String(shareId || "").trim();
+  if (!/^\d+$/.test(id)) throw new Error("Không tìm thấy phần tiền.");
+
+  const result = await query(
+    `
+    UPDATE basic_shares
+    SET paid = $2,
+        paid_at = CASE WHEN $2 THEN NOW() ELSE NULL END
+    WHERE id = $1::bigint
+    RETURNING *
+    `,
+    [id, paid]
+  );
+  if (!result.rows[0]) throw new Error("Không tìm thấy phần tiền.");
+  return mapBasicShare(result.rows[0]);
+}
+
+async function settleBasicPerson({ memberId, memberName }) {
+  const id = String(memberId || "").trim();
+  const name = String(memberName || "").trim();
+  if (!id && !name) throw new Error("Thiếu người cần cập nhật.");
+
+  const existing = await query(
+    id
+      ? `SELECT id FROM basic_shares WHERE member_id = $1 LIMIT 1`
+      : `SELECT id FROM basic_shares WHERE member_id = '' AND member_name_ci = $1 LIMIT 1`,
+    [id || safeLower(name)]
+  );
+  if (!existing.rows[0]) throw new Error("Không tìm thấy người này trong sổ.");
+
+  await query(
+    id
+      ? `
+        UPDATE basic_shares
+        SET paid = TRUE, paid_at = NOW()
+        WHERE member_id = $1 AND paid = FALSE
+      `
+      : `
+        UPDATE basic_shares
+        SET paid = TRUE, paid_at = NOW()
+        WHERE member_id = '' AND member_name_ci = $1 AND paid = FALSE
+      `,
+    [id || safeLower(name)]
+  );
+  return getBasicLedger();
+}
+
+function vietnamToday() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+}
+
+async function upsertPushToken(memberId, token) {
+  const id = String(memberId || "").trim();
+  const value = String(token || "").trim();
+  if (!id) throw new Error("Thiếu thành viên.");
+  if (!value || value.length > 4096) throw new Error("Token thông báo không hợp lệ.");
+  await query(
+    `
+    INSERT INTO push_tokens(token, member_id, updated_at)
+    VALUES ($1, $2, NOW())
+    ON CONFLICT (token) DO UPDATE
+      SET member_id = EXCLUDED.member_id, updated_at = NOW()
+    `,
+    [value, id]
+  );
+}
+
+async function deletePushTokens(tokens) {
+  const list = (Array.isArray(tokens) ? tokens : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  if (!list.length) return;
+  await query(`DELETE FROM push_tokens WHERE token = ANY($1::text[])`, [list]);
+}
+
+async function getPushTokensForMemberKey(memberKey) {
+  const key = String(memberKey || "").trim();
+  if (!key) return [];
+  const result = await query(
+    `
+    SELECT pt.token
+    FROM push_tokens pt
+    LEFT JOIN members m ON m.member_id = pt.member_id
+    WHERE pt.member_id = $1 OR lower(m.name) = lower($1)
+    `,
+    [key]
+  );
+  return result.rows.map((row) => row.token);
+}
+
+function pickEarlierPlay(mainRow, basicRow) {
+  const mainItem = mainRow
+    ? { date: mainRow.date || "", time: mainRow.time || "", location: mainRow.location || "" }
+    : null;
+  const basicItem = basicRow
+    ? { date: basicRow.date || "", time: "", location: basicRow.location || "" }
+    : null;
+  if (!mainItem) return basicItem;
+  if (!basicItem) return mainItem;
+  if (basicItem.date < mainItem.date) return basicItem;
+  if (mainItem.date < basicItem.date) return mainItem;
+  return {
+    date: mainItem.date,
+    time: mainItem.time,
+    location: mainItem.location || basicItem.location
+  };
+}
+
+async function getWeeklyReminderAudience() {
+  const today = vietnamToday();
+  const [members, debts, tokenResult, mainResult, basicResult, unpaidResult] = await Promise.all([
+    getActiveFixedMembers(),
+    getDebts(),
+    query(`SELECT token, member_id FROM push_tokens`),
+    query(
+      `
+      SELECT date, time, location
+      FROM sessions
+      WHERE date >= $1
+      ORDER BY date ASC, time ASC
+      LIMIT 1
+      `,
+      [today]
+    ),
+    query(
+      `
+      SELECT play_date AS date, court AS location
+      FROM basic_sessions
+      WHERE play_date >= $1
+      ORDER BY play_date ASC, created_at ASC
+      LIMIT 1
+      `,
+      [today]
+    ),
+    query(
+      `
+      SELECT member_id, SUM(share_amount)::int AS unpaid
+      FROM basic_shares
+      WHERE paid = FALSE AND member_id <> ''
+      GROUP BY member_id
+      `
+    )
+  ]);
+
+  const debtById = new Map();
+  const debtByName = new Map();
+  debts.forEach((item) => {
+    if (item.memberId) debtById.set(item.memberId, item.balance);
+    debtByName.set(String(item.memberName || "").toLowerCase(), item.balance);
+  });
+  const unpaidById = new Map(unpaidResult.rows.map((row) => [row.member_id, Math.round(toNumber(row.unpaid))]));
+  const tokensById = new Map();
+  tokenResult.rows.forEach((row) => {
+    const list = tokensById.get(row.member_id) || [];
+    list.push(row.token);
+    tokensById.set(row.member_id, list);
+  });
+
+  return {
+    session: pickEarlierPlay(mainResult.rows[0], basicResult.rows[0]),
+    members: members.map((member) => ({
+      memberId: member.memberId,
+      memberName: member.name,
+      tokens: tokensById.get(member.memberId) || [],
+      debtBalance: debtById.has(member.memberId)
+        ? debtById.get(member.memberId)
+        : debtByName.get(String(member.name || "").toLowerCase()) || 0,
+      basicUnpaid: unpaidById.get(member.memberId) || 0
+    }))
+  };
+}
+
+async function deleteBasicSession(sessionId) {
+  const id = String(sessionId || "").trim();
+  if (!id) throw new Error("Thiếu mã buổi.");
+  const result = await query(
+    `DELETE FROM basic_sessions WHERE basic_session_id = $1 RETURNING basic_session_id`,
+    [id]
+  );
+  if (!result.rows[0]) throw new Error("Không tìm thấy buổi.");
+  return { id };
+}
+
 module.exports = {
   initializeDatabase,
   getSettings,
@@ -2240,5 +2624,14 @@ module.exports = {
   getGeneratedMatchesByDate,
   getMonthlyReport,
   getSnapshotForSheetSync,
-  replaceAllDataFromSnapshot
+  replaceAllDataFromSnapshot,
+  getBasicLedger,
+  createBasicSession,
+  setBasicSharePaid,
+  settleBasicPerson,
+  deleteBasicSession,
+  upsertPushToken,
+  deletePushTokens,
+  getPushTokensForMemberKey,
+  getWeeklyReminderAudience
 };

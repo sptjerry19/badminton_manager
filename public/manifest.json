@@ -1,0 +1,10 @@
+{
+  "name": "Quản lý nhóm cầu lông",
+  "short_name": "Cầu lông",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f172a",
+  "lang": "vi"
+}

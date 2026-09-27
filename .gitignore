@@ -1,4 +1,5 @@
 node_modules
 .env
 credentials.json
+badminton-e1571.json
 .DS_Store

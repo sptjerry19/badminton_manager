@@ -839,18 +839,7 @@ function activateAdminTab(tabId) {
     if (!btn) return;
     const active = key === tabId;
 
-    btn.classList.toggle("bg-indigo-600", active);
-    btn.classList.toggle("text-white", active);
-    btn.classList.toggle("border-indigo-600", active);
-
-    btn.classList.toggle("border-slate-300", !active);
-    if (!active) {
-      btn.classList.add("bg-white", "text-slate-800");
-      btn.classList.remove("bg-indigo-600", "text-white");
-    } else {
-      btn.classList.remove("bg-white", "text-slate-800");
-      btn.classList.add("text-white");
-    }
+    btn.classList.toggle("is-active", active);
   });
 
   if (tabId === "expenses") {
@@ -1072,6 +1061,8 @@ function bindEvents() {
     errorEl.classList.add("hidden");
     try {
       const mode = document.getElementById("loginModeInput").value;
+      const permissionPromise =
+        mode === "user" && window.preparePushPermission ? window.preparePushPermission() : Promise.resolve();
       const payload =
         mode === "admin"
           ? { mode, password: document.getElementById("passwordInput").value }
@@ -1084,8 +1075,10 @@ function bindEvents() {
         method: "POST",
         body: JSON.stringify(payload)
       });
+      await permissionPromise.catch(() => {});
       showAppMode();
       await loadDashboard();
+      if (mode === "user") window.registerPush?.({ prompt: false }).catch(() => {});
     } catch (error) {
       errorEl.textContent = error.message;
       errorEl.classList.remove("hidden");
@@ -1159,6 +1152,18 @@ function bindEvents() {
         `Migrate thành công. Members: ${rows.members || 0}, Sessions: ${rows.sessions || 0}, Payments: ${rows.payments || 0}.`
       );
       await loadDashboard();
+    } catch (error) {
+      setMessage("dataOpsMessage", error.message, true);
+    }
+  });
+  document.getElementById("testPushBtn")?.addEventListener("click", async () => {
+    try {
+      const data = await api("/api/push/test", { method: "POST" });
+      const session = data.session?.date ? ` Lịch gần nhất: ${data.session.date}.` : "";
+      const summary = data.configured
+        ? `Đã gửi ${data.sent || 0} thông báo, ${data.withToken || 0} người có token.${session}`
+        : data.message || "Firebase chưa cấu hình service account.";
+      setMessage("dataOpsMessage", summary, !data.configured);
     } catch (error) {
       setMessage("dataOpsMessage", error.message, true);
     }
@@ -1683,6 +1688,7 @@ async function init() {
     await loadLoginOptions();
     await loadDashboard();
     showAppMode();
+    if (state.auth?.role === "user") window.registerPush?.({ prompt: false }).catch(() => {});
   } catch (_error) {
     showLoginMode();
   }

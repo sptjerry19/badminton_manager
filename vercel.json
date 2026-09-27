@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/sync-sheets",
       "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-reminder",
+      "schedule": "0 6 * * 6"
     }
   ]
 }

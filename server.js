@@ -44,7 +44,13 @@ const {
   addExpense,
   getExpenses,
   getSnapshotForSheetSync,
-  replaceAllDataFromSnapshot
+  replaceAllDataFromSnapshot,
+  getBasicLedger,
+  createBasicSession,
+  setBasicSharePaid,
+  settleBasicPerson,
+  deleteBasicSession,
+  upsertPushToken
 } = require("./src/postgres");
 const { syncSnapshotToSheets, getSnapshotFromSheets } = require("./src/sheets");
 
@@ -100,7 +106,7 @@ app.get("/api/health", (req, res) => {
 });
 
 app.use("/api", async (req, res, next) => {
-  if (req.path === "/health" || req.path === "/login" || req.path === "/login-options") {
+  if (req.path === "/health" || req.path === "/login" || req.path === "/login-options" || req.path === "/push/config") {
     return next();
   }
   try {
@@ -323,9 +329,9 @@ app.post("/api/sessions", requireAuth, requireRole(["admin"]), async (req, res) 
     const createdBy = req.session.username || "admin";
     const created = await createSession(req.body, createdBy);
     const members = await getActiveFixedMembers();
-    await notificationService.broadcast(members, (member) => {
-      const location = req.body?.location ? ` @${req.body.location}` : "";
-      return `Lich danh cau moi: ${req.body?.date} ${req.body?.time}${location}. Vui long vao app xac nhan tham gia.`;
+    await notificationService.broadcast(members, () => {
+      const location = req.body?.location ? ` · ${req.body.location}` : "";
+      return `Lịch đánh mới: ${req.body?.date} ${req.body?.time}${location}. Vào app xác nhận tham gia.`;
     });
     return res.json({
       ok: true,
@@ -514,7 +520,7 @@ app.post("/api/payments", requireAuth, requireRole(["admin"]), async (req, res) 
     await addPayment(payload);
     await notificationService.sendToMember(
       payload.memberName,
-      `Thanh toan da duoc ghi nhan: ${payload.memberName} - ${payload.amount}`
+      `Đã ghi nhận thanh toán ${payload.amount} cho ${payload.memberName}.`
     );
     return res.json({ ok: true, message: "Đã ghi nhận thanh toán và cập nhật công nợ." });
   } catch (error) {
@@ -653,11 +659,61 @@ app.post("/api/admin/migrate-from-sheets", requireAuth, requireRole(["admin"]), 
   }
 });
 
+function isCronAuthorized(req) {
+  const cronSecret = process.env.CRON_SECRET || "";
+  const authHeader = String(req.headers.authorization || "");
+  return Boolean(cronSecret) && authHeader === `Bearer ${cronSecret}`;
+}
+
+app.get("/api/push/config", (_req, res) => {
+  res.json({ vapidKey: String(process.env.FIREBASE_VAPID_KEY || "").trim() });
+});
+
+app.post("/api/push/subscribe", requireAuth, async (req, res) => {
+  try {
+    const memberName = String(req.session.memberName || "").trim();
+    if (!memberName) {
+      return res.status(400).json({ message: "Hãy đăng nhập bằng tài khoản thành viên để bật thông báo." });
+    }
+    const members = await getMembers();
+    const member = members.find((item) => item.name.toLowerCase() === memberName.toLowerCase());
+    if (!member) return res.status(404).json({ message: "Không tìm thấy thành viên." });
+    await upsertPushToken(member.memberId, req.body?.token);
+    return res.json({ ok: true, message: "Đã bật thông báo trên thiết bị này." });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.post("/api/push/test", requireAuth, requireRole(["admin"]), async (_req, res) => {
+  try {
+    const result = await notificationService.sendWeeklyReminders();
+    return res.json({
+      ok: true,
+      ...result,
+      message: result.configured ? "Đã gửi nhắc lịch." : result.message
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.get("/api/cron/weekly-reminder", async (req, res) => {
+  try {
+    if (!isCronAuthorized(req)) {
+      return res.status(401).json({ message: "Unauthorized cron reminder request." });
+    }
+    await ensureInitialized();
+    const result = await notificationService.sendWeeklyReminders();
+    return res.json({ ok: true, ...result });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
 app.get("/api/cron/sync-sheets", async (req, res) => {
   try {
-    const cronSecret = process.env.CRON_SECRET || "";
-    const authHeader = String(req.headers.authorization || "");
-    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    if (!isCronAuthorized(req)) {
       return res.status(401).json({ message: "Unauthorized cron sync request." });
     }
     await ensureInitialized();
@@ -705,6 +761,72 @@ app.get("/api/reports/monthly", requireAuth, requireRole(["admin"]), async (req,
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="monthly-report-${report.month}.csv"`);
     return res.send(lines.join("\n"));
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.get("/basic", (_req, res) => {
+  res.sendFile(path.join(__dirname, "public", "basic.html"));
+});
+
+app.get("/api/basic", requireAuth, async (req, res) => {
+  try {
+    const [members, sessions] = await Promise.all([getMembers(), getBasicLedger()]);
+    return res.json({
+      role: req.session.role,
+      memberName: req.session.memberName || "",
+      members: members
+        .filter((member) => member.active)
+        .map((member) => ({ memberId: member.memberId, name: member.name })),
+      sessions
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.post("/api/basic/sessions", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const sessionItem = await createBasicSession({
+      date: req.body?.date,
+      court: req.body?.court,
+      courtFee: req.body?.courtFee,
+      shuttleFee: req.body?.shuttleFee,
+      memberIds: req.body?.memberIds,
+      guestNames: req.body?.guestNames
+    });
+    return res.json({ ok: true, session: sessionItem, message: "Đã lưu buổi đánh." });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.patch("/api/basic/shares/:shareId", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const share = await setBasicSharePaid(req.params.shareId, req.body?.paid);
+    return res.json({ ok: true, share });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.patch("/api/basic/people/paid", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const sessions = await settleBasicPerson({
+      memberId: req.body?.memberId,
+      memberName: req.body?.memberName
+    });
+    return res.json({ ok: true, sessions });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.delete("/api/basic/sessions/:id", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    await deleteBasicSession(req.params.id);
+    return res.json({ ok: true, message: "Đã xóa buổi." });
   } catch (error) {
     return res.status(400).json({ message: error.message });
   }
