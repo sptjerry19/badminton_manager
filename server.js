@@ -324,21 +324,64 @@ app.patch("/api/members/:memberId", requireAuth, requireRole(["admin"]), async (
   }
 });
 
+function formatPlayDateShort(iso) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+  if (!match) return String(iso || "");
+  return `${Number(match[3])}/${Number(match[2])}`;
+}
+
+function formatMoneyText(value) {
+  return `${new Intl.NumberFormat("vi-VN").format(Math.round(Number(value) || 0))}đ`;
+}
+
+function describePush(prefix, result) {
+  if (!result?.configured) {
+    return `${prefix} Thông báo chưa gửi được vì Firebase chưa cấu hình. Bấm Gửi thông báo để thử lại.`;
+  }
+  if (!result.sent && result.failed) {
+    return `${prefix} Gửi thông báo lỗi ${result.failed} thiết bị. Bấm Gửi thông báo để gửi lại.`;
+  }
+  if (!result.sent) return `${prefix} Chưa có thiết bị nào bật thông báo.`;
+  const failed = result.failed ? `, lỗi ${result.failed}` : "";
+  return `${prefix} Đã gửi thông báo tới ${result.sent} thiết bị${failed}.`;
+}
+
+function courtNotice(session) {
+  const location = session.location ? ` · ${session.location}` : "";
+  const time = session.time ? ` ${session.time}` : "";
+  return `Lịch đánh mới: ${session.date}${time}${location}. Vào app xác nhận tham gia.`;
+}
+
+function basicCourtNotice(session) {
+  return `Sân mới ${formatPlayDateShort(session.date)} · ${session.court}. Tổng ${formatMoneyText(session.totalFee)}. Mở sổ để xem phần của bạn.`;
+}
+
+async function notifyActiveMembers(message) {
+  const members = (await getMembers()).filter((member) => member.active);
+  return notificationService.broadcast(members, () => message);
+}
+
 app.post("/api/sessions", requireAuth, requireRole(["admin"]), async (req, res) => {
   try {
     const createdBy = req.session.username || "admin";
     const created = await createSession(req.body, createdBy);
-    const members = await getActiveFixedMembers();
-    await notificationService.broadcast(members, () => {
-      const location = req.body?.location ? ` · ${req.body.location}` : "";
-      return `Lịch đánh mới: ${req.body?.date} ${req.body?.time}${location}. Vào app xác nhận tham gia.`;
-    });
+    const location = req.body?.location ? ` · ${req.body.location}` : "";
+    let push = { configured: false, sent: 0, failed: 0 };
+    try {
+      push = await notifyActiveMembers(
+        `Lịch đánh mới: ${req.body?.date} ${req.body?.time || ""}${location}. Vào app xác nhận tham gia.`
+      );
+    } catch (error) {
+      console.error("Không gửi được thông báo sân mới:", error.message);
+      push = { configured: true, sent: 0, failed: 1 };
+    }
     return res.json({
       ok: true,
       sessionId: created.sessionId,
       totalCost: created.totalCost,
       poll: created.poll,
-      message: "Đã tạo buổi chơi để điểm danh trước trận và gửi thông báo stub."
+      push,
+      message: describePush("Đã tạo buổi.", push)
     });
   } catch (error) {
     return res.status(400).json({ message: error.message });
@@ -786,6 +829,18 @@ app.get("/api/basic", requireAuth, async (req, res) => {
   }
 });
 
+app.post("/api/sessions/notify", requireAuth, requireRole(["admin"]), async (_req, res) => {
+  try {
+    const sessions = await getRecentSessions(1);
+    const session = sessions[0];
+    if (!session) return res.status(400).json({ message: "Chưa có buổi để gửi thông báo." });
+    const push = await notifyActiveMembers(courtNotice(session));
+    return res.json({ ok: true, push, message: describePush("Gửi lại buổi mới nhất.", push) });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
 app.post("/api/basic/sessions", requireAuth, requireRole(["admin"]), async (req, res) => {
   try {
     const sessionItem = await createBasicSession({
@@ -796,9 +851,33 @@ app.post("/api/basic/sessions", requireAuth, requireRole(["admin"]), async (req,
       memberIds: req.body?.memberIds,
       guestNames: req.body?.guestNames
     });
-    return res.json({ ok: true, session: sessionItem, message: "Đã lưu buổi đánh." });
+    let push = { configured: false, sent: 0, failed: 0 };
+    try {
+      push = await notifyActiveMembers(basicCourtNotice(sessionItem));
+    } catch (error) {
+      console.error("Không gửi được thông báo sân:", error.message);
+      push = { configured: true, sent: 0, failed: 1 };
+    }
+    return res.json({
+      ok: true,
+      session: sessionItem,
+      push,
+      message: describePush("Đã lưu buổi.", push)
+    });
   } catch (error) {
     return res.status(400).json({ message: error.message });
+  }
+});
+
+app.post("/api/basic/notify", requireAuth, requireRole(["admin"]), async (_req, res) => {
+  try {
+    const sessions = await getBasicLedger();
+    const session = sessions[0];
+    if (!session) return res.status(400).json({ message: "Chưa có sân để gửi thông báo." });
+    const push = await notifyActiveMembers(basicCourtNotice(session));
+    return res.json({ ok: true, push, message: describePush(`Gửi lại sân ${session.court}.`, push) });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
   }
 });
 

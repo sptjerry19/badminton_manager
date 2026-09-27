@@ -1304,10 +1304,23 @@ function bindEvents() {
     }
   });
 
+  document.getElementById("resendSessionPushBtn")?.addEventListener("click", async () => {
+    const button = document.getElementById("resendSessionPushBtn");
+    button.disabled = true;
+    try {
+      const data = await api("/api/sessions/notify", { method: "POST" });
+      const pushFailed = Boolean(data.push && ((!data.push.configured) || (!data.push.sent && data.push.failed)));
+      setMessage("preSessionMessage", data.message, pushFailed);
+    } catch (error) {
+      setMessage("preSessionMessage", error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
   document.getElementById("preSessionForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
-      await api("/api/sessions", {
+      const data = await api("/api/sessions", {
         method: "POST",
         body: JSON.stringify({
           date: document.getElementById("preDateInput").value,
@@ -1317,7 +1330,8 @@ function bindEvents() {
           pollQuestion: document.getElementById("prePollQuestionInput").value.trim()
         })
       });
-      setMessage("preSessionMessage", "Đã tạo buổi vote thành công.");
+      const pushFailed = Boolean(data.push && ((!data.push.configured) || (!data.push.sent && data.push.failed)));
+      setMessage("preSessionMessage", data.message || "Đã tạo buổi vote thành công.", pushFailed);
       await loadAdminDashboard();
     } catch (error) {
       setMessage("preSessionMessage", error.message, true);

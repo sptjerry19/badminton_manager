@@ -116,6 +116,8 @@ function showApp() {
   document.body.dataset.role = state.role;
   identity.textContent = state.role === "admin" ? "Admin" : state.memberName || "Thành viên";
   viewerNote.hidden = state.role === "admin";
+  const notifyCourtBtn = document.querySelector("#notifyCourtBtn");
+  if (notifyCourtBtn) notifyCourtBtn.hidden = state.role !== "admin";
   if (state.role !== "admin") showView("ledger");
 }
 
@@ -413,6 +415,22 @@ loginForm.addEventListener("submit", async (event) => {
   }
 });
 
+document.querySelector("#notifyCourtBtn")?.addEventListener("click", async () => {
+  const button = document.querySelector("#notifyCourtBtn");
+  const status = document.querySelector("#notifyStatus");
+  button.disabled = true;
+  setNote(status, "Đang gửi thông báo...");
+  try {
+    const data = await api("/api/basic/notify", { method: "POST" });
+    const failed = Boolean(data.push && ((!data.push.configured) || (!data.push.sent && data.push.failed)));
+    setNote(status, data.message, failed);
+  } catch (error) {
+    setNote(status, error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
 document.querySelector("#logoutBtn").addEventListener("click", async () => {
   await api("/api/logout", { method: "POST" });
   state.selected.clear();
@@ -524,7 +542,7 @@ document.querySelector("#sessionForm").addEventListener("submit", async (event) 
     paintTotal();
     await loadLedger();
     showView("ledger");
-    setNote(formMessage, "Đã lưu buổi đánh.");
+    setNote(document.querySelector("#notifyStatus"), data.message || "Đã lưu buổi.", Boolean(data.push && !data.push.sent && data.push.failed));
   } catch (error) {
     setNote(formMessage, error.message, true);
   } finally {

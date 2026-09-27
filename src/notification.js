@@ -151,12 +151,24 @@ class NotificationService {
   }
 
   async broadcast(members, messageBuilder) {
-    const jobs = (members || []).map((member) => {
-      const memberId = member.memberId || member.name;
-      const message = typeof messageBuilder === "function" ? messageBuilder(member) : String(messageBuilder || "");
-      return this.sendToMember(memberId, message);
-    });
-    await Promise.all(jobs);
+    const list = Array.isArray(members) ? members : [];
+    const configured = Boolean(getFirebaseMessaging());
+    if (!configured) return { configured: false, sent: 0, failed: 0 };
+    const results = await Promise.all(
+      list.map((member) => {
+        const memberId = member.memberId || member.name;
+        const message = typeof messageBuilder === "function" ? messageBuilder(member) : String(messageBuilder || "");
+        return this.sendToMember(memberId, message);
+      })
+    );
+    return results.reduce(
+      (summary, result) => ({
+        configured: true,
+        sent: summary.sent + Number(result.sent || 0),
+        failed: summary.failed + Number(result.failed || 0)
+      }),
+      { configured: true, sent: 0, failed: 0 }
+    );
   }
 
   async sendWeeklyReminders() {
