@@ -558,6 +558,7 @@ function renderReportTables(report) {
 
 function renderMyHistoryTable(rows = []) {
   const tbody = document.getElementById("myHistoryTableBody");
+  if (!tbody) return;
   tbody.innerHTML = "";
   if (!rows.length) {
     tbody.innerHTML =
@@ -579,6 +580,7 @@ function renderMyHistoryTable(rows = []) {
 
 function renderMyPaymentsTable(rows = []) {
   const tbody = document.getElementById("myPaymentsTableBody");
+  if (!tbody) return;
   tbody.innerHTML = "";
   if (!rows.length) {
     tbody.innerHTML =
@@ -995,8 +997,128 @@ async function loadUserDashboard() {
   renderMyPaymentsTable(data.myPayments || []);
   renderBirthdayEventOptions(state.birthdayEvents, "user");
   await loadBirthdayUserEvent().catch(() => renderBirthdayUserEventDetail(null));
+  await loadUserBasicLedger();
   if (data.activeVote) {
     openVoteModal(data.activeVote);
+  }
+}
+
+function formatPlayDateShort(iso) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+  if (!match) return iso || "";
+  return `${Number(match[3])}/${Number(match[2])}`;
+}
+
+function basicMoney(value) {
+  return `${new Intl.NumberFormat("vi-VN").format(Math.round(Number(value) || 0))}đ`;
+}
+
+function renderUserBasicLedger(payload) {
+  const sessions = Array.isArray(payload?.sessions) ? payload.sessions : [];
+  const list = document.getElementById("userSessionList");
+  const unpaidValue = document.getElementById("userUnpaidValue");
+  const unpaidMeta = document.getElementById("userUnpaidMeta");
+  const totals = document.getElementById("userPeopleTotals");
+  const totalsBody = document.getElementById("userPeopleTotalsBody");
+  if (!list || !unpaidValue || !unpaidMeta || !totals || !totalsBody) return;
+
+  const shares = sessions.flatMap((session) => session.shares || []);
+  const due = shares.filter((share) => !share.paid);
+  const dueAmount = due.reduce((sum, share) => sum + share.shareAmount, 0);
+  unpaidValue.textContent = basicMoney(dueAmount);
+  unpaidMeta.textContent = sessions.length
+    ? due.length
+      ? `${due.length} lượt chưa thanh toán`
+      : "Đã thu đủ mọi lượt trong sổ."
+    : "Chưa có buổi nào.";
+
+  const groups = new Map();
+  shares.forEach((share) => {
+    const key = share.memberId ? `m:${share.memberId}` : `g:${String(share.memberName || "").toLowerCase()}`;
+    if (!groups.has(key)) {
+      groups.set(key, { memberId: share.memberId || "", memberName: share.memberName, due: 0, unpaidCount: 0 });
+    }
+    if (!share.paid) {
+      const group = groups.get(key);
+      group.due += share.shareAmount;
+      group.unpaidCount += 1;
+    }
+  });
+  const people = [...groups.values()].sort(
+    (a, b) => b.due - a.due || a.memberName.localeCompare(b.memberName, "vi", { sensitivity: "base" })
+  );
+  if (!people.length) {
+    totals.hidden = true;
+    totalsBody.innerHTML = "";
+  } else {
+    totals.hidden = false;
+    totalsBody.innerHTML = people
+      .map((person) => {
+        const action =
+          person.due <= 0
+            ? `<span class="badge is-paid">Đã thanh toán</span>`
+            : `<span class="badge is-due">${person.unpaidCount} buổi chưa trả</span>`;
+        return `<tr><td><b>${escapeHtmlText(person.memberName)}</b>${person.memberId ? "" : '<span class="tag">Giao lưu</span>'}</td><td>${basicMoney(person.due)}</td><td>${action}</td></tr>`;
+      })
+      .join("");
+  }
+
+  if (!sessions.length) {
+    list.innerHTML = `<p class="empty">Khi admin lưu một buổi, sổ sẽ hiện theo ngày, sân và từng người.</p>`;
+    return;
+  }
+  list.innerHTML = sessions
+    .map((session) => {
+      const rows = (session.shares || [])
+        .map((share) => {
+          const paid = Boolean(share.paid);
+          return `
+            <div class="share">
+              <div class="who">
+                <b>${escapeHtmlText(share.memberName)}${share.memberId ? "" : '<span class="tag">Giao lưu</span>'}</b>
+                <small>${escapeHtmlText(formatPlayDateShort(session.date))} · ${basicMoney(share.shareAmount)}</small>
+              </div>
+              <span class="badge ${paid ? "is-paid" : "is-due"}">${paid ? "Đã thanh toán" : "Chưa thanh toán"}</span>
+            </div>
+          `;
+        })
+        .join("");
+      return `
+        <article class="session bezel" data-session="${escapeHtmlText(session.id)}">
+          <div class="core">
+            <button type="button" class="session-toggle" aria-expanded="false">
+              <span class="session-summary">
+                <span class="eyebrow">Ngày ${escapeHtmlText(formatPlayDateShort(session.date))}</span>
+                <span class="session-title">${escapeHtmlText(session.court)}</span>
+                <span class="meta">
+                  <span>Tiền sân <b>${basicMoney(session.courtFee)}</b></span>
+                  <span>Tiền cầu <b>${basicMoney(session.shuttleFee)}</b></span>
+                  <span>Tổng <b>${basicMoney(session.totalFee)}</b></span>
+                </span>
+              </span>
+              <span class="session-chevron" aria-hidden="true"></span>
+            </button>
+            <div class="session-detail">
+              <div class="session-detail-inner">
+                <div class="shares">${rows}</div>
+              </div>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+async function loadUserBasicLedger() {
+  const root = document.getElementById("userBasic");
+  if (!root) return;
+  try {
+    const data = await api("/api/basic");
+    renderUserBasicLedger(data);
+  } catch (error) {
+    const list = document.getElementById("userSessionList");
+    if (list) list.innerHTML = `<p class="empty">${escapeHtmlText(error.message)}</p>`;
   }
 }
 
@@ -1046,6 +1168,7 @@ async function loadDashboard() {
     renderMyPaymentsTable(data.myPayments || []);
     renderBirthdayEventOptions(state.birthdayEvents, "user");
     await loadBirthdayUserEvent().catch(() => renderBirthdayUserEventDetail(null));
+    await loadUserBasicLedger();
     if (data.activeVote) {
       openVoteModal(data.activeVote);
     }
@@ -1053,6 +1176,14 @@ async function loadDashboard() {
 }
 
 function bindEvents() {
+  document.getElementById("userSessionList")?.addEventListener("click", (event) => {
+    const toggle = event.target.closest(".session-toggle");
+    if (!toggle) return;
+    const article = toggle.closest(".session");
+    const open = article.classList.toggle("is-open");
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+
   document.getElementById("loginModeInput").addEventListener("change", toggleLoginMode);
 
   document.getElementById("loginForm").addEventListener("submit", async (event) => {

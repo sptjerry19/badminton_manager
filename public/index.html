@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Quản lý nhóm cầu lông</title>
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#1f6b4a" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -553,70 +556,34 @@
             <div id="myDebtQrActions" class="mt-3"></div>
           </section>
 
-          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-            <h3 class="mb-3 text-lg font-semibold">Trận đấu hôm nay</h3>
-            <div class="mb-3 flex flex-wrap items-center gap-2">
-              <label for="userMatchDateSelect" class="text-sm text-slate-600">Chọn buổi:</label>
-              <select
-                id="userMatchDateSelect"
-                class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              ></select>
-              <button
-                id="reloadUserMatchesBtn"
-                class="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100"
-              >
-                Xem trận
-              </button>
+          <section id="userBasic" class="basic-embed">
+            <div class="summary bezel">
+              <div class="core summary-core">
+                <p class="eyebrow">Chưa thu</p>
+                <strong id="userUnpaidValue">0đ</strong>
+                <p id="userUnpaidMeta">Chưa có buổi nào.</p>
+              </div>
             </div>
-            <div class="overflow-x-auto">
-              <table class="min-w-full border border-slate-200 text-sm">
-                <thead class="bg-slate-100">
-                  <tr>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Round</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Sân</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Đội 1</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Đội 2</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody id="todayMatchesTableBody"></tbody>
-              </table>
-            </div>
-          </section>
-
-          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-            <h3 class="mb-3 text-lg font-semibold">Lịch sử tham gia</h3>
-            <div class="overflow-x-auto">
-              <table class="min-w-full border border-slate-200 text-sm">
-                <thead class="bg-slate-100">
-                  <tr>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Ngày</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Giờ</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Địa điểm</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Trạng thái</th>
-                    <th class="border border-slate-200 px-2 py-1 text-right">Tổng chi buổi</th>
-                  </tr>
-                </thead>
-                <tbody id="myHistoryTableBody"></tbody>
-              </table>
-            </div>
-          </section>
-
-          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-            <h3 class="mb-3 text-lg font-semibold">Lịch sử thanh toán</h3>
-            <div class="overflow-x-auto">
-              <table class="min-w-full border border-slate-200 text-sm">
-                <thead class="bg-slate-100">
-                  <tr>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Ngày</th>
-                    <th class="border border-slate-200 px-2 py-1 text-right">Số tiền</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Ghi chú</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Tạo lúc</th>
-                  </tr>
-                </thead>
-                <tbody id="myPaymentsTableBody"></tbody>
-              </table>
-            </div>
+            <p id="userViewerNote" class="note">Bạn đang xem sổ sân. Chỉ admin nhập buổi và đánh dấu thanh toán.</p>
+            <div id="userSessionList" class="ledger"></div>
+            <section id="userPeopleTotals" class="totals bezel" hidden>
+              <div class="core">
+                <p class="eyebrow">Tổng kết</p>
+                <h2>Tiền cần thanh toán</h2>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Thành viên</th>
+                        <th>Cần thanh toán</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="userPeopleTotalsBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
           </section>
         </section>
       </main>
