@@ -78,6 +78,9 @@ async function subscribeForPushOnce(options) {
 
 function pushStatusText(result) {
   if (result?.ok) return "Đã bật thông báo trên máy này.";
+  if (result?.reason === "ios-install") {
+    return "Trên iPhone, Safari không hỏi quyền trong tab. Hãy bấm Chia sẻ, chọn Thêm vào Màn hình chính, rồi mở app từ icon đó và bấm lại.";
+  }
   if (result?.reason === "unsupported") {
     return "Trình duyệt chỉ hỏi quyền thông báo trên http://localhost:3000 hoặc HTTPS.";
   }
@@ -91,13 +94,22 @@ function pushStatusText(result) {
   return "Chưa bật được thông báo. Bấm lại nút Bật thông báo.";
 }
 
-async function enablePushFromClick() {
-  if (!window.isSecureContext || !("Notification" in window) || !("serviceWorker" in navigator)) {
-    return { ok: false, reason: "unsupported" };
+function askNotificationPermission() {
+  if (!("Notification" in window)) return Promise.resolve("unsupported");
+  if (Notification.permission === "granted" || Notification.permission === "denied") {
+    return Promise.resolve(Notification.permission);
   }
-  const permission = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
-  if (permission !== "granted") return { ok: false, reason: permission || "denied" };
-  return registerPush({ prompt: false });
+  const request = Notification.requestPermission();
+  return request && typeof request.then === "function" ? request : Promise.resolve(Notification.permission);
+}
+
+function isIosBrowser() {
+  const ua = navigator.userAgent || "";
+  return /iphone|ipad|ipod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function isInstalledApp() {
+  return window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
 }
 
 function labelForPermission(permission) {
@@ -106,31 +118,55 @@ function labelForPermission(permission) {
   return "Bật thông báo";
 }
 
+function showPushStatus(status, result) {
+  if (!status) return;
+  status.hidden = false;
+  status.textContent = pushStatusText(result);
+  status.classList.toggle("is-error", !result?.ok);
+  status.classList.toggle("text-red-600", !result?.ok);
+}
+
 function bindPushButtons() {
   document.querySelectorAll("[data-push-button]").forEach((button) => {
     const status = button.dataset.pushStatus ? document.querySelector(button.dataset.pushStatus) : null;
+    button.type = "button";
     button.textContent = labelForPermission(typeof Notification === "undefined" ? "" : Notification.permission);
-    if (status && (typeof Notification === "undefined" || Notification.permission === "default")) {
-      status.hidden = false;
-      status.textContent = "Bấm Bật thông báo để trình duyệt hỏi quyền.";
-    }
-    button.addEventListener("click", async () => {
-      button.disabled = true;
-      const result = await enablePushFromClick();
-      if (status) {
-        status.hidden = false;
-        status.textContent = pushStatusText(result);
-        status.classList.toggle("is-error", !result?.ok);
-        status.classList.toggle("text-red-600", !result?.ok);
+    if (status) status.hidden = true;
+    button.addEventListener("click", () => {
+      if (!window.isSecureContext || !("serviceWorker" in navigator) || !("Notification" in window)) {
+        const reason = isIosBrowser() && !isInstalledApp() ? "ios-install" : "unsupported";
+        showPushStatus(status, { ok: false, reason });
+        return;
       }
-      button.textContent = labelForPermission(typeof Notification === "undefined" ? "" : Notification.permission);
-      button.disabled = false;
+      const permissionRequest = askNotificationPermission();
+      button.disabled = true;
+      permissionRequest
+        .then(async (permission) => {
+          if (permission !== "granted") {
+            const reason = permission === "default" && isIosBrowser() && !isInstalledApp() ? "ios-install" : permission || "denied";
+            showPushStatus(status, { ok: false, reason });
+            return;
+          }
+          const result = await registerPush({ prompt: false });
+          showPushStatus(status, result);
+        })
+        .catch(() => {
+          showPushStatus(status, { ok: false, reason: "error" });
+        })
+        .finally(() => {
+          button.textContent = labelForPermission(typeof Notification === "undefined" ? "" : Notification.permission);
+          button.disabled = false;
+        });
     });
   });
 }
 
 window.preparePushPermission = preparePushPermission;
 window.registerPush = registerPush;
-window.enablePushFromClick = enablePushFromClick;
+window.enablePushFromClick = function enablePushFromClick() {
+  const button = document.querySelector("[data-push-button]");
+  button?.click();
+  return Promise.resolve({ ok: false, reason: "prompt" });
+};
 window.pushStatusText = pushStatusText;
 bindPushButtons();

@@ -67,16 +67,30 @@ function readServiceAccountFile() {
   return null;
 }
 
-function loadServiceAccount() {
-  const raw = String(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "").trim();
-  if (raw.startsWith("{") && raw.endsWith("}")) {
+function parseServiceAccountText(raw) {
+  let text = String(raw || "").trim();
+  if (!text) return null;
+  if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
     try {
-      const parsed = normalizeServiceAccount(JSON.parse(raw));
-      if (parsed) return parsed;
-    } catch (error) {
-      console.error("FIREBASE_SERVICE_ACCOUNT_JSON không phải JSON hợp lệ:", error.message);
+      const unwrapped = JSON.parse(text);
+      if (unwrapped && typeof unwrapped === "object") return normalizeServiceAccount(unwrapped);
+      if (typeof unwrapped === "string") text = unwrapped.trim();
+    } catch {
+      text = text.slice(1, -1).trim();
     }
   }
+  if (!text.startsWith("{")) return null;
+  try {
+    return normalizeServiceAccount(JSON.parse(text));
+  } catch (error) {
+    console.error("FIREBASE_SERVICE_ACCOUNT_JSON không phải JSON hợp lệ:", error.message);
+    return null;
+  }
+}
+
+function loadServiceAccount() {
+  const fromEnv = parseServiceAccountText(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+  if (fromEnv) return fromEnv;
   const fromFile = readServiceAccountFile();
   if (fromFile) return fromFile;
   const clientEmail = String(process.env.FIREBASE_CLIENT_EMAIL || "").trim();
@@ -177,7 +191,7 @@ class NotificationService {
       return {
         configured: false,
         message:
-          "Thiếu Firebase service account. Thêm FIREBASE_SERVICE_ACCOUNT_JSON hoặc FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY.",
+          "Thiếu Firebase service account trên server. Trong Vercel: Settings → Environment Variables, thêm FIREBASE_SERVICE_ACCOUNT_JSON bằng nội dung file service account, rồi Redeploy.",
         session: audience.session,
         members: audience.members.length,
         withToken: audience.members.filter((member) => member.tokens.length).length,
