@@ -276,14 +276,32 @@ function renderUpcoming(session) {
   }
 }
 
+function summarizeBasicDebt(payload, memberName) {
+  const sessions = Array.isArray(payload?.sessions) ? payload.sessions : [];
+  const nameCi = String(memberName || "").trim().toLowerCase();
+  const mine = sessions.flatMap((session) => session.shares || []).filter((share) => {
+    return String(share.memberName || "").trim().toLowerCase() === nameCi;
+  });
+  const totalDue = mine.reduce((sum, share) => sum + Number(share.shareAmount || 0), 0);
+  const totalPaid = mine
+    .filter((share) => share.paid)
+    .reduce((sum, share) => sum + Number(share.shareAmount || 0), 0);
+  const balance = mine
+    .filter((share) => !share.paid)
+    .reduce((sum, share) => sum + Number(share.shareAmount || 0), 0);
+  return { totalDue, totalPaid, balance, count: mine.length };
+}
+
 function renderUserDebt(myDebt) {
   const el = document.getElementById("myDebtCard");
   const actionEl = document.getElementById("myDebtQrActions");
-  if (!myDebt) {
-    el.textContent = "Chưa có dữ liệu công nợ.";
+  if (!myDebt || !myDebt.count) {
+    el.textContent = "Chưa có công nợ trên sổ sân.";
     actionEl.innerHTML = "";
+    state.userBasicBalance = 0;
     return;
   }
+  state.userBasicBalance = Number(myDebt.balance || 0);
   el.innerHTML = `
     <div>Tổng phải trả: <strong>${formatMoney(myDebt.totalDue)}</strong></div>
     <div>Đã thanh toán: <strong>${formatMoney(myDebt.totalPaid)}</strong></div>
@@ -990,14 +1008,13 @@ async function loadUserDashboard() {
   state.birthdayEvents = data.birthdayEvents || [];
   renderRoleHeader(data.auth);
   renderUpcoming(data.upcomingSession);
-  renderUserDebt(data.myDebt);
   renderUserMatchDateOptions(data.upcomingSession, data.myHistory || []);
   await loadUserMatchesBySelectedDate(data.auth.memberName || "");
   renderMyHistoryTable(data.myHistory || []);
   renderMyPaymentsTable(data.myPayments || []);
   renderBirthdayEventOptions(state.birthdayEvents, "user");
   await loadBirthdayUserEvent().catch(() => renderBirthdayUserEventDetail(null));
-  await loadUserBasicLedger();
+  await loadUserBasicLedger(data.auth?.memberName || "");
   if (data.activeVote) {
     openVoteModal(data.activeVote);
   }
@@ -1110,12 +1127,14 @@ function renderUserBasicLedger(payload) {
     .join("");
 }
 
-async function loadUserBasicLedger() {
+async function loadUserBasicLedger(memberName = "") {
   const root = document.getElementById("userBasic");
-  if (!root) return;
+  if (!root && !document.getElementById("myDebtCard")) return;
   try {
     const data = await api("/api/basic");
-    renderUserBasicLedger(data);
+    if (root) renderUserBasicLedger(data);
+    const name = memberName || state.auth?.memberName || data.memberName || "";
+    renderUserDebt(summarizeBasicDebt(data, name));
   } catch (error) {
     const list = document.getElementById("userSessionList");
     if (list) list.innerHTML = `<p class="empty">${escapeHtmlText(error.message)}</p>`;
@@ -1161,14 +1180,13 @@ async function loadDashboard() {
     state.birthdayEvents = data.birthdayEvents || [];
     renderRoleHeader(data.auth);
     renderUpcoming(data.upcomingSession);
-    renderUserDebt(data.myDebt);
     renderUserMatchDateOptions(data.upcomingSession, data.myHistory || []);
     await loadUserMatchesBySelectedDate(data.auth.memberName || "");
     renderMyHistoryTable(data.myHistory || []);
     renderMyPaymentsTable(data.myPayments || []);
     renderBirthdayEventOptions(state.birthdayEvents, "user");
     await loadBirthdayUserEvent().catch(() => renderBirthdayUserEventDetail(null));
-    await loadUserBasicLedger();
+    await loadUserBasicLedger(data.auth.memberName || "");
     if (data.activeVote) {
       openVoteModal(data.activeVote);
     }
@@ -1736,10 +1754,9 @@ function bindEvents() {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
     if (target.id !== "openQrBtn") return;
-    const data = await api("/api/bootstrap");
-    const myDebt = data.myDebt;
-    if (myDebt && Number(myDebt.balance || 0) > 0) {
-      openQrModal(data.auth.memberName, myDebt.balance);
+    const amount = Number(state.userBasicBalance || 0);
+    if (amount > 0) {
+      openQrModal(state.auth?.memberName || "", amount);
     }
   });
 
