@@ -351,6 +351,16 @@ async function initializeDatabase() {
   `).catch(() => {});
 
   await query(`DELETE FROM login_sessions WHERE expire < NOW()`);
+  await query(`
+    CREATE TABLE IF NOT EXISTS member_credits (
+      credit_id TEXT PRIMARY KEY,
+      member_id TEXT NOT NULL DEFAULT '',
+      member_name TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
 
   for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
     await query(
@@ -2462,6 +2472,32 @@ function vietnamToday() {
   }).format(new Date());
 }
 
+async function getPlaysForDate(date) {
+  const day = String(date || vietnamToday()).trim();
+  const [mainResult, basicResult] = await Promise.all([
+    query(
+      `SELECT date, time, location FROM sessions WHERE date = $1 ORDER BY time ASC, created_at ASC`,
+      [day]
+    ),
+    query(
+      `SELECT play_date, court FROM basic_sessions WHERE play_date = $1 ORDER BY created_at ASC`,
+      [day]
+    )
+  ]);
+  return {
+    date: day,
+    sessions: mainResult.rows.map((row) => ({
+      date: row.date || "",
+      time: row.time || "",
+      location: row.location || ""
+    })),
+    basicSessions: basicResult.rows.map((row) => ({
+      date: row.play_date || "",
+      court: row.court || ""
+    }))
+  };
+}
+
 async function upsertPushToken(memberId, token) {
   const id = String(memberId || "").trim();
   const value = String(token || "").trim();
@@ -2583,6 +2619,76 @@ async function getWeeklyReminderAudience() {
   };
 }
 
+async function addMemberCredit({ memberId, amount, note }) {
+  const delta = Math.round(toNumber(amount));
+  if (!delta) throw new Error("Số tiền thừa phải khác 0.");
+  const safeMemberId = String(memberId || "").trim();
+  const memberResult = await query(`SELECT member_id, name FROM members WHERE member_id = $1`, [safeMemberId]);
+  const member = memberResult.rows[0];
+  if (!member) throw new Error("Không tìm thấy thành viên.");
+  if (delta < 0) {
+    const current = await getMemberCreditBalanceById(member.member_id);
+    if (current + delta < 0) throw new Error("Không đủ tiền thừa để trừ.");
+  }
+  await query(
+    `
+    INSERT INTO member_credits(credit_id, member_id, member_name, amount, note, created_at)
+    VALUES ($1,$2,$3,$4,$5,$6)
+    `,
+    [crypto.randomUUID(), member.member_id, member.name, delta, String(note || "").trim(), nowIso()]
+  );
+  return getMemberCreditSummary();
+}
+
+async function getMemberCreditBalanceById(memberId) {
+  const result = await query(
+    `SELECT COALESCE(SUM(amount), 0)::int AS balance FROM member_credits WHERE member_id = $1`,
+    [String(memberId || "").trim()]
+  );
+  return Math.round(toNumber(result.rows[0]?.balance));
+}
+
+async function getMemberCreditBalanceByName(memberName) {
+  const result = await query(
+    `
+    SELECT COALESCE(SUM(c.amount), 0)::int AS balance
+    FROM member_credits c
+    JOIN members m ON m.member_id = c.member_id
+    WHERE LOWER(m.name) = LOWER($1)
+    `,
+    [String(memberName || "").trim()]
+  );
+  return Math.round(toNumber(result.rows[0]?.balance));
+}
+
+async function getMemberCreditSummary() {
+  const [balances, entries] = await Promise.all([
+    query(`
+      SELECT member_id, MAX(member_name) AS member_name, SUM(amount)::int AS balance
+      FROM member_credits
+      GROUP BY member_id
+      HAVING SUM(amount) <> 0
+      ORDER BY MAX(member_name) ASC
+    `),
+    query(`SELECT * FROM member_credits ORDER BY created_at DESC LIMIT 40`)
+  ]);
+  return {
+    balances: balances.rows.map((row) => ({
+      memberId: row.member_id,
+      memberName: row.member_name,
+      balance: Math.round(toNumber(row.balance))
+    })),
+    entries: entries.rows.map((row) => ({
+      creditId: row.credit_id,
+      memberId: row.member_id,
+      memberName: row.member_name,
+      amount: Math.round(toNumber(row.amount)),
+      note: row.note || "",
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+    }))
+  };
+}
+
 async function deleteBasicSession(sessionId) {
   const id = String(sessionId || "").trim();
   if (!id) throw new Error("Thiếu mã buổi.");
@@ -2643,5 +2749,9 @@ module.exports = {
   upsertPushToken,
   deletePushTokens,
   getPushTokensForMemberKey,
-  getWeeklyReminderAudience
+  getWeeklyReminderAudience,
+  getPlaysForDate,
+  addMemberCredit,
+  getMemberCreditSummary,
+  getMemberCreditBalanceByName
 };

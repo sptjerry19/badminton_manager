@@ -1,15 +1,4 @@
-:root {
-  --paper: #f4f6f8;
-  --ink: #111827;
-  --muted: #667085;
-  --line: #e4e7ec;
-  --green: #1f6b4a;
-  --green-deep: #18563b;
-  --clay: #b42318;
-  --ease: ease;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
-  color-scheme: light;
-}
+/* tokens live in tokens.css */
 
 * {
   box-sizing: border-box;
@@ -23,9 +12,20 @@ body {
 
 body {
   min-height: 100dvh;
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: var(--font-body);
   color: var(--ink);
-  background: var(--paper);
+  background: var(--bg);
+}
+
+h1,
+h2,
+.session-title,
+.eyebrow,
+.segment-btn,
+.switch button {
+  font-family: var(--font-display);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 button,
@@ -47,23 +47,23 @@ button {
 
 .bezel {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 4px;
   background: #fff;
   box-shadow: var(--shadow);
 }
 
 .core {
-  border-radius: 12px;
+  border-radius: 4px;
   background: #fff;
 }
 
 .eyebrow {
   margin: 0;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--green);
+  color: var(--muted);
 }
 
 h1,
@@ -74,10 +74,10 @@ p {
 
 h1 {
   margin-top: 4px;
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.2;
+  font-size: clamp(40px, 8vw, 64px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 0.95;
 }
 
 h2 {
@@ -115,14 +115,14 @@ h2 {
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 4px;
   background: #f8fafc;
 }
 
 .segment-btn,
 .switch button {
   flex: 1;
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 8px 12px;
   font-weight: 600;
 }
@@ -145,7 +145,7 @@ h2 {
 .segment-btn,
 .switch button {
   flex: 1;
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 8px 12px;
   font-weight: 600;
 }
@@ -172,7 +172,7 @@ select {
   width: 100%;
   min-height: 40px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 4px;
   background: #fff;
   padding: 8px 12px;
   outline: none;
@@ -181,8 +181,8 @@ select {
 
 input:focus,
 select:focus {
-  border-color: var(--green);
-  box-shadow: 0 0 0 3px rgba(31, 107, 74, 0.16);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px var(--focus);
 }
 
 .money-row {
@@ -198,7 +198,7 @@ select:focus {
   width: 100%;
   min-height: 40px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 8px 14px;
   background: var(--green);
   color: #f7fff9;
@@ -232,8 +232,8 @@ select:focus {
   justify-content: space-between;
   gap: 1rem;
   padding: 1rem 1.1rem;
-  border-radius: 12px;
-  background: #e7f3ec;
+  border-radius: 4px;
+  background: #f4f4f2;
 }
 
 .total-island strong,
@@ -254,7 +254,7 @@ select:focus {
 
 .chip {
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 8px 12px;
   background: #fff;
   font-weight: 600;
@@ -312,16 +312,53 @@ select:focus {
 
 .top {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.1rem;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.top-actions .ghost {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.top-actions .note {
+  flex: 1 0 100%;
+  margin: 0;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .top-actions {
+    justify-content: flex-start;
+  }
 }
 
 .ghost,
 .danger {
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 8px 12px;
   background: #fff;
   font-weight: 600;
@@ -329,7 +366,7 @@ select:focus {
 
 .switch {
   position: sticky;
-  top: 12px;
+  top: 4px;
   z-index: 2;
   margin-bottom: 16px;
   background: #f8fafc;
@@ -469,7 +506,7 @@ select:focus {
 
 .status,
 .badge {
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 6px 10px;
   font-size: 12px;
   font-weight: 600;
@@ -478,14 +515,15 @@ select:focus {
 
 .status.is-paid,
 .badge.is-paid {
-  background: #e7f3ec;
-  color: var(--green-deep);
+  background: var(--ink);
+  color: #f7f7f5;
 }
 
 .status.is-due,
 .badge.is-due {
-  background: #f8e8df;
+  background: transparent;
   color: var(--clay);
+  box-shadow: inset 0 0 0 1px var(--clay);
 }
 
 .session-tools {
@@ -596,7 +634,6 @@ body[data-role="user"] [data-view="entry"] {
   .share,
   .preview li {
     align-items: flex-start;
-    flex-direction: column;
   }
 }
 

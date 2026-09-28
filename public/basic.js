@@ -280,7 +280,7 @@ function renderPeopleTotals() {
       const action = done
         ? `<span class="badge is-paid">Đã thanh toán</span>`
         : state.role === "admin"
-          ? `<button type="button" class="status is-due" data-settle-id="${escapeHtml(person.memberId)}" data-settle-name="${escapeHtml(person.memberName)}">Đã hoàn thành thanh toán</button>`
+          ? `<button type="button" class="status is-due" data-settle-id="${escapeHtml(person.memberId)}" data-settle-name="${escapeHtml(person.memberName)}">Đã hoàn thành</button>`
           : `<span class="badge is-due">${person.unpaidCount} buổi chưa trả</span>`;
       return `
         <tr>
@@ -557,11 +557,11 @@ peopleTotals.addEventListener("click", async (event) => {
     peopleTotalsBody.querySelectorAll("[data-settle-name]").forEach((item) => {
       item.dataset.armed = "false";
       item.classList.remove("is-armed");
-      item.textContent = "Đã hoàn thành thanh toán";
+      item.textContent = "Đã hoàn thành";
     });
     button.dataset.armed = "true";
     button.classList.add("is-armed");
-    button.textContent = "Xác nhận hoàn thành";
+    button.textContent = "Xác nhận";
     return;
   }
   button.disabled = true;

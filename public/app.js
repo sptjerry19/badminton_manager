@@ -292,22 +292,28 @@ function summarizeBasicDebt(payload, memberName) {
   return { totalDue, totalPaid, balance, count: mine.length };
 }
 
-function renderUserDebt(myDebt) {
+function renderUserDebt(myDebt, creditBalance = 0) {
   const el = document.getElementById("myDebtCard");
   const actionEl = document.getElementById("myDebtQrActions");
-  if (!myDebt || !myDebt.count) {
+  if (!el || !actionEl) return;
+  const totalDue = Number(myDebt?.totalDue || 0);
+  const paidOnBook = Number(myDebt?.totalPaid || 0);
+  const credit = Math.max(0, Number(creditBalance || 0));
+  const totalPaid = paidOnBook + credit;
+  const remaining = totalDue - totalPaid;
+  if ((!myDebt || !myDebt.count) && !credit) {
     el.textContent = "Chưa có công nợ trên sổ sân.";
     actionEl.innerHTML = "";
     state.userBasicBalance = 0;
     return;
   }
-  state.userBasicBalance = Number(myDebt.balance || 0);
+  state.userBasicBalance = Math.max(0, remaining);
   el.innerHTML = `
-    <div>Tổng phải trả: <strong>${formatMoney(myDebt.totalDue)}</strong></div>
-    <div>Đã thanh toán: <strong>${formatMoney(myDebt.totalPaid)}</strong></div>
-    <div>Số dư: <strong class="${myDebt.balance > 0 ? "text-red-600" : "text-emerald-600"}">${formatMoney(myDebt.balance)}</strong></div>
+    <div>Tổng tiền cần thanh toán: <strong>${formatMoney(totalDue)}</strong></div>
+    <div>Đã thanh toán: <strong>${formatMoney(totalPaid)}</strong></div>
+    <div>Số tiền cần thanh toán: <strong class="${remaining > 0 ? "text-red-600" : "text-emerald-600"}">${formatMoney(remaining)}</strong></div>
   `;
-  if (Number(myDebt.balance || 0) > 0) {
+  if (remaining > 0) {
     actionEl.innerHTML = `<button id="openQrBtn" class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">Thanh toán bằng QR</button>`;
   } else {
     actionEl.innerHTML = `<p class="text-sm text-slate-500">Bạn không có công nợ cần thanh toán.</p>`;
@@ -394,7 +400,7 @@ function renderAdminAttendanceTable(participants = [], pollQuestion = "") {
   tbody.innerHTML = "";
   if (!participants.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="7" class="border border-slate-200 px-2 py-2 text-center text-slate-500">Chưa có dữ liệu xác nhận.</td>`;
+    tr.innerHTML = `<td colspan="6" class="px-2 py-2 text-center text-slate-500">Chưa có dữ liệu xác nhận.</td>`;
     tbody.appendChild(tr);
     return;
   }
@@ -405,27 +411,23 @@ function renderAdminAttendanceTable(participants = [], pollQuestion = "") {
     const currentStatus = String(item.status || "pending").toLowerCase();
     const allowPending = typeLabel === "GL";
     const statusOptions = [
-      { value: "yes", label: "Có tham gia" },
       { value: "no", label: "Không tham gia" },
+      { value: "yes", label: "Có tham gia" },
       ...(allowPending ? [{ value: "pending", label: "Chưa phản hồi" }] : [])
     ]
       .map((opt) => `<option value="${opt.value}" ${currentStatus === opt.value ? "selected" : ""}>${opt.label}</option>`)
       .join("");
     tr.innerHTML = `
-      <td class="border border-slate-200 px-2 py-1">${item.memberName || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1">${typeLabel}</td>
-      <td class="border border-slate-200 px-2 py-1 text-right">${level}</td>
-      <td class="border border-slate-200 px-2 py-1">${formatAttendanceStatus(item.status)}</td>
-      <td class="border border-slate-200 px-2 py-1">
-        <div class="flex flex-wrap items-center gap-2">
-          <select data-member="${item.memberName || ""}" data-type="${typeLabel}" data-level="${level}" class="attendance-status-input rounded border border-slate-300 px-2 py-1 text-sm">
-            ${statusOptions}
-          </select>
-          <button data-member="${item.memberName || ""}" data-type="${typeLabel}" data-level="${level}" class="save-attendance-status-btn rounded bg-blue-600 px-2 py-1 text-xs text-white">Lưu</button>
-        </div>
+      <td>${item.memberName || "-"}</td>
+      <td class="attendance-col-extra">${typeLabel}</td>
+      <td>${level}</td>
+      <td>
+        <select data-member="${item.memberName || ""}" data-type="${typeLabel}" data-level="${level}" class="attendance-status-input">
+          ${statusOptions}
+        </select>
       </td>
-      <td class="border border-slate-200 px-2 py-1">${item.pollAnswer || (pollQuestion ? "-" : "Không có poll")}</td>
-      <td class="border border-slate-200 px-2 py-1">${item.respondedAt || "-"}</td>
+      <td class="attendance-col-extra">${item.pollAnswer || (pollQuestion ? "-" : "Không có poll")}</td>
+      <td class="attendance-col-extra">${item.respondedAt || "-"}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -840,7 +842,8 @@ function activateAdminTab(tabId) {
     court: "courtTabContent",
     expenses: "expensesTabContent",
     games: "gamesTabContent",
-    tools: "toolsTabContent"
+    tools: "toolsTabContent",
+    credit: "creditTabContent"
   };
   Object.entries(contentDefs).forEach(([key, contentId]) => {
     const el = document.getElementById(contentId);
@@ -852,7 +855,8 @@ function activateAdminTab(tabId) {
     court: "adminTabCourtBtn",
     expenses: "adminTabExpensesBtn",
     games: "adminTabGamesBtn",
-    tools: "adminTabToolsBtn"
+    tools: "adminTabToolsBtn",
+    credit: "adminTabCreditBtn"
   };
   Object.entries(btnDefs).forEach(([key, btnId]) => {
     const btn = document.getElementById(btnId);
@@ -861,6 +865,8 @@ function activateAdminTab(tabId) {
 
     btn.classList.toggle("is-active", active);
   });
+
+  if (tabId === "credit") loadCreditBoard().catch((error) => setMessage("creditMessage", error.message, true));
 
   if (tabId === "expenses") {
     renderAdminPaymentsTableForCurrentInput();
@@ -1132,9 +1138,10 @@ async function loadUserBasicLedger(memberName = "") {
   if (!root && !document.getElementById("myDebtCard")) return;
   try {
     const data = await api("/api/basic");
+    const credit = await api("/api/credits").catch(() => ({ balance: 0 }));
     if (root) renderUserBasicLedger(data);
     const name = memberName || state.auth?.memberName || data.memberName || "";
-    renderUserDebt(summarizeBasicDebt(data, name));
+    renderUserDebt(summarizeBasicDebt(data, name), Number(credit.balance || 0));
   } catch (error) {
     const list = document.getElementById("userSessionList");
     if (list) list.innerHTML = `<p class="empty">${escapeHtmlText(error.message)}</p>`;
@@ -1245,6 +1252,82 @@ function bindEvents() {
   document.getElementById("adminTabToolsBtn")?.addEventListener("click", () => activateAdminTab("tools"));
 
   document.getElementById("refreshMembersBtn")?.addEventListener("click", loadAdminDashboard);
+}
+
+function fillCreditMembers() {
+  const select = document.getElementById("creditMemberSelect");
+  if (!select) return;
+  const current = select.value;
+  const members = (state.members || []).filter((member) => member.active !== false);
+  select.innerHTML = members.length
+    ? members
+        .map((member) => `<option value="${escapeHtmlText(member.memberId)}">${escapeHtmlText(member.name)}</option>`)
+        .join("")
+    : `<option value="">Chưa có thành viên</option>`;
+  if (current && members.some((member) => member.memberId === current)) select.value = current;
+}
+
+function renderCreditBoard(payload) {
+  const balances = payload?.balances || [];
+  const entries = payload?.entries || [];
+  const balanceBody = document.getElementById("creditBalanceBody");
+  const entryBody = document.getElementById("creditEntryBody");
+  if (balanceBody) {
+    balanceBody.innerHTML = balances.length
+      ? balances
+          .map(
+            (item) =>
+              `<tr><td>${escapeHtmlText(item.memberName)}</td><td class="text-right">${formatMoney(item.balance)}</td></tr>`
+          )
+          .join("")
+      : `<tr><td colspan="2" class="text-slate-500">Chưa có tiền thừa.</td></tr>`;
+  }
+  if (entryBody) {
+    entryBody.innerHTML = entries.length
+      ? entries
+          .map((item) => {
+            const sign = item.amount > 0 ? "+" : "";
+            return `<tr><td>${escapeHtmlText(item.memberName)}</td><td class="text-right">${sign}${formatMoney(item.amount)}</td><td>${escapeHtmlText(item.note || "-")}</td></tr>`;
+          })
+          .join("")
+      : `<tr><td colspan="3" class="text-slate-500">Chưa có ghi nhận.</td></tr>`;
+  }
+}
+
+async function loadCreditBoard() {
+  fillCreditMembers();
+  const data = await api("/api/credits");
+  renderCreditBoard(data);
+}
+
+document.getElementById("adminTabCreditBtn")?.addEventListener("click", () => activateAdminTab("credit"));
+document.getElementById("creditForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const amount = Number(String(document.getElementById("creditAmountInput")?.value || "").replace(/[^\d]/g, ""));
+  if (!amount) {
+    setMessage("creditMessage", "Nhập số tiền lớn hơn 0.", true);
+    return;
+  }
+  try {
+    const data = await api("/api/credits", {
+      method: "POST",
+      body: JSON.stringify({
+        memberId: document.getElementById("creditMemberSelect")?.value,
+        amount,
+        direction: document.getElementById("creditDirectionInput")?.value || "add",
+        note: document.getElementById("creditNoteInput")?.value || ""
+      })
+    });
+    document.getElementById("creditAmountInput").value = "";
+    document.getElementById("creditNoteInput").value = "";
+    renderCreditBoard(data);
+    setMessage("creditMessage", data.message || "Đã lưu.");
+  } catch (error) {
+    setMessage("creditMessage", error.message, true);
+  }
+});
+
+  document.getElementById("refreshMembersBtn")?.addEventListener("click", loadAdminDashboard);
   document.getElementById("birthdayEventForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
@@ -1331,9 +1414,9 @@ function bindEvents() {
   });
   document.getElementById("loadAttendanceBtn")?.addEventListener("click", loadAdminAttendanceTable);
   document.getElementById("attendanceSessionSelect")?.addEventListener("change", loadAdminAttendanceTable);
-  document.getElementById("attendanceTableBody")?.addEventListener("click", async (event) => {
+  document.getElementById("attendanceTableBody")?.addEventListener("change", async (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLElement) || !target.classList.contains("save-attendance-status-btn")) return;
+    if (!(target instanceof HTMLSelectElement) || !target.classList.contains("attendance-status-input")) return;
     const sessionId = document.getElementById("attendanceSessionSelect")?.value;
     if (!sessionId) {
       setMessage("attendanceMessage", "Vui lòng chọn session trước khi cập nhật trạng thái.", true);
@@ -1346,9 +1429,8 @@ function bindEvents() {
       setMessage("attendanceMessage", "Thiếu tên thành viên cần cập nhật.", true);
       return;
     }
-    const row = target.closest("tr");
-    const select = row?.querySelector(".attendance-status-input");
-    const status = String(select?.value || "pending");
+    const status = String(target.value || "pending");
+    target.disabled = true;
     try {
       if (type === "GL") {
         await api(`/api/sessions/${encodeURIComponent(sessionId)}/guests`, {
@@ -1372,6 +1454,7 @@ function bindEvents() {
       await loadAdminAttendanceTable();
     } catch (error) {
       setMessage("attendanceMessage", error.message, true);
+      target.disabled = false;
     }
   });
   document.getElementById("addAttendanceGuestForm")?.addEventListener("submit", async (event) => {
@@ -1841,7 +1924,6 @@ function bindEvents() {
       setMessage("voteMessage", error.message, true);
     }
   });
-}
 
 async function init() {
   bindEvents();

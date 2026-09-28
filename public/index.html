@@ -5,20 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Quản lý nhóm cầu lông</title>
     <link rel="icon" href="/favicon.ico?v=3" sizes="32x32" />
-    <link rel="icon" href="/favicon-32.png?v=3" type="image/png" sizes="32x32" />
+    <link
+      rel="icon"
+      href="/favicon-32.png?v=3"
+      type="image/png"
+      sizes="32x32"
+    />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3" />
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#1f6b4a" />
+    <meta name="theme-color" content="#111111" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Cầu lông" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/tokens.css" />
     <link rel="stylesheet" href="/ui.css" />
   </head>
   <body class="app-shell">
@@ -30,9 +36,14 @@
         </div>
       </header>
 
-      <section id="loginSection" class="mx-auto max-w-md rounded-xl bg-white p-5 shadow-sm">
+      <section
+        id="loginSection"
+        class="mx-auto max-w-md rounded-xl bg-white p-5 shadow-sm"
+      >
         <h2 class="text-lg font-semibold">Đăng nhập</h2>
-        <p class="mt-1 text-sm text-slate-500">Admin dùng password, user chọn thành viên + nhập số điện thoại.</p>
+        <p class="mt-1 text-sm text-slate-500">
+          Admin dùng password, user chọn thành viên + nhập số điện thoại.
+        </p>
         <form id="loginForm" class="mt-4 space-y-3">
           <label class="block text-sm">
             <span class="mb-1 block font-medium">Chế độ đăng nhập</span>
@@ -64,7 +75,10 @@
               class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
             />
           </div>
-          <button type="submit" class="w-full rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700">
+          <button
+            type="submit"
+            class="w-full rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700"
+          >
             Đăng nhập
           </button>
         </form>
@@ -108,100 +122,215 @@
         <section id="adminSection" class="hidden space-y-5">
           <nav class="tabs" aria-label="Mục quản trị">
             <button id="adminTabCourtBtn" type="button" class="tab">Sân</button>
-            <button id="adminTabExpensesBtn" type="button" class="tab">Chi phí</button>
-            <button id="adminTabGamesBtn" type="button" class="tab">Trận</button>
+            <button id="adminTabExpensesBtn" type="button" class="tab">
+              Chi phí
+            </button>
+            <button id="adminTabGamesBtn" type="button" class="tab">
+              Trận
+            </button>
             <button id="adminTabToolsBtn" type="button" class="tab">Công cụ</button>
+            <button id="adminTabCreditBtn" type="button" class="tab">Tiền thừa</button>
+            <button id="adminTabBasicBtn" type="button" class="tab">
+              <a href="/basic">Cơ bản</a>
+            </button>
           </nav>
 
           <div id="courtTabContent" class="space-y-5">
-          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-            <h3 class="mb-3 text-lg font-semibold">Quản trị dữ liệu</h3>
-            <div class="flex flex-wrap gap-3">
-              <button id="migrateSheetsBtn" class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
-                Migrate từ Sheets
-              </button>
-              <button id="syncSheetsBtn" class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
-                Sync sang Sheets ngay
-              </button>
-              <button id="testPushBtn" type="button" class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
-                Gửi nhắc lịch ngay
-              </button>
-            </div>
-            <p id="dataOpsMessage" class="mt-2 text-sm"></p>
-          </section>
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-3 text-lg font-semibold">Quản trị dữ liệu</h3>
+              <div class="flex flex-wrap gap-3">
+                <button
+                  id="migrateSheetsBtn"
+                  class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
+                >
+                  Migrate từ Sheets
+                </button>
+                <button
+                  id="syncSheetsBtn"
+                  class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
+                >
+                  Sync sang Sheets ngay
+                </button>
+                <button
+                  id="testPushBtn"
+                  type="button"
+                  class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
+                >
+                  Gửi nhắc lịch ngay
+                </button>
+              </div>
+              <p id="dataOpsMessage" class="mt-2 text-sm"></p>
+            </section>
 
-          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-            <h3 class="mb-3 text-lg font-semibold">Phase 2 - Tạo vote trước buổi</h3>
-            <form id="preSessionForm" class="space-y-3">
-              <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <input id="preDateInput" type="date" class="rounded-lg border border-slate-300 px-3 py-2" required />
-                <input id="preTimeInput" type="time" class="rounded-lg border border-slate-300 px-3 py-2" required />
-                <input id="preLocationInput" placeholder="Địa điểm (optional)" class="rounded-lg border border-slate-300 px-3 py-2" />
-              </div>
-              <input id="preNoteInput" placeholder="Ghi chú buổi chơi" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
-              <input id="prePollQuestionInput" placeholder='Poll (vd: "Tuần này đánh sân A hay B?")' class="w-full rounded-lg border border-slate-300 px-3 py-2" />
-              <button class="rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-700">Tạo vote buổi</button>
-              <button id="resendSessionPushBtn" type="button" class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100">
-                Gửi lại thông báo
-              </button>
-              <p id="preSessionMessage" class="text-sm"></p>
-            </form>
-          </section>
-
-          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-            <h3 class="mb-3 text-lg font-semibold">Phase 1 - Chốt thực tế sau buổi và tính phí</h3>
-            <form id="settleSessionForm" class="space-y-3">
-              <div class="grid grid-cols-1 gap-3 sm:grid-cols-4">
-                <select id="settleSessionSelect" class="rounded-lg border border-slate-300 px-3 py-2"></select>
-                <input id="fixedCourtCostInput" type="number" min="0" value="300000" placeholder="Tiền sân cố định" class="rounded-lg border border-slate-300 px-3 py-2" />
-                <input id="extraCourtsInput" type="number" min="0" placeholder="Số sân thêm" class="rounded-lg border border-slate-300 px-3 py-2" />
-                <input id="shuttlecockCostInput" type="number" min="0" placeholder="Tiền cầu" class="rounded-lg border border-slate-300 px-3 py-2" />
-              </div>
-              <div>
-                <h4 class="mb-2 font-medium">Thành viên cố định thực tế có mặt</h4>
-                <div id="settleFixedMembersContainer" class="grid grid-cols-1 gap-2 sm:grid-cols-2"></div>
-              </div>
-              <div>
-                <div class="mb-2 flex items-center justify-between">
-                  <h4 class="font-medium">Danh sách giao lưu thực tế</h4>
-                  <button type="button" id="addSettleGuestBtn" class="rounded-lg border border-slate-300 px-3 py-1 text-sm">+ Thêm GL</button>
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-3 text-lg font-semibold">
+                Phase 2 - Tạo vote trước buổi
+              </h3>
+              <form id="preSessionForm" class="space-y-3">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <input
+                    id="preDateInput"
+                    type="date"
+                    class="rounded-lg border border-slate-300 px-3 py-2"
+                    required
+                  />
+                  <input
+                    id="preTimeInput"
+                    type="time"
+                    class="rounded-lg border border-slate-300 px-3 py-2"
+                    required
+                  />
+                  <input
+                    id="preLocationInput"
+                    placeholder="Địa điểm (optional)"
+                    class="rounded-lg border border-slate-300 px-3 py-2"
+                  />
                 </div>
-                <div id="settleGuestContainer" class="space-y-2"></div>
-              </div>
-              <button class="rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-700">Chốt buổi & tính tiền</button>
-              <p id="settleSessionMessage" class="text-sm"></p>
-            </form>
-          </section>
+                <input
+                  id="preNoteInput"
+                  placeholder="Ghi chú buổi chơi"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2"
+                />
+                <input
+                  id="prePollQuestionInput"
+                  placeholder='Poll (vd: "Tuần này đánh sân A hay B?")'
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2"
+                />
+                <button
+                  class="rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-700"
+                >
+                  Tạo vote buổi
+                </button>
+                <button
+                  id="resendSessionPushBtn"
+                  type="button"
+                  class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
+                >
+                  Gửi lại thông báo
+                </button>
+                <p id="preSessionMessage" class="text-sm"></p>
+              </form>
+            </section>
 
-          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-            <div class="mb-3 flex items-center justify-between">
-              <h3 class="text-lg font-semibold">Level thành viên</h3>
-              <div class="flex items-center gap-2">
-                <button id="openAddMemberBtn" class="rounded-lg bg-indigo-600 px-3 py-1 text-sm text-white">+ Thêm member</button>
-                <button id="refreshMembersBtn" class="rounded-lg border border-slate-300 px-3 py-1 text-sm">Reload</button>
-              </div>
-            </div>
-            <p id="memberManageMessage" class="mb-2 text-sm"></p>
-            <div class="overflow-x-auto">
-              <table class="min-w-full border border-slate-200 text-sm">
-                <thead class="bg-slate-100">
-                  <tr>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Tên</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Loại</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Giới tính</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Birthday</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">SĐT</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Level</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Active</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody id="memberLevelTable"></tbody>
-              </table>
-            </div>
-          </section>
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-3 text-lg font-semibold">
+                Phase 1 - Chốt thực tế sau buổi và tính phí
+              </h3>
+              <form id="settleSessionForm" class="space-y-3">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                  <select
+                    id="settleSessionSelect"
+                    class="rounded-lg border border-slate-300 px-3 py-2"
+                  ></select>
+                  <input
+                    id="fixedCourtCostInput"
+                    type="number"
+                    min="0"
+                    value="300000"
+                    placeholder="Tiền sân cố định"
+                    class="rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                  <input
+                    id="extraCourtsInput"
+                    type="number"
+                    min="0"
+                    placeholder="Số sân thêm"
+                    class="rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                  <input
+                    id="shuttlecockCostInput"
+                    type="number"
+                    min="0"
+                    placeholder="Tiền cầu"
+                    class="rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <h4 class="mb-2 font-medium">
+                    Thành viên cố định thực tế có mặt
+                  </h4>
+                  <div
+                    id="settleFixedMembersContainer"
+                    class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+                  ></div>
+                </div>
+                <div>
+                  <div class="mb-2 flex items-center justify-between">
+                    <h4 class="font-medium">Danh sách giao lưu thực tế</h4>
+                    <button
+                      type="button"
+                      id="addSettleGuestBtn"
+                      class="rounded-lg border border-slate-300 px-3 py-1 text-sm"
+                    >
+                      + Thêm GL
+                    </button>
+                  </div>
+                  <div id="settleGuestContainer" class="space-y-2"></div>
+                </div>
+                <button
+                  class="rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-700"
+                >
+                  Chốt buổi & tính tiền
+                </button>
+                <p id="settleSessionMessage" class="text-sm"></p>
+              </form>
+            </section>
 
-          <!-- <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <div class="mb-3 flex items-center justify-between">
+                <h3 class="text-lg font-semibold">Level thành viên</h3>
+                <div class="flex items-center gap-2">
+                  <button
+                    id="openAddMemberBtn"
+                    class="rounded-lg bg-indigo-600 px-3 py-1 text-sm text-white"
+                  >
+                    + Thêm member
+                  </button>
+                  <button
+                    id="refreshMembersBtn"
+                    class="rounded-lg border border-slate-300 px-3 py-1 text-sm"
+                  >
+                    Reload
+                  </button>
+                </div>
+              </div>
+              <p id="memberManageMessage" class="mb-2 text-sm"></p>
+              <div class="overflow-x-auto">
+                <table class="min-w-full border border-slate-200 text-sm">
+                  <thead class="bg-slate-100">
+                    <tr>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Tên
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Loại
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Giới tính
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Birthday
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        SĐT
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Level
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Active
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Thao tác
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody id="memberLevelTable"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <!-- <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
             <h3 class="mb-3 text-lg font-semibold">Birthday Drink Event</h3>
             <form id="birthdayEventForm" class="space-y-3">
               <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -227,65 +356,98 @@
             <div id="birthdayAdminSummary" class="mt-3 space-y-3"></div>
           </section> -->
 
-          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-            <h3 class="mb-3 text-lg font-semibold">Theo dõi xác nhận tham gia (Phase 2)</h3>
-            <div class="mb-3 flex flex-wrap items-center gap-3">
-              <select id="attendanceSessionSelect" class="rounded-lg border border-slate-300 px-3 py-2"></select>
-              <button id="loadAttendanceBtn" class="rounded-lg border border-slate-300 px-4 py-2 text-sm">Xem xác nhận</button>
-            </div>
-            <form id="addAttendanceGuestForm" class="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
-              <input
-                id="attendanceGuestNameInput"
-                placeholder="Tên GL"
-                class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                required
-              />
-              <input
-                id="attendanceGuestLevelInput"
-                type="number"
-                min="1"
-                max="10"
-                value="5"
-                class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                required
-              />
-              <select id="attendanceGuestStatusInput" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                <option value="yes">Có tham gia</option>
-                <option value="no">Không tham gia</option>
-                <option value="pending">Chưa chốt</option>
-              </select>
-              <button class="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white">Thêm GL</button>
-            </form>
-            <p id="attendanceMessage" class="mb-2 text-sm"></p>
-            <div class="overflow-x-auto">
-              <table class="min-w-full border border-slate-200 text-sm">
-                <thead class="bg-slate-100">
-                  <tr>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Thành viên</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Loại</th>
-                    <th class="border border-slate-200 px-2 py-1 text-right">Level</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Trạng thái</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Cập nhật trạng thái</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Trả lời poll</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Thời gian phản hồi</th>
-                  </tr>
-                </thead>
-                <tbody id="attendanceTableBody"></tbody>
-              </table>
-            </div>
-          </section>
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-3 text-lg font-semibold">
+                Theo dõi xác nhận tham gia (Phase 2)
+              </h3>
+              <div class="mb-3 flex flex-wrap items-center gap-3">
+                <select
+                  id="attendanceSessionSelect"
+                  class="rounded-lg border border-slate-300 px-3 py-2"
+                ></select>
+                <button
+                  id="loadAttendanceBtn"
+                  class="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+                >
+                  Xem xác nhận
+                </button>
+              </div>
+              <form
+                id="addAttendanceGuestForm"
+                class="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-4"
+              >
+                <input
+                  id="attendanceGuestNameInput"
+                  placeholder="Tên GL"
+                  class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  required
+                />
+                <input
+                  id="attendanceGuestLevelInput"
+                  type="number"
+                  min="1"
+                  max="10"
+                  value="5"
+                  class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  required
+                />
+                <select
+                  id="attendanceGuestStatusInput"
+                  class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="yes">Có tham gia</option>
+                  <option value="no">Không tham gia</option>
+                  <option value="pending">Chưa chốt</option>
+                </select>
+                <button
+                  class="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white"
+                >
+                  Thêm GL
+                </button>
+              </form>
+              <p id="attendanceMessage" class="mb-2 text-sm"></p>
+              <div class="overflow-x-auto">
+                <table class="attendance-table min-w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th class="text-left">Thành viên</th>
+                      <th class="attendance-col-extra text-left">Loại</th>
+                      <th class="text-left">Level</th>
+                      <th class="text-left">Trạng thái</th>
+                      <th class="attendance-col-extra text-left">Trả lời poll</th>
+                      <th class="attendance-col-extra text-left">Thời gian phản hồi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="attendanceTableBody"></tbody>
+                </table>
+              </div>
+            </section>
 
-          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-            <h3 class="mb-3 text-lg font-semibold">Xếp trận tự động</h3>
-            <div class="flex flex-wrap items-end gap-3">
-              <select id="matchSessionSelect" class="rounded-lg border border-slate-300 px-3 py-2"></select>
-              <input id="roundCountInput" type="number" min="1" max="10" value="2" class="w-24 rounded-lg border border-slate-300 px-3 py-2" />
-              <button id="generateMatchesBtn" class="rounded-lg bg-indigo-600 px-4 py-2 text-white">Generate</button>
-            </div>
-            <p id="matchMessage" class="mt-2 text-sm"></p>
-            <div id="matchResultTables" class="mt-3 space-y-3"></div>
-          </section>
-
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-3 text-lg font-semibold">Xếp trận tự động</h3>
+              <div class="flex flex-wrap items-end gap-3">
+                <select
+                  id="matchSessionSelect"
+                  class="rounded-lg border border-slate-300 px-3 py-2"
+                ></select>
+                <input
+                  id="roundCountInput"
+                  type="number"
+                  min="1"
+                  max="10"
+                  value="2"
+                  class="w-24 rounded-lg border border-slate-300 px-3 py-2"
+                />
+                <button
+                  id="generateMatchesBtn"
+                  class="rounded-lg bg-indigo-600 px-4 py-2 text-white"
+                >
+                  Generate
+                </button>
+              </div>
+              <p id="matchMessage" class="mt-2 text-sm"></p>
+              <div id="matchResultTables" class="mt-3 space-y-3"></div>
+            </section>
           </div>
 
           <div id="expensesTabContent" class="hidden space-y-5">
@@ -293,7 +455,10 @@
               <h3 class="mb-3 text-lg font-semibold">Chi phí phát sinh</h3>
               <form id="expenseForm" class="space-y-3">
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <select id="expenseSessionSelect" class="rounded-lg border border-slate-300 px-3 py-2"></select>
+                  <select
+                    id="expenseSessionSelect"
+                    class="rounded-lg border border-slate-300 px-3 py-2"
+                  ></select>
                   <input
                     id="expenseNameInput"
                     placeholder="Tên chi phí (vd: nhậu, nước)"
@@ -312,7 +477,10 @@
 
                 <div>
                   <h4 class="mb-2 font-medium">Participants</h4>
-                  <div id="expenseParticipantsContainer" class="grid grid-cols-1 gap-2 sm:grid-cols-2"></div>
+                  <div
+                    id="expenseParticipantsContainer"
+                    class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+                  ></div>
                   <div class="mt-3 flex flex-wrap items-end gap-2">
                     <input
                       id="expenseGuestNameInput"
@@ -327,20 +495,29 @@
                       + Thêm GL
                     </button>
                   </div>
-                  <p class="mt-2 text-sm text-slate-500">Mặc định sẽ chọn tất cả participants của buổi.</p>
+                  <p class="mt-2 text-sm text-slate-500">
+                    Mặc định sẽ chọn tất cả participants của buổi.
+                  </p>
                 </div>
 
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div class="rounded-lg bg-slate-100 p-3 text-sm">
                     <div class="text-xs text-slate-600">Split method</div>
-                    <select id="expenseSplitMethodInput" disabled class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                    <select
+                      id="expenseSplitMethodInput"
+                      disabled
+                      class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    >
                       <option value="equal">Equal split</option>
                     </select>
                   </div>
                 </div>
 
                 <div class="flex flex-wrap justify-end gap-2">
-                  <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                  <button
+                    type="submit"
+                    class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                  >
                     Lưu chi phí
                   </button>
                 </div>
@@ -349,16 +526,28 @@
             </section>
 
             <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <h3 class="mb-3 text-lg font-semibold">Lịch sử chi phí phát sinh</h3>
+              <h3 class="mb-3 text-lg font-semibold">
+                Lịch sử chi phí phát sinh
+              </h3>
               <div class="mt-2 overflow-x-auto">
                 <table class="min-w-full border border-slate-200 text-sm">
                   <thead class="bg-slate-100">
                     <tr>
-                      <th class="border border-slate-200 px-2 py-1 text-left">Ngày</th>
-                      <th class="border border-slate-200 px-2 py-1 text-left">Nội dung</th>
-                      <th class="border border-slate-200 px-2 py-1 text-right">Tổng</th>
-                      <th class="border border-slate-200 px-2 py-1 text-left">Participants</th>
-                      <th class="border border-slate-200 px-2 py-1 text-left">Tạo lúc</th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Ngày
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Nội dung
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-right">
+                        Tổng
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Participants
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Tạo lúc
+                      </th>
                     </tr>
                   </thead>
                   <tbody id="adminExpensesTableBody"></tbody>
@@ -367,102 +556,182 @@
             </section>
 
             <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-            <h3 class="mb-3 text-lg font-semibold">Ghi nhận thanh toán</h3>
-            <form id="paymentForm" class="grid grid-cols-1 gap-3 sm:grid-cols-5">
-              <input id="paymentDateInput" type="date" class="rounded-lg border border-slate-300 px-3 py-2" required />
-              <input id="paymentMemberInput" placeholder="Tên thành viên" class="rounded-lg border border-slate-300 px-3 py-2" required />
-              <input id="paymentAmountInput" type="number" min="1" placeholder="Số tiền" class="rounded-lg border border-slate-300 px-3 py-2" required />
-              <input id="paymentNoteInput" placeholder="Ghi chú" class="rounded-lg border border-slate-300 px-3 py-2" />
-              <button class="rounded-lg bg-indigo-600 px-4 py-2 text-white">Lưu</button>
-            </form>
-            <p id="paymentMessage" class="mt-2 text-sm"></p>
-            <div class="mt-4 overflow-x-auto">
-              <h4 class="mb-2 font-medium">Lịch sử thanh toán</h4>
-              <table class="min-w-full border border-slate-200 text-sm">
-                <thead class="bg-slate-100">
-                  <tr>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Ngày</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Thành viên</th>
-                    <th class="border border-slate-200 px-2 py-1 text-right">Số tiền</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Ghi chú</th>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Tạo lúc</th>
-                  </tr>
-                </thead>
-                <tbody id="adminPaymentsTableBody"></tbody>
-              </table>
-            </div>
-          </section>
+              <h3 class="mb-3 text-lg font-semibold">Ghi nhận thanh toán</h3>
+              <form
+                id="paymentForm"
+                class="grid grid-cols-1 gap-3 sm:grid-cols-5"
+              >
+                <input
+                  id="paymentDateInput"
+                  type="date"
+                  class="rounded-lg border border-slate-300 px-3 py-2"
+                  required
+                />
+                <input
+                  id="paymentMemberInput"
+                  placeholder="Tên thành viên"
+                  class="rounded-lg border border-slate-300 px-3 py-2"
+                  required
+                />
+                <input
+                  id="paymentAmountInput"
+                  type="number"
+                  min="1"
+                  placeholder="Số tiền"
+                  class="rounded-lg border border-slate-300 px-3 py-2"
+                  required
+                />
+                <input
+                  id="paymentNoteInput"
+                  placeholder="Ghi chú"
+                  class="rounded-lg border border-slate-300 px-3 py-2"
+                />
+                <button class="rounded-lg bg-indigo-600 px-4 py-2 text-white">
+                  Lưu
+                </button>
+              </form>
+              <p id="paymentMessage" class="mt-2 text-sm"></p>
+              <div class="mt-4 overflow-x-auto">
+                <h4 class="mb-2 font-medium">Lịch sử thanh toán</h4>
+                <table class="min-w-full border border-slate-200 text-sm">
+                  <thead class="bg-slate-100">
+                    <tr>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Ngày
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Thành viên
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-right">
+                        Số tiền
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Ghi chú
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Tạo lúc
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody id="adminPaymentsTableBody"></tbody>
+                </table>
+              </div>
+            </section>
 
-          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-            <h3 class="mb-3 text-lg font-semibold">Báo cáo tháng</h3>
-            <div class="flex flex-wrap gap-3">
-              <input id="reportMonthInput" type="month" class="rounded-lg border border-slate-300 px-3 py-2" />
-              <button id="loadReportBtn" class="rounded-lg bg-blue-600 px-4 py-2 text-white">Xem báo cáo</button>
-              <button id="downloadCsvBtn" class="rounded-lg border border-slate-300 px-4 py-2">Tải CSV</button>
-            </div>
-            <p id="reportMessage" class="mt-2 text-sm"></p>
-            <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div class="rounded-lg bg-slate-100 p-3 text-sm">
-                <div class="text-xs text-slate-500">Tổng chi tháng</div>
-                <div id="reportTotalCost" class="text-lg font-semibold">0</div>
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-3 text-lg font-semibold">Báo cáo tháng</h3>
+              <div class="flex flex-wrap gap-3">
+                <input
+                  id="reportMonthInput"
+                  type="month"
+                  class="rounded-lg border border-slate-300 px-3 py-2"
+                />
+                <button
+                  id="loadReportBtn"
+                  class="rounded-lg bg-blue-600 px-4 py-2 text-white"
+                >
+                  Xem báo cáo
+                </button>
+                <button
+                  id="downloadCsvBtn"
+                  class="rounded-lg border border-slate-300 px-4 py-2"
+                >
+                  Tải CSV
+                </button>
               </div>
-              <div class="rounded-lg bg-slate-100 p-3 text-sm">
-                <div class="text-xs text-slate-500">Tổng số buổi</div>
-                <div id="reportTotalSessions" class="text-lg font-semibold">0</div>
+              <p id="reportMessage" class="mt-2 text-sm"></p>
+              <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div class="rounded-lg bg-slate-100 p-3 text-sm">
+                  <div class="text-xs text-slate-500">Tổng chi tháng</div>
+                  <div id="reportTotalCost" class="text-lg font-semibold">
+                    0
+                  </div>
+                </div>
+                <div class="rounded-lg bg-slate-100 p-3 text-sm">
+                  <div class="text-xs text-slate-500">Tổng số buổi</div>
+                  <div id="reportTotalSessions" class="text-lg font-semibold">
+                    0
+                  </div>
+                </div>
+                <div class="rounded-lg bg-slate-100 p-3 text-sm">
+                  <div class="text-xs text-slate-500">Tháng</div>
+                  <div id="reportMonthValue" class="text-lg font-semibold">
+                    -
+                  </div>
+                </div>
               </div>
-              <div class="rounded-lg bg-slate-100 p-3 text-sm">
-                <div class="text-xs text-slate-500">Tháng</div>
-                <div id="reportMonthValue" class="text-lg font-semibold">-</div>
-              </div>
-            </div>
-            <div class="mt-3 overflow-x-auto">
-              <h4 class="mb-2 font-medium">Tỷ lệ tham gia từng thành viên</h4>
-              <table class="min-w-full border border-slate-200 text-sm">
-                <thead class="bg-slate-100">
-                  <tr>
-                    <th class="border border-slate-200 px-2 py-1 text-left">Thành viên</th>
-                    <th class="border border-slate-200 px-2 py-1 text-right">Số buổi tham gia</th>
-                    <th class="border border-slate-200 px-2 py-1 text-right">Tổng buổi</th>
-                    <th class="border border-slate-200 px-2 py-1 text-right">Tỷ lệ</th>
-                  </tr>
-                </thead>
-                <tbody id="reportAttendanceBody"></tbody>
-              </table>
-            </div>
-            <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <div class="overflow-x-auto">
-                <h4 class="mb-2 font-medium">Top nợ nhiều nhất</h4>
+              <div class="mt-3 overflow-x-auto">
+                <h4 class="mb-2 font-medium">Tỷ lệ tham gia từng thành viên</h4>
                 <table class="min-w-full border border-slate-200 text-sm">
                   <thead class="bg-slate-100">
                     <tr>
-                      <th class="border border-slate-200 px-2 py-1 text-left">Thành viên</th>
-                      <th class="border border-slate-200 px-2 py-1 text-right">Số dư</th>
+                      <th class="border border-slate-200 px-2 py-1 text-left">
+                        Thành viên
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-right">
+                        Số buổi tham gia
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-right">
+                        Tổng buổi
+                      </th>
+                      <th class="border border-slate-200 px-2 py-1 text-right">
+                        Tỷ lệ
+                      </th>
                     </tr>
                   </thead>
-                  <tbody id="reportTopDebtorsBody"></tbody>
+                  <tbody id="reportAttendanceBody"></tbody>
                 </table>
               </div>
-              <div class="overflow-x-auto">
-                <h4 class="mb-2 font-medium">Top thanh toán nhiều nhất</h4>
-                <table class="min-w-full border border-slate-200 text-sm">
-                  <thead class="bg-slate-100">
-                    <tr>
-                      <th class="border border-slate-200 px-2 py-1 text-left">Thành viên</th>
-                      <th class="border border-slate-200 px-2 py-1 text-right">Tổng đã thanh toán</th>
-                    </tr>
-                  </thead>
-                  <tbody id="reportTopPayersBody"></tbody>
-                </table>
+              <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <div class="overflow-x-auto">
+                  <h4 class="mb-2 font-medium">Top nợ nhiều nhất</h4>
+                  <table class="min-w-full border border-slate-200 text-sm">
+                    <thead class="bg-slate-100">
+                      <tr>
+                        <th class="border border-slate-200 px-2 py-1 text-left">
+                          Thành viên
+                        </th>
+                        <th
+                          class="border border-slate-200 px-2 py-1 text-right"
+                        >
+                          Số dư
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody id="reportTopDebtorsBody"></tbody>
+                  </table>
+                </div>
+                <div class="overflow-x-auto">
+                  <h4 class="mb-2 font-medium">Top thanh toán nhiều nhất</h4>
+                  <table class="min-w-full border border-slate-200 text-sm">
+                    <thead class="bg-slate-100">
+                      <tr>
+                        <th class="border border-slate-200 px-2 py-1 text-left">
+                          Thành viên
+                        </th>
+                        <th
+                          class="border border-slate-200 px-2 py-1 text-right"
+                        >
+                          Tổng đã thanh toán
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody id="reportTopPayersBody"></tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
           </div>
 
           <div id="gamesTabContent" class="hidden space-y-5">
             <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
               <h3 class="mb-2 text-lg font-semibold">Games</h3>
-              <p class="text-sm text-slate-600">Chưa có module game nào trong hệ thống (placeholder).</p>
-              <div class="mt-3 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">
+              <p class="text-sm text-slate-600">
+                Chưa có module game nào trong hệ thống (placeholder).
+              </p>
+              <div
+                class="mt-3 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500"
+              >
                 Empty state: danh sách games đang trống.
               </div>
             </section>
@@ -470,10 +739,16 @@
 
           <div id="toolsTabContent" class="hidden space-y-5">
             <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <h3 class="mb-3 text-lg font-semibold">Tools - Convert HTML to Ink Button</h3>
+              <h3 class="mb-3 text-lg font-semibold">
+                Tools - Convert HTML to Ink Button
+              </h3>
               <form id="htmlConvertForm" class="space-y-3">
                 <div>
-                  <label for="htmlConvertInput" class="mb-1 block text-sm font-medium">HTML input</label>
+                  <label
+                    for="htmlConvertInput"
+                    class="mb-1 block text-sm font-medium"
+                    >HTML input</label
+                  >
                   <textarea
                     id="htmlConvertInput"
                     rows="8"
@@ -484,7 +759,11 @@
                 </div>
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label for="htmlConvertTextInputCTA1" class="mb-1 block text-sm font-medium">Text cần chuyển thành button CTA 1</label>
+                    <label
+                      for="htmlConvertTextInputCTA1"
+                      class="mb-1 block text-sm font-medium"
+                      >Text cần chuyển thành button CTA 1</label
+                    >
                     <input
                       id="htmlConvertTextInputCTA1"
                       placeholder="Mua ngay"
@@ -493,7 +772,11 @@
                     />
                   </div>
                   <div>
-                    <label for="htmlConvertTextInputCTA2" class="mb-1 block text-sm font-medium">Text cần chuyển thành button CTA 2</label>
+                    <label
+                      for="htmlConvertTextInputCTA2"
+                      class="mb-1 block text-sm font-medium"
+                      >Text cần chuyển thành button CTA 2</label
+                    >
                     <input
                       id="htmlConvertTextInputCTA2"
                       placeholder="Mua ngay"
@@ -502,7 +785,11 @@
                     />
                   </div>
                   <div>
-                    <label for="htmlConvertVariantIdInput" class="mb-1 block text-sm font-medium">Variant ID</label>
+                    <label
+                      for="htmlConvertVariantIdInput"
+                      class="mb-1 block text-sm font-medium"
+                      >Variant ID</label
+                    >
                     <input
                       id="htmlConvertVariantIdInput"
                       placeholder="51183887417659"
@@ -512,12 +799,22 @@
                   </div>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                  <button id="htmlConvertBtn" type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white">Convert</button>
+                  <button
+                    id="htmlConvertBtn"
+                    type="submit"
+                    class="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white"
+                  >
+                    Convert
+                  </button>
                 </div>
               </form>
               <p id="htmlConvertMessage" class="mt-2 text-sm"></p>
               <div class="mt-3">
-                <label for="htmlConvertOutput" class="mb-1 block text-sm font-medium">Output HTML</label>
+                <label
+                  for="htmlConvertOutput"
+                  class="mb-1 block text-sm font-medium"
+                  >Output HTML</label
+                >
                 <textarea
                   id="htmlConvertOutput"
                   rows="14"
@@ -527,14 +824,59 @@
               </div>
             </section>
           </div>
+
+          <div id="creditTabContent" class="hidden space-y-5">
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-3 text-lg font-semibold">Tiền thừa</h3>
+              <p class="mb-3 text-sm text-slate-500">Khi thành viên chuyển dư, ghi phần thừa vào đây. Số còn lại hiện trên màn công nợ của họ.</p>
+              <form id="creditForm" class="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                <select id="creditMemberSelect" class="rounded-lg border border-slate-300 px-3 py-2" required></select>
+                <input id="creditAmountInput" inputmode="numeric" placeholder="Số tiền" class="rounded-lg border border-slate-300 px-3 py-2" required />
+                <select id="creditDirectionInput" class="rounded-lg border border-slate-300 px-3 py-2">
+                  <option value="add">Ghi tiền thừa</option>
+                  <option value="use">Trừ tiền thừa</option>
+                </select>
+                <input id="creditNoteInput" placeholder="Ghi chú" class="rounded-lg border border-slate-300 px-3 py-2" />
+                <button class="rounded-lg bg-indigo-600 px-4 py-2 text-white sm:col-span-4">Lưu</button>
+              </form>
+              <p id="creditMessage" class="mt-2 text-sm"></p>
+              <div class="mt-4 overflow-x-auto">
+                <table class="min-w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th class="text-left">Thành viên</th>
+                      <th class="text-right">Còn lại</th>
+                    </tr>
+                  </thead>
+                  <tbody id="creditBalanceBody"></tbody>
+                </table>
+              </div>
+              <h4 class="mb-2 mt-4 font-medium">Lịch sử ghi</h4>
+              <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th class="text-left">Thành viên</th>
+                      <th class="text-right">Số tiền</th>
+                      <th class="text-left">Ghi chú</th>
+                    </tr>
+                  </thead>
+                  <tbody id="creditEntryBody"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
         </section>
 
         <section id="userSection" class="hidden space-y-5">
           <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-            <h3 class="mb-3 text-lg font-semibold">Buổi upcoming (bắt buộc phản hồi)</h3>
+            <h3 class="mb-3 text-lg font-semibold">
+              Buổi upcoming (bắt buộc phản hồi)
+            </h3>
             <div id="upcomingInfo" class="mb-3 text-sm text-slate-600"></div>
             <p class="text-sm text-slate-500">
-              Khi có buổi cần phản hồi, hệ thống sẽ tự bật popup để bạn chọn nhanh bằng nút.
+              Khi có buổi cần phản hồi, hệ thống sẽ tự bật popup để bạn chọn
+              nhanh bằng nút.
             </p>
           </section>
 
@@ -564,7 +906,9 @@
                 <p id="userUnpaidMeta">Chưa có buổi nào.</p>
               </div>
             </div>
-            <p id="userViewerNote" class="note">Bạn đang xem sổ sân. Chỉ admin nhập buổi và đánh dấu thanh toán.</p>
+            <p id="userViewerNote" class="note">
+              Bạn đang xem sổ sân. Chỉ admin nhập buổi và đánh dấu thanh toán.
+            </p>
             <div id="userSessionList" class="ledger"></div>
             <section id="userPeopleTotals" class="totals bezel" hidden>
               <div class="core">
@@ -589,18 +933,33 @@
       </main>
     </div>
 
-    <div id="loadingModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40">
-      <div class="flex items-center gap-3 rounded-xl bg-white px-5 py-4 shadow-lg">
-        <div class="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600"></div>
-        <p class="text-sm font-medium text-slate-700">Đang xử lý, vui lòng chờ...</p>
+    <div
+      id="loadingModal"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40"
+    >
+      <div
+        class="flex items-center gap-3 rounded-xl bg-white px-5 py-4 shadow-lg"
+      >
+        <div
+          class="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600"
+        ></div>
+        <p class="text-sm font-medium text-slate-700">
+          Đang xử lý, vui lòng chờ...
+        </p>
       </div>
     </div>
 
-    <div id="voteModal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4">
+    <div
+      id="voteModal"
+      class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4"
+    >
       <div class="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl">
         <h3 class="text-lg font-semibold">Vote hôm nay</h3>
         <p id="voteSessionText" class="mt-1 text-sm text-slate-500"></p>
-        <p id="voteQuestionText" class="mt-3 rounded-lg bg-slate-100 p-3 text-sm"></p>
+        <p
+          id="voteQuestionText"
+          class="mt-3 rounded-lg bg-slate-100 p-3 text-sm"
+        ></p>
         <textarea
           id="voteAnswerInput"
           rows="3"
@@ -609,41 +968,95 @@
         ></textarea>
         <p id="voteMessage" class="mt-2 text-sm"></p>
         <div class="mt-4 flex flex-wrap justify-end gap-2">
-          <button id="voteSkipBtn" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">Bỏ qua</button>
-          <button id="voteCloseBtn" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">Đóng</button>
-          <button id="voteSubmitBtn" class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">Gửi vote</button>
+          <button
+            id="voteSkipBtn"
+            class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            Bỏ qua
+          </button>
+          <button
+            id="voteCloseBtn"
+            class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            Đóng
+          </button>
+          <button
+            id="voteSubmitBtn"
+            class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white"
+          >
+            Gửi vote
+          </button>
         </div>
       </div>
     </div>
 
-    <div id="qrModal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4">
+    <div
+      id="qrModal"
+      class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4"
+    >
       <div class="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
         <h3 class="text-lg font-semibold">Thanh toán công nợ qua QR</h3>
         <p id="qrDebtInfo" class="mt-1 text-sm text-slate-500"></p>
         <div class="mt-3 flex justify-center">
-          <img id="qrImage" alt="VietQR thanh toán công nợ" class="h-64 w-64 rounded border border-slate-200 object-contain" />
+          <img
+            id="qrImage"
+            alt="VietQR thanh toán công nợ"
+            class="h-64 w-64 rounded border border-slate-200 object-contain"
+          />
         </div>
         <div class="mt-4 flex justify-end gap-2">
-          <button id="qrCloseBtn" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">Đóng</button>
-          <a id="qrOpenTabLink" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">Mở tab mới</a>
+          <button
+            id="qrCloseBtn"
+            class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            Đóng
+          </button>
+          <a
+            id="qrOpenTabLink"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white"
+            >Mở tab mới</a
+          >
         </div>
       </div>
     </div>
 
-    <div id="attendanceModal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4">
+    <div
+      id="attendanceModal"
+      class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4"
+    >
       <div class="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl">
         <h3 class="text-lg font-semibold">Xác nhận buổi upcoming</h3>
         <p id="attendanceModalInfo" class="mt-2 text-sm text-slate-600"></p>
         <p id="attendanceModalMessage" class="mt-2 text-sm"></p>
         <div class="mt-4 flex flex-wrap justify-end gap-2">
-          <button id="attendanceCloseBtn" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">Đóng</button>
-          <button id="attendanceNoBtn" class="rounded-lg bg-rose-600 px-4 py-2 text-sm text-white">Không tham gia</button>
-          <button id="attendanceYesBtn" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white">Có tham gia</button>
+          <button
+            id="attendanceCloseBtn"
+            class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            Đóng
+          </button>
+          <button
+            id="attendanceNoBtn"
+            class="rounded-lg bg-rose-600 px-4 py-2 text-sm text-white"
+          >
+            Không tham gia
+          </button>
+          <button
+            id="attendanceYesBtn"
+            class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white"
+          >
+            Có tham gia
+          </button>
         </div>
       </div>
     </div>
 
-    <div id="memberModal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4">
+    <div
+      id="memberModal"
+      class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4"
+    >
       <div class="w-full max-w-xl rounded-xl bg-white p-5 shadow-xl">
         <h3 id="memberModalTitle" class="text-lg font-semibold">Thêm member</h3>
         <form id="memberForm" class="mt-3 space-y-3">
@@ -651,18 +1064,28 @@
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label class="text-sm">
               <span class="mb-1 block font-medium">Tên</span>
-              <input id="memberNameInput" required class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+              <input
+                id="memberNameInput"
+                required
+                class="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
             </label>
             <label class="text-sm">
               <span class="mb-1 block font-medium">Loại</span>
-              <select id="memberTypeInput" class="w-full rounded-lg border border-slate-300 px-3 py-2">
+              <select
+                id="memberTypeInput"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2"
+              >
                 <option value="Cố định">Cố định</option>
                 <option value="GL">GL</option>
               </select>
             </label>
             <label class="text-sm">
               <span class="mb-1 block font-medium">Giới tính</span>
-              <select id="memberGenderInput" class="w-full rounded-lg border border-slate-300 px-3 py-2">
+              <select
+                id="memberGenderInput"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2"
+              >
                 <option value="">-</option>
                 <option value="Nam">Nam</option>
                 <option value="Nữ">Nữ</option>
@@ -670,15 +1093,29 @@
             </label>
             <label class="text-sm">
               <span class="mb-1 block font-medium">Birthday</span>
-              <input id="memberBirthdayInput" type="date" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+              <input
+                id="memberBirthdayInput"
+                type="date"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
             </label>
             <label class="text-sm">
               <span class="mb-1 block font-medium">Số điện thoại</span>
-              <input id="memberPhoneInput" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+              <input
+                id="memberPhoneInput"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
             </label>
             <label class="text-sm">
               <span class="mb-1 block font-medium">Level</span>
-              <input id="memberLevelInput" type="number" min="1" max="10" value="5" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+              <input
+                id="memberLevelInput"
+                type="number"
+                min="1"
+                max="10"
+                value="5"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
             </label>
             <label class="flex items-center gap-2 pt-6 text-sm">
               <input id="memberActiveInput" type="checkbox" checked />
@@ -687,8 +1124,19 @@
           </div>
           <p id="memberModalMessage" class="text-sm"></p>
           <div class="flex flex-wrap justify-end gap-2">
-            <button id="memberModalCloseBtn" type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">Đóng</button>
-            <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">Lưu</button>
+            <button
+              id="memberModalCloseBtn"
+              type="button"
+              class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              Đóng
+            </button>
+            <button
+              type="submit"
+              class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white"
+            >
+              Lưu
+            </button>
           </div>
         </form>
       </div>

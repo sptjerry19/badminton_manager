@@ -1,0 +1,26 @@
+:root {
+  --bg: #f4f4f2;
+  --surface: #ffffff;
+  --ink: #111111;
+  --muted: #5c5c5c;
+  --line: #e4e4e1;
+  --line-strong: #111111;
+  --paper: var(--bg);
+  --green: #111111;
+  --green-deep: #2a2a2a;
+  --clay: #9f1d1d;
+  --primary: #111111;
+  --primary-hover: #2a2a2a;
+  --primary-soft: #f4f4f2;
+  --danger: #9f1d1d;
+  --danger-soft: #f8ecec;
+  --success: #111111;
+  --focus: rgba(17, 17, 17, 0.16);
+  --border: var(--line);
+  --radius: 4px;
+  --shadow: none;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --font-display: "Oswald", sans-serif;
+  --font-body: "Plus Jakarta Sans", sans-serif;
+  color-scheme: light;
+}

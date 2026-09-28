@@ -5,19 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sổ tiền sân</title>
     <link rel="icon" href="/favicon.ico?v=3" sizes="32x32" />
-    <link rel="icon" href="/favicon-32.png?v=3" type="image/png" sizes="32x32" />
+    <link
+      rel="icon"
+      href="/favicon-32.png?v=3"
+      type="image/png"
+      sizes="32x32"
+    />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3" />
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#0f172a" />
+    <meta name="theme-color" content="#111111" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Cầu lông" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="/tokens.css" />
     <link rel="stylesheet" href="/basic.css" />
   </head>
   <body>
@@ -27,15 +33,31 @@
           <div class="core auth-core">
             <p class="eyebrow">Sổ riêng</p>
             <h1>Tiền sân, chia đều.</h1>
-            <p class="lead">Nhập buổi và theo dõi ai đã trả. Sổ này tách khỏi công nợ của app chính.</p>
+            <p class="lead">
+              Nhập buổi và theo dõi ai đã trả. Sổ này tách khỏi công nợ của app
+              chính.
+            </p>
             <form id="loginForm" class="stack">
               <div class="segment" role="tablist" aria-label="Cách đăng nhập">
-                <button type="button" class="segment-btn is-on" data-mode="admin">Admin</button>
-                <button type="button" class="segment-btn" data-mode="user">Thành viên</button>
+                <button
+                  type="button"
+                  class="segment-btn is-on"
+                  data-mode="admin"
+                >
+                  Admin
+                </button>
+                <button type="button" class="segment-btn" data-mode="user">
+                  Thành viên
+                </button>
               </div>
               <label class="field" id="adminFields">
                 <span>Mật khẩu admin</span>
-                <input id="passwordInput" type="password" autocomplete="current-password" required />
+                <input
+                  id="passwordInput"
+                  type="password"
+                  autocomplete="current-password"
+                  required
+                />
               </label>
               <div id="userFields" class="stack" hidden>
                 <label class="field">
@@ -44,7 +66,12 @@
                 </label>
                 <label class="field">
                   <span>Số điện thoại</span>
-                  <input id="phoneInput" type="tel" autocomplete="tel" inputmode="tel" />
+                  <input
+                    id="phoneInput"
+                    type="tel"
+                    autocomplete="tel"
+                    inputmode="tel"
+                  />
                 </label>
               </div>
               <button class="pill" type="submit">
@@ -53,7 +80,12 @@
               </button>
               <p id="loginError" class="note is-error" hidden></p>
             </form>
-            <button type="button" data-push-button data-push-status="#pushLoginStatus" class="ghost">
+            <button
+              type="button"
+              data-push-button
+              data-push-status="#pushLoginStatus"
+              class="ghost"
+            >
               Bật thông báo
             </button>
             <p id="pushLoginStatus" class="note" hidden></p>
@@ -67,9 +99,12 @@
             <p class="eyebrow">Sổ tiền sân</p>
             <h1 id="identity">Buổi đánh</h1>
           </div>
-          <div class="stack" style="justify-items: end">
-            <button type="button" data-push-button data-push-status="#pushStatus" class="ghost">Bật thông báo</button>
-            <button id="notifyCourtBtn" class="ghost" type="button" hidden>Gửi thông báo</button>
+          <div class="top-actions">
+            <button type="button" data-push-button data-push-status="#pushStatus" class="ghost">
+              Thông báo
+            </button>
+            <button id="notifyCourtBtn" class="ghost" type="button" hidden>Gửi lại</button>
+            <a class="ghost" href="/">Trang chủ</a>
             <button id="logoutBtn" class="ghost" type="button">Đăng xuất</button>
             <p id="notifyStatus" class="note" hidden></p>
             <p id="pushStatus" class="note" hidden></p>
@@ -78,7 +113,9 @@
 
         <nav class="switch" id="viewSwitch" aria-label="Chức năng">
           <button type="button" data-view="entry">Nhập buổi</button>
-          <button type="button" data-view="ledger" class="is-on">Tính tiền</button>
+          <button type="button" data-view="ledger" class="is-on">
+            Tính tiền
+          </button>
         </nav>
 
         <div class="stage">
@@ -87,7 +124,10 @@
               <div class="core stack">
                 <div class="screen-head">
                   <h2>Nhập một buổi</h2>
-                  <p>Tổng tiền tự cộng từ tiền sân và tiền cầu, rồi chia đều cho người được chọn.</p>
+                  <p>
+                    Tổng tiền tự cộng từ tiền sân và tiền cầu, rồi chia đều cho
+                    người được chọn.
+                  </p>
                 </div>
                 <label class="field">
                   <span>Ngày đánh</span>
@@ -95,16 +135,32 @@
                 </label>
                 <label class="field">
                   <span>Sân</span>
-                  <input id="courtInput" type="text" placeholder="Lê Văn Thiêm" autocomplete="off" required />
+                  <input
+                    id="courtInput"
+                    type="text"
+                    placeholder="Lê Văn Thiêm"
+                    autocomplete="off"
+                    required
+                  />
                 </label>
                 <div class="money-row">
                   <label class="field">
                     <span>Tiền sân</span>
-                    <input id="courtFeeInput" inputmode="numeric" autocomplete="off" placeholder="0" />
+                    <input
+                      id="courtFeeInput"
+                      inputmode="numeric"
+                      autocomplete="off"
+                      placeholder="0"
+                    />
                   </label>
                   <label class="field">
                     <span>Tiền cầu</span>
-                    <input id="shuttleFeeInput" inputmode="numeric" autocomplete="off" placeholder="0" />
+                    <input
+                      id="shuttleFeeInput"
+                      inputmode="numeric"
+                      autocomplete="off"
+                      placeholder="0"
+                    />
                   </label>
                 </div>
                 <div class="total-island" aria-live="polite">
@@ -114,12 +170,25 @@
                 <div class="stack">
                   <label class="field">
                     <span>Người tham gia</span>
-                    <input id="memberFilter" type="search" placeholder="Tìm trong danh sách thành viên" autocomplete="off" />
+                    <input
+                      id="memberFilter"
+                      type="search"
+                      placeholder="Tìm trong danh sách thành viên"
+                      autocomplete="off"
+                    />
                   </label>
                   <div id="memberList" class="chips"></div>
                   <div class="guest-add">
-                    <input id="guestInput" type="text" maxlength="60" placeholder="Tên người giao lưu" autocomplete="off" />
-                    <button id="addGuestBtn" class="ghost" type="button">Thêm</button>
+                    <input
+                      id="guestInput"
+                      type="text"
+                      maxlength="60"
+                      placeholder="Tên người giao lưu"
+                      autocomplete="off"
+                    />
+                    <button id="addGuestBtn" class="ghost" type="button">
+                      Thêm
+                    </button>
                   </div>
                   <div id="guestList" class="chips"></div>
                 </div>
@@ -141,7 +210,9 @@
                 <p id="unpaidMeta">Chưa có buổi nào.</p>
               </div>
             </div>
-            <p id="viewerNote" class="note" hidden>Bạn đang xem sổ. Chỉ admin nhập buổi và đánh dấu thanh toán.</p>
+            <p id="viewerNote" class="note" hidden>
+              Bạn đang xem sổ. Chỉ admin nhập buổi và đánh dấu thanh toán.
+            </p>
             <div id="sessionList" class="ledger"></div>
             <section id="peopleTotals" class="totals bezel" hidden>
               <div class="core">

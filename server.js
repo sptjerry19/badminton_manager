@@ -52,6 +52,10 @@ const {
   settleBasicPerson,
   deleteBasicSession,
   upsertPushToken,
+  addMemberCredit,
+  getMemberCreditSummary,
+  getMemberCreditBalanceByName,
+  getPlaysForDate,
   pool
 } = require("./src/postgres");
 const { syncSnapshotToSheets, getSnapshotFromSheets } = require("./src/sheets");
@@ -259,6 +263,34 @@ app.get("/api/debts", requireAuth, async (_req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
+  }
+});
+
+app.get("/api/credits", requireAuth, async (req, res) => {
+  try {
+    if (req.session.role === "admin") {
+      return res.json(await getMemberCreditSummary());
+    }
+    const balance = await getMemberCreditBalanceByName(req.session.memberName || "");
+    return res.json({ balance });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.post("/api/credits", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const direction = String(req.body?.direction || "add").trim().toLowerCase();
+    const amount = Math.abs(Math.round(Number(req.body?.amount) || 0));
+    const signed = direction === "use" ? -amount : amount;
+    const summary = await addMemberCredit({
+      memberId: req.body?.memberId,
+      amount: signed,
+      note: req.body?.note
+    });
+    return res.json({ ok: true, ...summary, message: direction === "use" ? "Đã trừ tiền thừa." : "Đã ghi tiền thừa." });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
   }
 });
 
@@ -752,6 +784,20 @@ app.post("/api/push/test", requireAuth, requireRole(["admin"]), async (_req, res
   }
 });
 
+function todayPlayNotice(plan) {
+  const lines = [`Hôm nay ${formatPlayDateShort(plan.date)} có lịch đánh.`];
+  plan.sessions.forEach((item) => {
+    const when = [formatPlayDateShort(item.date), item.time].filter(Boolean).join(" ");
+    const place = item.location ? ` · ${item.location}` : "";
+    lines.push(`${when}${place}`);
+  });
+  plan.basicSessions.forEach((item) => {
+    if (item.court) lines.push(`Sân ${item.court}`);
+  });
+  lines.push("Mở app để xem chi tiết.");
+  return lines.join("\n");
+}
+
 app.get("/api/cron/weekly-reminder", async (req, res) => {
   try {
     if (!isCronAuthorized(req)) {
@@ -760,6 +806,37 @@ app.get("/api/cron/weekly-reminder", async (req, res) => {
     await ensureInitialized();
     const result = await notificationService.sendWeeklyReminders();
     return res.json({ ok: true, ...result });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.get("/api/cron/today-play", async (req, res) => {
+  try {
+    if (!isCronAuthorized(req)) {
+      return res.status(401).json({ message: "Unauthorized cron play reminder request." });
+    }
+    await ensureInitialized();
+    const plan = await getPlaysForDate();
+    const count = plan.sessions.length + plan.basicSessions.length;
+    if (!count) {
+      return res.json({
+        ok: true,
+        skipped: true,
+        date: plan.date,
+        sent: 0,
+        failed: 0,
+        message: "Hôm nay không có lịch đánh."
+      });
+    }
+    const push = await notifyActiveMembers(todayPlayNotice(plan));
+    return res.json({
+      ok: true,
+      skipped: false,
+      date: plan.date,
+      sessions: count,
+      ...push
+    });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
