@@ -71,7 +71,8 @@
   padding: 20px;
 }
 
-.app-shell input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.app-shell
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
 .app-shell select,
 .app-shell textarea {
   width: 100%;
@@ -83,7 +84,11 @@
   padding: 8px 12px;
   font: inherit;
   font-size: 14px;
-  transition: border-color 180ms var(--ease), background-color 180ms var(--ease), color 180ms var(--ease), transform 180ms var(--ease);
+  transition:
+    border-color 180ms var(--ease),
+    background-color 180ms var(--ease),
+    color 180ms var(--ease),
+    transform 180ms var(--ease);
 }
 
 .app-shell textarea {
@@ -112,7 +117,11 @@
 .app-shell a.rounded-lg {
   border-radius: var(--radius);
   font-weight: 600;
-  transition: background-color 180ms var(--ease), border-color 180ms var(--ease), color 180ms var(--ease), transform 180ms var(--ease);
+  transition:
+    background-color 180ms var(--ease),
+    border-color 180ms var(--ease),
+    color 180ms var(--ease),
+    transform 180ms var(--ease);
 }
 
 .app-shell button:active,
@@ -496,9 +505,8 @@
   margin-top: 12px;
 }
 
-@media (max-width: 640px) {
+/* @media (max-width: 640px) {
   #userBasic .share {
     align-items: flex-start;
-    flex-direction: column;
   }
-}
+} */
