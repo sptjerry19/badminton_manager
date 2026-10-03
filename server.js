@@ -13,6 +13,7 @@ const {
   getActiveFixedMembers,
   getMembers,
   getRecentSessions,
+  listVoteSessions,
   getSessionById,
   getSessionParticipants,
   getPollBySession,
@@ -20,11 +21,14 @@ const {
   getPollAnswersBySession,
   getUpcomingSessionForMember,
   createSession,
+  cancelVoteSession,
+  bookVoteSession,
   settleSession,
   upsertMemberContact,
   updateMemberLevel,
   createMember,
   updateMemberProfile,
+  deleteMember,
   createBirthdayEvent,
   getBirthdayEvents,
   getBirthdayEventDetail,
@@ -59,6 +63,34 @@ const {
   pool
 } = require("./src/postgres");
 const { syncSnapshotToSheets, getSnapshotFromSheets } = require("./src/sheets");
+const {
+  getTournamentBootstrap,
+  registerTournamentMember,
+  loginTournamentMember,
+  completeTournamentProfile,
+  updateEventRules,
+  updateTournamentSettings,
+  listTournamentPlayers,
+  adminUpdatePlayer,
+  adminSetPlayerStatus,
+  adminRemovePlayer,
+  listPairCandidates,
+  invitePartner,
+  respondPair,
+  cancelPair,
+  listPairs,
+  listMatches,
+  generateMatches,
+  setMatchScore,
+  getStandings,
+  getTournamentEvents,
+  listTournaments,
+  getTournamentById,
+  createTournament,
+  updateTournament,
+  activateTournament,
+  deleteTournament
+} = require("./src/tournament");
 
 const app = express();
 let initPromise = null;
@@ -66,7 +98,7 @@ const notificationService = new NotificationService();
 const loginMaxAgeMs = 1000 * 60 * 60 * 24 * 90;
 
 app.set("trust proxy", 1);
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 app.use(
   session({
     store: new PgSession({
@@ -88,6 +120,14 @@ app.use(
     }
   })
 );
+
+app.get("/tournament", (_req, res) => {
+  res.sendFile(path.join(__dirname, "public", "tournament.html"));
+});
+
+app.get("/basic", (_req, res) => {
+  res.sendFile(path.join(__dirname, "public", "basic.html"));
+});
 
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -121,7 +161,15 @@ app.get("/api/health", (req, res) => {
 });
 
 app.use("/api", async (req, res, next) => {
-  if (req.path === "/health" || req.path === "/login" || req.path === "/login-options" || req.path === "/push/config") {
+  if (
+    req.path === "/health" ||
+    req.path === "/login" ||
+    req.path === "/login-options" ||
+    req.path === "/push/config" ||
+    req.path === "/tournament/login" ||
+    req.path === "/tournament/login-options" ||
+    req.path === "/tournament/register"
+  ) {
     return next();
   }
   try {
@@ -206,13 +254,14 @@ app.get("/api/bootstrap", requireAuth, async (req, res) => {
     const role = req.session.role;
     const memberName = req.session.memberName || "";
     if (role === "admin") {
-      const [members, debts, sessions, payments, expenses, birthdayEvents] = await Promise.all([
+      const [members, debts, sessions, payments, expenses, birthdayEvents, voteSessions] = await Promise.all([
         getMembers(),
         getDebts(),
         getRecentSessions(30),
         getPayments(100),
         getExpenses(100),
-        getBirthdayEvents(50)
+        getBirthdayEvents(50),
+        listVoteSessions({ includeCancelled: true, limit: 30 })
       ]);
       return res.json({
         auth: { role },
@@ -221,20 +270,23 @@ app.get("/api/bootstrap", requireAuth, async (req, res) => {
         sessions,
         payments,
         expenses,
-        birthdayEvents
+        birthdayEvents,
+        voteSessions
       });
     }
 
     const today = new Date().toISOString().slice(0, 10);
-    const [upcomingSession, debts, history, payments, activeVote, todaysMatches, birthdayEvents] = await Promise.all([
-      getUpcomingSessionForMember(memberName),
-      getDebts(),
-      getMemberHistory(memberName, 20),
-      getPayments(200),
-      getActivePollForMember(memberName),
-      getGeneratedMatchesByDate(today),
-      getBirthdayEvents(20)
-    ]);
+    const [upcomingSession, debts, history, payments, activeVote, todaysMatches, birthdayEvents, voteSessions] =
+      await Promise.all([
+        getUpcomingSessionForMember(memberName),
+        getDebts(),
+        getMemberHistory(memberName, 20),
+        getPayments(200),
+        getActivePollForMember(memberName),
+        getGeneratedMatchesByDate(today),
+        getBirthdayEvents(20),
+        listVoteSessions({ includeCancelled: false, limit: 30, memberName })
+      ]);
 
     return res.json({
       auth: { role, memberName },
@@ -242,6 +294,7 @@ app.get("/api/bootstrap", requireAuth, async (req, res) => {
       activeVote,
       todaysMatches,
       birthdayEvents,
+      voteSessions,
       myDebt: debts.find((item) => item.memberName.toLowerCase() === memberName.toLowerCase()) || null,
       myHistory: history,
       myPayments: payments.filter((item) => item.memberName.toLowerCase() === memberName.toLowerCase()).slice(0, 20)
@@ -367,6 +420,16 @@ app.patch("/api/members/:memberId", requireAuth, requireRole(["admin"]), async (
   }
 });
 
+app.delete("/api/members/:memberId", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const memberId = String(req.params.memberId || "").trim();
+    const result = await deleteMember(memberId);
+    return res.json({ ok: true, ...result, message: "Đã xóa thành viên." });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
 function formatPlayDateShort(iso) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
   if (!match) return String(iso || "");
@@ -399,6 +462,27 @@ function basicCourtNotice(session) {
   return `Sân mới ${formatPlayDateShort(session.date)} · ${session.court}. Tổng ${formatMoneyText(session.totalFee)}. Mở sổ để xem phần của bạn.`;
 }
 
+function stripHtmlToText(html) {
+  return String(html || "")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tournamentCreateNotice(tournament) {
+  const location = tournament.location ? ` · ${tournament.location}` : "";
+  const excerpt = stripHtmlToText(tournament.contentHtml).slice(0, 120);
+  const body = excerpt ? `. ${excerpt}` : "";
+  return `Giải mới: ${tournament.name}${location}${body}. Vào tab Giải đấu để xem.`;
+}
+
 async function notifyActiveMembers(message) {
   const members = (await getMembers()).filter((member) => member.active);
   return notificationService.broadcast(members, () => message);
@@ -425,6 +509,72 @@ app.post("/api/sessions", requireAuth, requireRole(["admin"]), async (req, res) 
       poll: created.poll,
       push,
       message: describePush("Đã tạo buổi.", push)
+    });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.get("/api/sessions/votes", requireAuth, async (req, res) => {
+  try {
+    const includeCancelled = req.session.role === "admin";
+    const memberName = req.session.role === "admin" ? "" : req.session.memberName || "";
+    const voteSessions = await listVoteSessions({
+      includeCancelled,
+      limit: Number(req.query.limit || 30) || 30,
+      memberName
+    });
+    return res.json({ sessions: voteSessions });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.post("/api/sessions/:sessionId/cancel", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const sessionId = String(req.params.sessionId || "").trim();
+    const sessionItem = await cancelVoteSession(sessionId);
+    let push = { configured: false, sent: 0, failed: 0 };
+    try {
+      const location = sessionItem.location ? ` · ${sessionItem.location}` : "";
+      push = await notifyActiveMembers(
+        `Đã hủy vote sân: ${sessionItem.date} ${sessionItem.time || ""}${location}. Không cần phản hồi nữa.`
+      );
+    } catch (error) {
+      console.error("Không gửi được thông báo hủy vote:", error.message);
+      push = { configured: true, sent: 0, failed: 1 };
+    }
+    return res.json({
+      ok: true,
+      session: sessionItem,
+      push,
+      message: describePush("Đã hủy vote sân.", push)
+    });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.post("/api/sessions/:sessionId/book", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const sessionId = String(req.params.sessionId || "").trim();
+    const imageDataUrl = String(req.body?.imageDataUrl || req.body?.bookingImageUrl || "").trim();
+    const sessionItem = await bookVoteSession(sessionId, imageDataUrl);
+    let push = { configured: false, sent: 0, failed: 0 };
+    try {
+      const location = sessionItem.location ? ` · ${sessionItem.location}` : "";
+      push = await notifyActiveMembers(
+        `Đã đặt sân: ${sessionItem.date} ${sessionItem.time || ""}${location}. Vào app xem ảnh xác nhận.`
+      );
+    } catch (error) {
+      console.error("Không gửi được thông báo đặt sân:", error.message);
+      push = { configured: true, sent: 0, failed: 1 };
+    }
+    return res.json({
+      ok: true,
+      session: sessionItem,
+      push,
+      message: describePush("Đã đánh dấu đặt sân.", push)
     });
   } catch (error) {
     return res.status(400).json({ message: error.message });
@@ -897,10 +1047,6 @@ app.get("/api/reports/monthly", requireAuth, requireRole(["admin"]), async (req,
   }
 });
 
-app.get("/basic", (_req, res) => {
-  res.sendFile(path.join(__dirname, "public", "basic.html"));
-});
-
 app.get("/api/basic", requireAuth, async (req, res) => {
   try {
     const [members, sessions] = await Promise.all([getMembers(), getBasicLedger()]);
@@ -919,9 +1065,9 @@ app.get("/api/basic", requireAuth, async (req, res) => {
 
 app.post("/api/sessions/notify", requireAuth, requireRole(["admin"]), async (_req, res) => {
   try {
-    const sessions = await getRecentSessions(1);
+    const sessions = await listVoteSessions({ includeCancelled: false, limit: 1 });
     const session = sessions[0];
-    if (!session) return res.status(400).json({ message: "Chưa có buổi để gửi thông báo." });
+    if (!session) return res.status(400).json({ message: "Chưa có buổi đang mở để gửi thông báo." });
     const push = await notifyActiveMembers(courtNotice(session));
     return res.json({ ok: true, push, message: describePush("Gửi lại buổi mới nhất.", push) });
   } catch (error) {
@@ -1003,6 +1149,321 @@ app.use((err, _req, res, _next) => {
   const requestId = crypto.randomUUID();
   console.error(`[${requestId}]`, err);
   res.status(500).json({ message: `Có lỗi hệ thống. Mã lỗi: ${requestId}` });
+});
+
+app.get("/api/tournament/login-options", async (_req, res) => {
+  try {
+    await ensureInitialized();
+    const members = (await getMembers()).filter((member) => member.active);
+    return res.json({
+      members: members.map((member) => ({
+        memberId: member.memberId,
+        name: member.name
+      }))
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.post("/api/tournament/register", async (req, res) => {
+  try {
+    await ensureInitialized();
+    const member = await registerTournamentMember({
+      name: req.body?.name,
+      phoneNumber: req.body?.phoneNumber
+    });
+    req.session.authenticated = true;
+    req.session.role = "user";
+    req.session.memberName = member.name;
+    req.session.username = member.name;
+    return res.json({ ok: true, role: "user", memberName: member.name, member });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.post("/api/tournament/login", async (req, res) => {
+  try {
+    await ensureInitialized();
+    const mode = String(req.body?.mode || "").trim().toLowerCase();
+    if (mode === "admin") {
+      const inputPassword = String(req.body?.password || "");
+      if (!inputPassword || inputPassword !== ADMIN_PASSWORD) {
+        return res.status(401).json({ message: "Sai mật khẩu admin." });
+      }
+      req.session.authenticated = true;
+      req.session.role = "admin";
+      req.session.memberName = "";
+      req.session.username = "Admin";
+      return res.json({ ok: true, role: "admin" });
+    }
+    const member = await loginTournamentMember({
+      memberName: req.body?.memberName,
+      phoneNumber: req.body?.phoneNumber
+    });
+    req.session.authenticated = true;
+    req.session.role = "user";
+    req.session.memberName = member.name;
+    req.session.username = member.name;
+    return res.json({ ok: true, role: "user", memberName: member.name, member });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.get("/api/tournament/bootstrap", requireAuth, async (req, res) => {
+  try {
+    const data = await getTournamentBootstrap({
+      role: req.session.role,
+      memberName: req.session.memberName || ""
+    });
+    return res.json(data);
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.get("/api/tournament/catalog", requireAuth, async (_req, res) => {
+  try {
+    return res.json({ tournaments: await listTournaments() });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.get("/api/tournament/catalog/:tournamentId", requireAuth, async (req, res) => {
+  try {
+    const tournament = await getTournamentById(req.params.tournamentId);
+    return res.json({ tournament });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.post("/api/tournament/catalog", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const tournament = await createTournament({
+      name: req.body?.name,
+      location: req.body?.location,
+      contentHtml: req.body?.contentHtml
+    });
+    let push = { configured: false, sent: 0, failed: 0 };
+    try {
+      push = await notifyActiveMembers(tournamentCreateNotice(tournament));
+    } catch (error) {
+      console.error("Không gửi được thông báo giải mới:", error.message);
+      push = { configured: true, sent: 0, failed: 1 };
+    }
+    return res.json({
+      ok: true,
+      tournament,
+      push,
+      message: describePush("Đã tạo giải đấu.", push)
+    });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.patch("/api/tournament/catalog/:tournamentId", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const tournament = await updateTournament(req.params.tournamentId, {
+      name: req.body?.name,
+      location: req.body?.location,
+      contentHtml: req.body?.contentHtml
+    });
+    return res.json({ ok: true, tournament, message: "Đã cập nhật giải đấu." });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.post(
+  "/api/tournament/catalog/:tournamentId/activate",
+  requireAuth,
+  requireRole(["admin"]),
+  async (req, res) => {
+    try {
+      const tournament = await activateTournament(req.params.tournamentId);
+      return res.json({ ok: true, tournament, message: "Đã đặt giải đang diễn ra." });
+    } catch (error) {
+      return res.status(400).json({ message: error.message });
+    }
+  }
+);
+
+app.delete("/api/tournament/catalog/:tournamentId", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const result = await deleteTournament(req.params.tournamentId);
+    return res.json({ ok: true, ...result, message: "Đã xóa giải đấu." });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.post("/api/tournament/profile", requireAuth, requireRole(["user"]), async (req, res) => {
+  try {
+    const result = await completeTournamentProfile(req.session.memberName, req.body || {});
+    req.session.memberName = result.member.name;
+    req.session.username = result.member.name;
+    return res.json({ ok: true, ...result, message: "Đã lưu hồ sơ giải đấu." });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.patch("/api/tournament/settings", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const settings = await updateTournamentSettings(req.body || {});
+    return res.json({ ok: true, settings });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.patch("/api/tournament/events/:eventId/rules", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const event = await updateEventRules(req.params.eventId, {
+      minLevelSum: req.body?.minLevelSum,
+      maxLevelSum: req.body?.maxLevelSum
+    });
+    return res.json({ ok: true, event });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.get("/api/tournament/players", requireAuth, requireRole(["admin"]), async (_req, res) => {
+  try {
+    return res.json({ players: await listTournamentPlayers() });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.patch("/api/tournament/players/:memberId", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    if (req.body?.status !== undefined && Object.keys(req.body || {}).length === 1) {
+      const player = await adminSetPlayerStatus(req.params.memberId, req.body.status);
+      return res.json({ ok: true, player, message: "Đã cập nhật trạng thái VĐV." });
+    }
+    const player = await adminUpdatePlayer(req.params.memberId, req.body || {});
+    return res.json({ ok: true, player });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.delete("/api/tournament/players/:memberId", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const result = await adminRemovePlayer(req.params.memberId);
+    return res.json({ ok: true, ...result, message: "Đã xóa VĐV khỏi danh sách giải." });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.get("/api/tournament/events", requireAuth, async (_req, res) => {
+  try {
+    return res.json({ events: await getTournamentEvents() });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.get("/api/tournament/pairs/candidates", requireAuth, requireRole(["user"]), async (req, res) => {
+  try {
+    const eventId = String(req.query.eventId || "").trim();
+    const candidates = await listPairCandidates(req.session.memberName, eventId);
+    return res.json({ candidates });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.get("/api/tournament/pairs", requireAuth, async (req, res) => {
+  try {
+    if (req.session.role === "admin") {
+      return res.json({ pairs: await listPairs({ eventId: req.query.eventId || "" }) });
+    }
+    const bootstrap = await getTournamentBootstrap({
+      role: "user",
+      memberName: req.session.memberName || ""
+    });
+    return res.json({ pairs: bootstrap.pairs || [] });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.post("/api/tournament/pairs/invite", requireAuth, requireRole(["user"]), async (req, res) => {
+  try {
+    const pair = await invitePartner(req.session.memberName, {
+      eventId: req.body?.eventId,
+      partnerMemberId: req.body?.partnerMemberId
+    });
+    return res.json({ ok: true, pair, message: "Đã gửi lời mời đồng đội." });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.post("/api/tournament/pairs/:pairId/respond", requireAuth, requireRole(["user"]), async (req, res) => {
+  try {
+    const accept = String(req.body?.accept).toLowerCase() !== "false" && req.body?.accept !== false;
+    const pair = await respondPair(req.session.memberName, req.params.pairId, accept);
+    return res.json({
+      ok: true,
+      pair,
+      message: accept ? "Đã chấp nhận ghép đôi." : "Đã từ chối lời mời."
+    });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.post("/api/tournament/pairs/:pairId/cancel", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const result = await cancelPair(req.params.pairId);
+    return res.json({ ok: true, ...result, message: "Đã hủy cặp." });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.get("/api/tournament/matches", requireAuth, async (req, res) => {
+  try {
+    return res.json({ matches: await listMatches(req.query.eventId || "") });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.post("/api/tournament/matches/generate", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const result = await generateMatches(req.body?.eventId || "");
+    return res.json({ ok: true, ...result, message: `Đã tạo ${result.created} trận.` });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.patch("/api/tournament/matches/:matchId/score", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const match = await setMatchScore(req.params.matchId, req.body?.scoreA, req.body?.scoreB);
+    return res.json({ ok: true, match, message: "Đã lưu tỉ số." });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+app.get("/api/tournament/standings", requireAuth, async (req, res) => {
+  try {
+    return res.json({ standings: await getStandings(req.query.eventId || "") });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
 });
 
 if (require.main === module) {

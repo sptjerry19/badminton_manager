@@ -326,6 +326,14 @@ async function initializeDatabase() {
     ADD COLUMN IF NOT EXISTS participant_level INTEGER;
   `);
   await query(`
+    ALTER TABLE sessions
+    ADD COLUMN IF NOT EXISTS vote_status TEXT NOT NULL DEFAULT 'open';
+  `);
+  await query(`
+    ALTER TABLE sessions
+    ADD COLUMN IF NOT EXISTS booking_image_url TEXT NOT NULL DEFAULT '';
+  `);
+  await query(`
     ALTER TABLE members
     ADD COLUMN IF NOT EXISTS birthday TEXT NOT NULL DEFAULT '';
   `);
@@ -361,6 +369,141 @@ async function initializeDatabase() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS tournaments (
+      tournament_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      location TEXT NOT NULL DEFAULT '',
+      content_html TEXT NOT NULL DEFAULT '',
+      is_active BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query(`
+    CREATE INDEX IF NOT EXISTS tournaments_created_at_idx
+    ON tournaments(created_at DESC);
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS tournament_events (
+      event_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      min_level_sum INTEGER NOT NULL DEFAULT 2,
+      max_level_sum INTEGER NOT NULL DEFAULT 20,
+      gender_rule TEXT NOT NULL DEFAULT 'MF',
+      active BOOLEAN NOT NULL DEFAULT TRUE
+    );
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS tournament_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT ''
+    );
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS tournament_registrations (
+      member_id TEXT PRIMARY KEY,
+      member_name TEXT NOT NULL,
+      join_summary BOOLEAN NOT NULL DEFAULT FALSE,
+      profile_completed BOOLEAN NOT NULL DEFAULT FALSE,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  // Bảng cũ chưa có cột: thêm với default approved để VĐV hiện tại vẫn tham dự được.
+  await query(`
+    ALTER TABLE tournament_registrations
+    ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'approved';
+  `);
+  await query(`
+    ALTER TABLE tournament_registrations
+    ALTER COLUMN status SET DEFAULT 'pending';
+  `).catch(() => {});
+  await query(`
+    CREATE TABLE IF NOT EXISTS tournament_player_events (
+      member_id TEXT NOT NULL,
+      event_id TEXT NOT NULL,
+      PRIMARY KEY (member_id, event_id)
+    );
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS tournament_pairs (
+      pair_id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      member_a_id TEXT NOT NULL,
+      member_b_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      invited_by TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      responded_at TIMESTAMPTZ
+    );
+  `);
+  await query(`
+    CREATE INDEX IF NOT EXISTS tournament_pairs_event_status_idx
+    ON tournament_pairs(event_id, status);
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS tournament_matches (
+      match_id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      round INTEGER NOT NULL,
+      match_no INTEGER NOT NULL,
+      pair_a_id TEXT NOT NULL,
+      pair_b_id TEXT NOT NULL,
+      score_a INTEGER,
+      score_b INTEGER,
+      status TEXT NOT NULL DEFAULT 'scheduled',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (event_id, round, match_no)
+    );
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS tournament_member_stats (
+      member_id TEXT NOT NULL,
+      event_id TEXT NOT NULL,
+      played INTEGER NOT NULL DEFAULT 0,
+      wins INTEGER NOT NULL DEFAULT 0,
+      points INTEGER NOT NULL DEFAULT 0,
+      point_diff INTEGER NOT NULL DEFAULT 0,
+      points_for INTEGER NOT NULL DEFAULT 0,
+      points_against INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (member_id, event_id)
+    );
+  `);
+
+  const defaultEvents = [
+    ["MD", "Đôi nam", 2, 20, "MM"],
+    ["XD", "Đôi nam nữ", 2, 20, "MF"],
+    ["WD", "Đôi nữ", 2, 20, "FF"]
+  ];
+  for (const [eventId, name, minSum, maxSum, genderRule] of defaultEvents) {
+    await query(
+      `
+      INSERT INTO tournament_events(event_id, name, min_level_sum, max_level_sum, gender_rule, active)
+      VALUES ($1,$2,$3,$4,$5,TRUE)
+      ON CONFLICT (event_id) DO NOTHING
+      `,
+      [eventId, name, minSum, maxSum, genderRule]
+    );
+  }
+  const defaultTournamentSettings = {
+    points_to_win: "21",
+    registration_open: "true",
+    pairing_open: "true"
+  };
+  for (const [key, value] of Object.entries(defaultTournamentSettings)) {
+    await query(
+      `
+      INSERT INTO tournament_settings(key, value)
+      VALUES ($1, $2)
+      ON CONFLICT (key) DO NOTHING
+      `,
+      [key, value]
+    );
+  }
 
   for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
     await query(
@@ -429,6 +572,31 @@ async function getActiveFixedMembers() {
   return result.rows.map(mapMember);
 }
 
+function normalizeVoteStatus(value) {
+  const status = String(value || "open").trim().toLowerCase();
+  if (status === "cancelled" || status === "booked") return status;
+  return "open";
+}
+
+function mapSessionRow(row, extras = {}) {
+  return {
+    sessionId: row.session_id,
+    date: row.date,
+    time: row.time || "",
+    location: row.location || "",
+    note: row.note || "",
+    fixedCourtCost: toNumber(row.fixed_court_cost),
+    extraCourts: toNumber(row.extra_courts),
+    shuttlecockCost: toNumber(row.shuttlecock_cost),
+    totalCost: toNumber(row.total_cost),
+    createdBy: row.created_by || "admin",
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
+    voteStatus: normalizeVoteStatus(row.vote_status),
+    bookingImageUrl: row.booking_image_url || "",
+    ...extras
+  };
+}
+
 async function getRecentSessions(limit = 20) {
   const sessionsResult = await query(
     `
@@ -470,40 +638,134 @@ async function getRecentSessions(limit = 20) {
     settledBySession[row.session_id] = toNumber(row.count) > 0;
   });
 
-  return sessionsResult.rows.map((row) => ({
-    sessionId: row.session_id,
-    date: row.date,
-    time: row.time || "",
-    location: row.location || "",
-    note: row.note || "",
-    fixedCourtCost: toNumber(row.fixed_court_cost),
-    extraCourts: toNumber(row.extra_courts),
-    shuttlecockCost: toNumber(row.shuttlecock_cost),
-    totalCost: toNumber(row.total_cost),
-    createdBy: row.created_by || "admin",
-    createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
-    stats: statsBySession[row.session_id] || { yes: 0, no: 0, pending: 0 },
-    settled: Boolean(settledBySession[row.session_id])
-  }));
+  return sessionsResult.rows.map((row) =>
+    mapSessionRow(row, {
+      stats: statsBySession[row.session_id] || { yes: 0, no: 0, pending: 0 },
+      settled: Boolean(settledBySession[row.session_id])
+    })
+  );
 }
 
 async function getSessionById(sessionId) {
   const result = await query(`SELECT * FROM sessions WHERE session_id = $1`, [sessionId]);
   const row = result.rows[0];
   if (!row) return null;
-  return {
-    sessionId: row.session_id,
-    date: row.date,
-    time: row.time || "",
-    location: row.location || "",
-    note: row.note || "",
-    fixedCourtCost: toNumber(row.fixed_court_cost),
-    extraCourts: toNumber(row.extra_courts),
-    shuttlecockCost: toNumber(row.shuttlecock_cost),
-    totalCost: toNumber(row.total_cost),
-    createdBy: row.created_by || "admin",
-    createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
-  };
+  return mapSessionRow(row);
+}
+
+async function listVoteSessions({ includeCancelled = false, limit = 30, memberName = "" } = {}) {
+  const max = Math.max(1, Math.min(100, Number(limit) || 30));
+  const sessionsResult = await query(
+    includeCancelled
+      ? `
+        SELECT * FROM sessions
+        ORDER BY date DESC, time DESC, created_at DESC
+        LIMIT $1
+      `
+      : `
+        SELECT * FROM sessions
+        WHERE COALESCE(vote_status, 'open') <> 'cancelled'
+        ORDER BY date DESC, time DESC, created_at DESC
+        LIMIT $1
+      `,
+    [max]
+  );
+  if (!sessionsResult.rows.length) return [];
+
+  const sessionIds = sessionsResult.rows.map((row) => row.session_id);
+  const participantsResult = await query(
+    `
+    SELECT session_id, member_name, member_name_ci, participant_level, status
+    FROM session_participants
+    WHERE session_id = ANY($1::text[])
+    ORDER BY member_name ASC
+    `,
+    [sessionIds]
+  );
+
+  const memberNameCi = safeLower(memberName);
+  const yesBySession = {};
+  const statsBySession = {};
+  const myStatusBySession = {};
+  participantsResult.rows.forEach((row) => {
+    const sid = row.session_id;
+    if (!statsBySession[sid]) statsBySession[sid] = { yes: 0, no: 0, pending: 0 };
+    const status = String(row.status || "pending").toLowerCase();
+    if (memberNameCi && row.member_name_ci === memberNameCi) {
+      myStatusBySession[sid] = status;
+    }
+    if (status === "yes") {
+      statsBySession[sid].yes += 1;
+      if (!yesBySession[sid]) yesBySession[sid] = [];
+      yesBySession[sid].push({
+        name: row.member_name,
+        level: row.participant_level === null || row.participant_level === undefined
+          ? null
+          : normalizeLevel(row.participant_level)
+      });
+    } else if (status === "no") {
+      statsBySession[sid].no += 1;
+    } else {
+      statsBySession[sid].pending += 1;
+    }
+  });
+
+  return sessionsResult.rows.map((row) => {
+    const mapped = mapSessionRow(row, {
+      stats: statsBySession[row.session_id] || { yes: 0, no: 0, pending: 0 },
+      yesMembers: yesBySession[row.session_id] || []
+    });
+    if (memberNameCi) {
+      mapped.myStatus = myStatusBySession[row.session_id] || "pending";
+    }
+    return mapped;
+  });
+}
+
+function assertSessionAcceptsVotes(session) {
+  if (!session) throw new Error("Không tìm thấy buổi chơi.");
+  const status = normalizeVoteStatus(session.voteStatus);
+  if (status === "cancelled") throw new Error("Buổi này đã bị hủy vote.");
+  if (status === "booked") throw new Error("Buổi này đã đặt sân, không cần vote thêm.");
+}
+
+async function cancelVoteSession(sessionId) {
+  const session = await getSessionById(sessionId);
+  if (!session) throw new Error("Không tìm thấy buổi chơi.");
+  if (session.voteStatus === "cancelled") return session;
+  if (session.voteStatus === "booked") {
+    throw new Error("Không thể hủy buổi đã đặt sân. Hãy tạo vote mới nếu cần.");
+  }
+  await query(
+    `UPDATE sessions SET vote_status = 'cancelled' WHERE session_id = $1`,
+    [sessionId]
+  );
+  return getSessionById(sessionId);
+}
+
+async function bookVoteSession(sessionId, bookingImageUrl) {
+  const session = await getSessionById(sessionId);
+  if (!session) throw new Error("Không tìm thấy buổi chơi.");
+  if (session.voteStatus === "cancelled") {
+    throw new Error("Không thể đánh dấu đã đặt cho buổi đã hủy.");
+  }
+  const imageUrl = String(bookingImageUrl || "").trim();
+  if (!imageUrl) throw new Error("Cần upload ảnh xác nhận đã đặt sân.");
+  if (imageUrl.length > 1_800_000) {
+    throw new Error("Ảnh quá lớn. Hãy dùng ảnh dưới ~1.3MB.");
+  }
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(imageUrl) && !/^https?:\/\//i.test(imageUrl)) {
+    throw new Error("Ảnh đặt sân không hợp lệ.");
+  }
+  await query(
+    `
+    UPDATE sessions
+    SET vote_status = 'booked', booking_image_url = $2
+    WHERE session_id = $1
+    `,
+    [sessionId, imageUrl]
+  );
+  return getSessionById(sessionId);
 }
 
 async function getSessionParticipants(sessionId) {
@@ -560,6 +822,7 @@ async function getActivePollForMember(memberName) {
       ON pa.session_id = s.session_id
      AND pa.member_name_ci = $2
     WHERE (s.date || 'T' || COALESCE(s.time, '00:00')) >= $1
+      AND COALESCE(s.vote_status, 'open') <> 'cancelled'
       AND (pa.answer IS NULL OR BTRIM(pa.answer) = '')
     ORDER BY s.date ASC, s.time ASC
     LIMIT 1
@@ -610,6 +873,7 @@ async function getUpcomingSessionForMember(memberName) {
       ON sp.session_id = s.session_id
      AND sp.member_name_ci = $2
     WHERE (s.date || 'T' || COALESCE(s.time, '00:00')) >= $1
+      AND COALESCE(s.vote_status, 'open') <> 'cancelled'
     ORDER BY
       CASE WHEN sp.status = 'pending' THEN 0 ELSE 1 END,
       s.date ASC,
@@ -635,6 +899,8 @@ async function getUpcomingSessionForMember(memberName) {
     location: row.location || "",
     note: row.note || "",
     totalCost: toNumber(row.total_cost),
+    voteStatus: normalizeVoteStatus(row.vote_status),
+    bookingImageUrl: row.booking_image_url || "",
     myStatus: row.my_status || "pending",
     poll: poll
       ? {
@@ -660,9 +926,9 @@ async function createSession(payload, createdBy = "admin") {
   await query(
     `
     INSERT INTO sessions(
-      session_id, date, time, location, note, fixed_court_cost, extra_courts, shuttlecock_cost, total_cost, created_by, created_at
+      session_id, date, time, location, note, fixed_court_cost, extra_courts, shuttlecock_cost, total_cost, created_by, created_at, vote_status, booking_image_url
     )
-    VALUES ($1,$2,$3,$4,$5,0,0,0,0,$6,$7)
+    VALUES ($1,$2,$3,$4,$5,0,0,0,0,$6,$7,'open','')
     `,
     [sessionId, date, time, location, note, createdBy, ts]
   );
@@ -835,6 +1101,46 @@ async function createMember({ name, type, gender, birthday, phoneNumber, level, 
     [memberId, safeName, memberType, memberGender, safeBirthday, safeLevel, Boolean(active), safePhone, ts]
   );
   return mapMember(result.rows[0]);
+}
+
+async function deleteMember(memberId) {
+  const safeMemberId = String(memberId || "").trim();
+  if (!safeMemberId) throw new Error("Thiếu memberId.");
+  const existingResult = await query(`SELECT * FROM members WHERE member_id = $1`, [safeMemberId]);
+  const existing = existingResult.rows[0];
+  if (!existing) throw new Error("Không tìm thấy thành viên cần xóa.");
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `
+      UPDATE tournament_pairs
+      SET status = 'cancelled', responded_at = NOW()
+      WHERE status IN ('pending', 'locked')
+        AND (member_a_id = $1 OR member_b_id = $1)
+      `,
+      [safeMemberId]
+    );
+    await client.query(`DELETE FROM tournament_player_events WHERE member_id = $1`, [safeMemberId]);
+    await client.query(`DELETE FROM tournament_member_stats WHERE member_id = $1`, [safeMemberId]);
+    await client.query(`DELETE FROM tournament_registrations WHERE member_id = $1`, [safeMemberId]);
+    await client.query(`DELETE FROM birthday_drink_orders WHERE member_id = $1`, [safeMemberId]);
+    await client.query(`DELETE FROM push_tokens WHERE member_id = $1`, [safeMemberId]);
+    await client.query(`DELETE FROM member_credits WHERE member_id = $1`, [safeMemberId]);
+    await client.query(`DELETE FROM debts WHERE member_id = $1`, [safeMemberId]);
+    await client.query(`DELETE FROM members WHERE member_id = $1`, [safeMemberId]);
+    await client.query("COMMIT");
+    return {
+      memberId: safeMemberId,
+      name: String(existing.name || "").trim()
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function updateMemberProfile(memberId, payload) {
@@ -1176,7 +1482,7 @@ async function respondToSession({ sessionId, memberName, status, pollAnswer }) {
   if (!member) throw new Error("Không tìm thấy thành viên.");
 
   const session = await getSessionById(sessionId);
-  if (!session) throw new Error("Không tìm thấy buổi chơi.");
+  assertSessionAcceptsVotes(session);
 
   const ts = nowIso();
   await query(
@@ -1216,6 +1522,10 @@ async function answerPoll({ sessionId, memberName, answer }) {
   const answerText = String(answer || "").trim();
   if (!answerText) throw new Error("Câu trả lời poll không được để trống.");
 
+  const session = await getSessionById(sessionId);
+  if (!session) throw new Error("Không tìm thấy buổi chơi.");
+  if (session.voteStatus === "cancelled") throw new Error("Buổi này đã bị hủy vote.");
+
   const memberResult = await query(`SELECT * FROM members WHERE LOWER(name) = LOWER($1)`, [memberName]);
   const member = memberResult.rows[0];
   if (!member) throw new Error("Không tìm thấy thành viên.");
@@ -1245,7 +1555,7 @@ async function answerPoll({ sessionId, memberName, answer }) {
 
 async function addGuestToSession({ sessionId, guestName, level = 5, status = "yes" }) {
   const session = await getSessionById(sessionId);
-  if (!session) throw new Error("Không tìm thấy buổi chơi.");
+  assertSessionAcceptsVotes(session);
   const name = String(guestName || "").trim();
   if (!name) throw new Error("Tên GL không được để trống.");
   const safeStatus = safeLower(status || "yes");
@@ -1790,7 +2100,9 @@ async function getSnapshotForSheetSync() {
       shuttlecockCost: toNumber(row.shuttlecock_cost),
       totalCost: toNumber(row.total_cost),
       createdBy: row.created_by || "admin",
-      createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
+      voteStatus: normalizeVoteStatus(row.vote_status),
+      bookingImageUrl: row.booking_image_url || ""
     })),
     participants: participants.rows.map((row) => ({
       sessionId: row.session_id,
@@ -1974,8 +2286,8 @@ async function replaceAllDataFromSnapshot(snapshot) {
     for (const row of snapshot.sessions || []) {
       await client.query(
         `
-        INSERT INTO sessions(session_id, date, time, location, note, fixed_court_cost, extra_courts, shuttlecock_cost, total_cost, created_by, created_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        INSERT INTO sessions(session_id, date, time, location, note, fixed_court_cost, extra_courts, shuttlecock_cost, total_cost, created_by, created_at, vote_status, booking_image_url)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
         `,
         [
           String(row.sessionId || "").trim(),
@@ -1988,7 +2300,9 @@ async function replaceAllDataFromSnapshot(snapshot) {
           Math.round(toNumber(row.shuttlecockCost)),
           Math.round(toNumber(row.totalCost)),
           String(row.createdBy || "admin"),
-          String(row.createdAt || nowIso())
+          String(row.createdAt || nowIso()),
+          normalizeVoteStatus(row.voteStatus || row.vote_status),
+          String(row.bookingImageUrl || row.booking_image_url || "").trim()
         ]
       );
     }
@@ -2476,7 +2790,7 @@ async function getPlaysForDate(date) {
   const day = String(date || vietnamToday()).trim();
   const [mainResult, basicResult] = await Promise.all([
     query(
-      `SELECT date, time, location FROM sessions WHERE date = $1 ORDER BY time ASC, created_at ASC`,
+      `SELECT date, time, location FROM sessions WHERE date = $1 AND COALESCE(vote_status, 'open') <> 'cancelled' ORDER BY time ASC, created_at ASC`,
       [day]
     ),
     query(
@@ -2566,6 +2880,7 @@ async function getWeeklyReminderAudience() {
       SELECT date, time, location
       FROM sessions
       WHERE date >= $1
+        AND COALESCE(vote_status, 'open') <> 'cancelled'
       ORDER BY date ASC, time ASC
       LIMIT 1
       `,
@@ -2707,6 +3022,7 @@ module.exports = {
   getMembers,
   getActiveFixedMembers,
   getRecentSessions,
+  listVoteSessions,
   getSessionById,
   getSessionParticipants,
   getPollBySession,
@@ -2714,11 +3030,14 @@ module.exports = {
   getPollAnswersBySession,
   getUpcomingSessionForMember,
   createSession,
+  cancelVoteSession,
+  bookVoteSession,
   settleSession,
   upsertMemberContact,
   updateMemberLevel,
   createMember,
   updateMemberProfile,
+  deleteMember,
   createBirthdayEvent,
   getBirthdayEvents,
   getBirthdayEventDetail,

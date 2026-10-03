@@ -2,6 +2,7 @@ const state = {
   loginOptions: [],
   auth: null,
   sessions: [],
+  voteSessions: [],
   members: [],
   adminPayments: [],
   adminExpenses: [],
@@ -12,6 +13,9 @@ const state = {
   selectedBirthdayEventId: "",
   selectedBirthdayBrand: "",
   activeAdminTab: "court",
+  activeUserTab: "home",
+  tournamentMountedFor: "",
+  loginAuthMode: "login",
   activeVote: null,
   upcomingSessionId: "",
   selectedUserMatchDate: "",
@@ -43,6 +47,8 @@ function toggleModal(id, isOpen) {
   modal.classList.toggle("flex", isOpen);
 }
 
+let loadingHideTimer = null;
+
 function setLoading(isLoading) {
   const modal = document.getElementById("loadingModal");
   if (!modal) return;
@@ -50,9 +56,28 @@ function setLoading(isLoading) {
   modal.classList.toggle("flex", isLoading);
 }
 
+function bumpLoading(delta = 1) {
+  state.pendingApiCalls = Math.max(0, state.pendingApiCalls + Number(delta || 0));
+  if (state.pendingApiCalls > 0) {
+    if (loadingHideTimer) {
+      clearTimeout(loadingHideTimer);
+      loadingHideTimer = null;
+    }
+    setLoading(true);
+    return;
+  }
+  if (loadingHideTimer) clearTimeout(loadingHideTimer);
+  loadingHideTimer = setTimeout(() => {
+    loadingHideTimer = null;
+    if (state.pendingApiCalls === 0) setLoading(false);
+  }, 80);
+}
+
+window.bumpLoading = bumpLoading;
+
 async function api(path, options = {}) {
-  state.pendingApiCalls += 1;
-  setLoading(true);
+  const trackLoading = options.loading !== false;
+  if (trackLoading) bumpLoading(1);
   try {
     const response = await fetch(path, {
       credentials: "include",
@@ -65,14 +90,22 @@ async function api(path, options = {}) {
     if (!response.ok) throw new Error(data.message || "Có lỗi hệ thống.");
     return data;
   } finally {
-    state.pendingApiCalls = Math.max(0, state.pendingApiCalls - 1);
-    setLoading(state.pendingApiCalls > 0);
+    if (trackLoading) bumpLoading(-1);
   }
 }
 
 function showLoginMode() {
   document.getElementById("loginSection").classList.remove("hidden");
   document.getElementById("appSection").classList.add("hidden");
+  state.tournamentMountedFor = "";
+  state.activeUserTab = "home";
+  ["userTournamentMount", "adminTournamentMount"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.innerHTML = "";
+      el.dataset.ready = "0";
+    }
+  });
 }
 
 function showAppMode() {
@@ -96,19 +129,48 @@ function escapeHtmlText(text) {
     .replace(/'/g, "&#39;");
 }
 
+function setLoginAuthMode(mode) {
+  state.loginAuthMode = mode;
+  document.querySelectorAll("#authModeSegment .login-segment-btn").forEach((btn) => {
+    btn.classList.toggle("is-on", btn.dataset.mode === mode);
+  });
+  const loginFields = document.getElementById("loginFields");
+  const registerFields = document.getElementById("registerFields");
+  const adminFields = document.getElementById("adminFields");
+  const memberSelect = document.getElementById("memberSelectInput");
+  const phoneInput = document.getElementById("phoneInput");
+  const registerPhone = document.getElementById("registerPhone");
+  const submitLabel = document.getElementById("authSubmitLabel");
+  if (loginFields) loginFields.hidden = mode !== "login";
+  if (registerFields) registerFields.hidden = mode !== "register";
+  if (adminFields) adminFields.hidden = mode !== "admin";
+  if (memberSelect) memberSelect.required = mode === "login";
+  if (phoneInput) phoneInput.required = mode === "login";
+  if (registerPhone) {
+    registerPhone.required = mode === "register";
+    // Browser đôi khi nhét email vào ô SĐT của form đăng ký.
+    if (mode === "register" && String(registerPhone.value || "").includes("@")) {
+      registerPhone.value = "";
+    }
+  }
+  if (submitLabel) {
+    submitLabel.textContent =
+      mode === "register" ? "Đăng ký" : mode === "admin" ? "Vào admin" : "Đăng nhập";
+  }
+}
+
 function toggleLoginMode() {
-  const mode = document.getElementById("loginModeInput").value;
-  document.getElementById("adminLoginFields").classList.toggle("hidden", mode !== "admin");
-  document.getElementById("userLoginFields").classList.toggle("hidden", mode !== "user");
+  setLoginAuthMode(state.loginAuthMode || "login");
 }
 
 function renderLoginOptions() {
   const select = document.getElementById("memberSelectInput");
+  if (!select) return;
   select.innerHTML = "";
   state.loginOptions.forEach((member) => {
     const option = document.createElement("option");
     option.value = member.name;
-    option.textContent = `${member.name} (${member.type || "GL"})`;
+    option.textContent = member.type ? `${member.name} (${member.type})` : member.name;
     select.appendChild(option);
   });
 }
@@ -171,7 +233,10 @@ function renderMemberLevels(members) {
       <td class="border border-slate-200 px-2 py-1">${member.level ?? "-"}</td>
       <td class="border border-slate-200 px-2 py-1">${member.active ? "TRUE" : "FALSE"}</td>
       <td class="border border-slate-200 px-2 py-1">
-        <button data-member-id="${member.memberId}" class="edit-member-btn rounded bg-blue-600 px-2 py-1 text-white">Sửa</button>
+        <div class="flex flex-wrap items-center gap-1">
+          <button data-member-id="${member.memberId}" class="edit-member-btn rounded bg-blue-600 px-2 py-1 text-white">Sửa</button>
+          <button data-member-id="${member.memberId}" class="delete-member-btn rounded bg-rose-600 px-2 py-1 text-white">Xóa</button>
+        </div>
       </td>
     `;
     tbody.appendChild(tr);
@@ -254,9 +319,13 @@ function renderUpcoming(session) {
     return;
   }
   state.upcomingSessionId = session.sessionId;
+  const voteStatus = String(session.voteStatus || "open").toLowerCase();
+  const statusLabel =
+    voteStatus === "booked" ? "đã đặt sân" : voteStatus === "cancelled" ? "đã hủy" : "đang vote";
   info.innerHTML = [
     `Buổi: ${session.date} ${session.time}`,
     session.location ? `Địa điểm: ${session.location}` : "",
+    `Vote: ${statusLabel}`,
     `Trạng thái hiện tại: ${session.myStatus || "pending"}`
   ]
     .filter(Boolean)
@@ -269,11 +338,181 @@ function renderUpcoming(session) {
     .filter(Boolean)
     .join(" | ");
 
-  if (String(session.myStatus || "pending").toLowerCase() === "pending") {
+  const needsResponse =
+    voteStatus === "open" && String(session.myStatus || "pending").toLowerCase() === "pending";
+  if (needsResponse) {
     toggleModal("attendanceModal", true);
   } else {
     toggleModal("attendanceModal", false);
   }
+}
+
+function voteStatusLabel(status) {
+  const value = String(status || "open").toLowerCase();
+  if (value === "booked") return "Đã đặt";
+  if (value === "cancelled") return "Đã hủy";
+  return "Đang vote";
+}
+
+function voteStatusClass(status) {
+  const value = String(status || "open").toLowerCase();
+  if (value === "booked") return "is-booked";
+  if (value === "cancelled") return "is-cancelled";
+  return "is-open";
+}
+
+function renderYesMemberChips(yesMembers) {
+  const list = Array.isArray(yesMembers) ? yesMembers : [];
+  if (!list.length) return `<span class="vote-empty">Chưa có ai đồng ý</span>`;
+  return list
+    .map((member) => {
+      const level =
+        member.level === null || member.level === undefined ? "" : ` · Lv${member.level}`;
+      return `<span class="vote-chip">${escapeHtmlText(member.name)}${escapeHtmlText(level)}</span>`;
+    })
+    .join("");
+}
+
+function renderAdminVoteList(sessions) {
+  const container = document.getElementById("voteSessionList");
+  if (!container) return;
+  state.voteSessions = Array.isArray(sessions) ? sessions : [];
+  if (!state.voteSessions.length) {
+    container.innerHTML = `<p class="text-sm text-slate-500">Chưa có buổi vote nào.</p>`;
+    return;
+  }
+
+  container.innerHTML = state.voteSessions
+    .map((session) => {
+      const status = String(session.voteStatus || "open").toLowerCase();
+      const stats = session.stats || { yes: 0, no: 0, pending: 0 };
+      const imageBlock =
+        status === "booked" && session.bookingImageUrl
+          ? `<button type="button" class="vote-thumb-btn" data-action="preview-booking" data-session="${escapeHtmlText(session.sessionId)}">
+              <img src="${escapeHtmlText(session.bookingImageUrl)}" alt="Ảnh đặt sân" class="vote-thumb" />
+            </button>`
+          : "";
+      const actions =
+        status === "open"
+          ? `<div class="vote-actions">
+              <label class="vote-upload">
+                <span>Đánh dấu đã đặt</span>
+                <input type="file" accept="image/*" data-action="book-vote" data-session="${escapeHtmlText(session.sessionId)}" />
+              </label>
+              <button type="button" class="vote-btn vote-btn-danger" data-action="cancel-vote" data-session="${escapeHtmlText(session.sessionId)}">Hủy vote</button>
+            </div>`
+          : status === "booked"
+            ? `<div class="vote-actions">
+                <label class="vote-upload">
+                  <span>Đổi ảnh đặt sân</span>
+                  <input type="file" accept="image/*" data-action="book-vote" data-session="${escapeHtmlText(session.sessionId)}" />
+                </label>
+              </div>`
+            : "";
+
+      return `<article class="vote-card" data-session="${escapeHtmlText(session.sessionId)}">
+        <div class="vote-card-head">
+          <div>
+            <strong>${escapeHtmlText(session.date)} ${escapeHtmlText(session.time || "")}</strong>
+            <p>${escapeHtmlText(session.location || "Chưa có địa điểm")}${session.note ? ` · ${escapeHtmlText(session.note)}` : ""}</p>
+          </div>
+          <span class="vote-badge ${voteStatusClass(status)}">${voteStatusLabel(status)}</span>
+        </div>
+        <p class="vote-stats">Đồng ý ${stats.yes || 0} · Không ${stats.no || 0} · Chờ ${stats.pending || 0}</p>
+        <div class="vote-yes">${renderYesMemberChips(session.yesMembers)}</div>
+        ${imageBlock}
+        ${actions}
+      </article>`;
+    })
+    .join("");
+}
+
+function renderUserVoteList(sessions) {
+  const container = document.getElementById("userVoteList");
+  if (!container) return;
+  const list = (Array.isArray(sessions) ? sessions : []).filter(
+    (session) => String(session.voteStatus || "open").toLowerCase() !== "cancelled"
+  );
+  if (!list.length) {
+    container.innerHTML = `<p class="text-sm text-slate-500">Chưa có buổi vote nào.</p>`;
+    return;
+  }
+
+  container.innerHTML = list
+    .map((session) => {
+      const status = String(session.voteStatus || "open").toLowerCase();
+      const myStatus = String(session.myStatus || "pending").toLowerCase();
+      const respondBtn =
+        status === "open" && myStatus === "pending"
+          ? `<button type="button" class="vote-btn vote-btn-primary" data-action="user-respond" data-session="${escapeHtmlText(session.sessionId)}">Xác nhận tham gia</button>`
+          : `<span class="vote-mine">Bạn: ${escapeHtmlText(myStatus)}</span>`;
+      const imageBlock =
+        status === "booked" && session.bookingImageUrl
+          ? `<button type="button" class="vote-thumb-btn" data-action="preview-booking" data-session="${escapeHtmlText(session.sessionId)}">
+              <img src="${escapeHtmlText(session.bookingImageUrl)}" alt="Ảnh đặt sân" class="vote-thumb" />
+              <span>Xem ảnh đặt sân</span>
+            </button>`
+          : "";
+
+      return `<article class="vote-card">
+        <div class="vote-card-head">
+          <div>
+            <strong>${escapeHtmlText(session.date)} ${escapeHtmlText(session.time || "")}</strong>
+            <p>${escapeHtmlText(session.location || "Chưa có địa điểm")}${session.note ? ` · ${escapeHtmlText(session.note)}` : ""}</p>
+          </div>
+          <span class="vote-badge ${voteStatusClass(status)}">${voteStatusLabel(status)}</span>
+        </div>
+        <div class="vote-yes">${renderYesMemberChips(session.yesMembers)}</div>
+        <div class="vote-actions">${respondBtn}</div>
+        ${imageBlock}
+      </article>`;
+    })
+    .join("");
+}
+
+function openBookingImage(url) {
+  const image = document.getElementById("bookingImagePreview");
+  if (!image || !url) return;
+  image.src = url;
+  toggleModal("bookingImageModal", true);
+}
+
+function readImageAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      reject(new Error("Chưa chọn ảnh."));
+      return;
+    }
+    if (!String(file.type || "").startsWith("image/")) {
+      reject(new Error("File phải là ảnh."));
+      return;
+    }
+    if (file.size > 1.4 * 1024 * 1024) {
+      reject(new Error("Ảnh quá lớn (tối đa ~1.4MB)."));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Không đọc được ảnh."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function cancelVoteSession(sessionId) {
+  if (!window.confirm("Hủy vote sân này? User sẽ không cần phản hồi nữa.")) return;
+  const data = await api(`/api/sessions/${encodeURIComponent(sessionId)}/cancel`, { method: "POST" });
+  setMessage("voteListMessage", data.message || "Đã hủy vote.");
+  await loadAdminDashboard();
+}
+
+async function bookVoteSession(sessionId, file) {
+  const imageDataUrl = await readImageAsDataUrl(file);
+  const data = await api(`/api/sessions/${encodeURIComponent(sessionId)}/book`, {
+    method: "POST",
+    body: JSON.stringify({ imageDataUrl })
+  });
+  setMessage("voteListMessage", data.message || "Đã đánh dấu đặt sân.");
+  await loadAdminDashboard();
 }
 
 function summarizeBasicDebt(payload, memberName) {
@@ -368,13 +607,14 @@ function openQrModal(memberName, balance) {
   toggleModal("qrModal", true);
 }
 
-async function submitAttendance(status) {
-  const sessionId = state.upcomingSessionId;
+async function submitAttendance(status, sessionIdOverride = "") {
+  const sessionId = String(sessionIdOverride || state.upcomingSessionId || "").trim();
   if (!sessionId) {
     setMessage("attendanceModalMessage", "Chưa có buổi upcoming để phản hồi.", true);
     return;
   }
   try {
+    state.upcomingSessionId = sessionId;
     await api(`/api/sessions/${encodeURIComponent(sessionId)}/respond`, {
       method: "POST",
       body: JSON.stringify({ status })
@@ -835,6 +1075,37 @@ async function loadBirthdayUserEvent() {
   renderBirthdayUserEventDetail(state.birthdayEventDetail);
 }
 
+async function mountTournamentPanel(role) {
+  const mountId = role === "admin" ? "adminTournamentMount" : "userTournamentMount";
+  const mount = document.getElementById(mountId);
+  if (!mount || !window.TournamentPanel) return;
+  const key = `${role}:${state.auth?.memberName || role}`;
+  if (state.tournamentMountedFor === key && mount.dataset.ready === "1") {
+    await window.TournamentPanel.refresh().catch(() => {});
+    return;
+  }
+  mount.dataset.ready = "0";
+  await window.TournamentPanel.mount(mount);
+  mount.dataset.ready = "1";
+  state.tournamentMountedFor = key;
+}
+
+function activateUserTab(tabId) {
+  state.activeUserTab = tabId;
+  const home = document.getElementById("userHomeTabContent");
+  const tournament = document.getElementById("userTournamentTabContent");
+  home?.classList.toggle("hidden", tabId !== "home");
+  tournament?.classList.toggle("hidden", tabId !== "tournament");
+  document.getElementById("userTabHomeBtn")?.classList.toggle("is-active", tabId === "home");
+  document.getElementById("userTabTournamentBtn")?.classList.toggle("is-active", tabId === "tournament");
+  if (tabId === "tournament") {
+    mountTournamentPanel("user").catch((error) => {
+      const mount = document.getElementById("userTournamentMount");
+      if (mount) mount.innerHTML = `<p class="text-sm text-rose-600">${error.message}</p>`;
+    });
+  }
+}
+
 function activateAdminTab(tabId) {
   state.activeAdminTab = tabId;
 
@@ -843,7 +1114,8 @@ function activateAdminTab(tabId) {
     expenses: "expensesTabContent",
     games: "gamesTabContent",
     tools: "toolsTabContent",
-    credit: "creditTabContent"
+    credit: "creditTabContent",
+    tournament: "tournamentTabContent"
   };
   Object.entries(contentDefs).forEach(([key, contentId]) => {
     const el = document.getElementById(contentId);
@@ -856,7 +1128,8 @@ function activateAdminTab(tabId) {
     expenses: "adminTabExpensesBtn",
     games: "adminTabGamesBtn",
     tools: "adminTabToolsBtn",
-    credit: "adminTabCreditBtn"
+    credit: "adminTabCreditBtn",
+    tournament: "adminTabTournamentBtn"
   };
   Object.entries(btnDefs).forEach(([key, btnId]) => {
     const btn = document.getElementById(btnId);
@@ -871,6 +1144,13 @@ function activateAdminTab(tabId) {
   if (tabId === "expenses") {
     renderAdminPaymentsTableForCurrentInput();
     renderAdminExpensesTable(state.adminExpenses || []);
+  }
+
+  if (tabId === "tournament") {
+    mountTournamentPanel("admin").catch((error) => {
+      const mount = document.getElementById("adminTournamentMount");
+      if (mount) mount.innerHTML = `<p class="text-sm text-rose-600">${error.message}</p>`;
+    });
   }
 }
 
@@ -969,13 +1249,14 @@ async function loadAdminAttendanceTable() {
 }
 
 async function loadLoginOptions() {
-  const data = await api("/api/login-options");
+  const data = await api("/api/tournament/login-options").catch(() => api("/api/login-options"));
   state.loginOptions = data.members || [];
   renderLoginOptions();
 }
 
 async function loadAdminDashboard() {
   const data = await api("/api/bootstrap");
+  state.auth = data.auth;
   state.members = data.members || [];
   state.adminPayments = data.payments || [];
   state.adminExpenses = data.expenses || [];
@@ -1004,6 +1285,8 @@ async function loadAdminDashboard() {
     renderMatchTables([]);
   }
   await loadAdminAttendanceTable();
+  state.voteSessions = data.voteSessions || [];
+  renderAdminVoteList(state.voteSessions);
   renderAdminPaymentsTableForCurrentInput();
   document.getElementById("preDateInput").value = new Date().toISOString().slice(0, 10);
   document.getElementById("paymentDateInput").value = new Date().toISOString().slice(0, 10);
@@ -1011,9 +1294,13 @@ async function loadAdminDashboard() {
 
 async function loadUserDashboard() {
   const data = await api("/api/bootstrap");
+  state.auth = data.auth;
   state.birthdayEvents = data.birthdayEvents || [];
+  state.voteSessions = data.voteSessions || [];
   renderRoleHeader(data.auth);
+  activateUserTab(state.activeUserTab || "home");
   renderUpcoming(data.upcomingSession);
+  renderUserVoteList(data.voteSessions || []);
   renderUserMatchDateOptions(data.upcomingSession, data.myHistory || []);
   await loadUserMatchesBySelectedDate(data.auth.memberName || "");
   renderMyHistoryTable(data.myHistory || []);
@@ -1180,13 +1467,17 @@ async function loadDashboard() {
       renderMatchTables([]);
     }
     await loadAdminAttendanceTable();
+    state.voteSessions = data.voteSessions || [];
+    renderAdminVoteList(state.voteSessions);
     renderAdminPaymentsTableForCurrentInput();
     document.getElementById("preDateInput").value = new Date().toISOString().slice(0, 10);
     document.getElementById("paymentDateInput").value = new Date().toISOString().slice(0, 10);
   } else {
     state.birthdayEvents = data.birthdayEvents || [];
+    state.voteSessions = data.voteSessions || [];
     renderRoleHeader(data.auth);
     renderUpcoming(data.upcomingSession);
+    renderUserVoteList(data.voteSessions || []);
     renderUserMatchDateOptions(data.upcomingSession, data.myHistory || []);
     await loadUserMatchesBySelectedDate(data.auth.memberName || "");
     renderMyHistoryTable(data.myHistory || []);
@@ -1209,32 +1500,53 @@ function bindEvents() {
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
   });
 
-  document.getElementById("loginModeInput").addEventListener("change", toggleLoginMode);
+  document.querySelectorAll("#authModeSegment .login-segment-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setLoginAuthMode(btn.dataset.mode));
+  });
+  setLoginAuthMode("login");
 
   document.getElementById("loginForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const errorEl = document.getElementById("loginError");
     errorEl.classList.add("hidden");
     try {
-      const mode = document.getElementById("loginModeInput").value;
+      const mode = state.loginAuthMode || "login";
+      const isUserFlow = mode === "login" || mode === "register";
       const permissionPromise =
-        mode === "user" && window.preparePushPermission ? window.preparePushPermission() : Promise.resolve();
-      const payload =
-        mode === "admin"
-          ? { mode, password: document.getElementById("passwordInput").value }
-          : {
-              mode,
-              memberName: document.getElementById("memberSelectInput").value,
-              phoneNumber: document.getElementById("phoneInput").value.trim()
-            };
-      await api("/api/login", {
-        method: "POST",
-        body: JSON.stringify(payload)
-      });
+        isUserFlow && window.preparePushPermission ? window.preparePushPermission() : Promise.resolve();
+
+      if (mode === "admin") {
+        await api("/api/tournament/login", {
+          method: "POST",
+          body: JSON.stringify({
+            mode: "admin",
+            password: document.getElementById("passwordInput").value
+          })
+        });
+      } else if (mode === "register") {
+        await api("/api/tournament/register", {
+          method: "POST",
+          body: JSON.stringify({
+            name: document.getElementById("registerName").value.trim(),
+            phoneNumber: document.getElementById("registerPhone").value.trim()
+          })
+        });
+      } else {
+        await api("/api/tournament/login", {
+          method: "POST",
+          body: JSON.stringify({
+            mode: "user",
+            memberName: document.getElementById("memberSelectInput").value,
+            phoneNumber: document.getElementById("phoneInput").value.trim()
+          })
+        });
+      }
+
       await permissionPromise.catch(() => {});
       showAppMode();
       await loadDashboard();
-      if (mode === "user") window.registerPush?.({ prompt: false }).catch(() => {});
+      if (isUserFlow) window.registerPush?.({ prompt: false }).catch(() => {});
+      if (mode === "register") await loadLoginOptions().catch(() => {});
     } catch (error) {
       errorEl.textContent = error.message;
       errorEl.classList.remove("hidden");
@@ -1250,6 +1562,9 @@ function bindEvents() {
   document.getElementById("adminTabExpensesBtn")?.addEventListener("click", () => activateAdminTab("expenses"));
   document.getElementById("adminTabGamesBtn")?.addEventListener("click", () => activateAdminTab("games"));
   document.getElementById("adminTabToolsBtn")?.addEventListener("click", () => activateAdminTab("tools"));
+  document.getElementById("adminTabTournamentBtn")?.addEventListener("click", () => activateAdminTab("tournament"));
+  document.getElementById("userTabHomeBtn")?.addEventListener("click", () => activateUserTab("home"));
+  document.getElementById("userTabTournamentBtn")?.addEventListener("click", () => activateUserTab("tournament"));
 
   document.getElementById("refreshMembersBtn")?.addEventListener("click", loadAdminDashboard);
 }
@@ -1488,16 +1803,33 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
 
   document.getElementById("openAddMemberBtn")?.addEventListener("click", () => openMemberModal(null));
   document.getElementById("memberModalCloseBtn")?.addEventListener("click", () => toggleModal("memberModal", false));
-  document.getElementById("memberLevelTable").addEventListener("click", (event) => {
+  document.getElementById("memberLevelTable").addEventListener("click", async (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLElement) || !target.classList.contains("edit-member-btn")) return;
+    if (!(target instanceof HTMLElement)) return;
     const memberId = String(target.dataset.memberId || "");
-    const member = state.members.find((item) => item.memberId === memberId);
-    if (!member) {
-      setMessage("memberManageMessage", "Không tìm thấy thông tin member để chỉnh sửa.", true);
+    if (!memberId) return;
+
+    if (target.classList.contains("edit-member-btn")) {
+      const member = state.members.find((item) => item.memberId === memberId);
+      if (!member) {
+        setMessage("memberManageMessage", "Không tìm thấy thông tin member để chỉnh sửa.", true);
+        return;
+      }
+      openMemberModal(member);
       return;
     }
-    openMemberModal(member);
+
+    if (!target.classList.contains("delete-member-btn")) return;
+    const member = state.members.find((item) => item.memberId === memberId);
+    const memberName = member?.name || memberId;
+    if (!window.confirm(`Xóa thành viên "${memberName}"? Thao tác này không hoàn tác.`)) return;
+    try {
+      await api(`/api/members/${encodeURIComponent(memberId)}`, { method: "DELETE" });
+      setMessage("memberManageMessage", `Đã xóa member ${memberName}.`);
+      await loadAdminDashboard();
+    } catch (error) {
+      setMessage("memberManageMessage", error.message, true);
+    }
   });
   document.getElementById("memberForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1832,6 +2164,72 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
   document.getElementById("attendanceCloseBtn")?.addEventListener("click", () => toggleModal("attendanceModal", false));
   document.getElementById("attendanceYesBtn")?.addEventListener("click", () => submitAttendance("yes"));
   document.getElementById("attendanceNoBtn")?.addEventListener("click", () => submitAttendance("no"));
+  document.getElementById("bookingImageCloseBtn")?.addEventListener("click", () => {
+    toggleModal("bookingImageModal", false);
+    const image = document.getElementById("bookingImagePreview");
+    if (image) image.removeAttribute("src");
+  });
+
+  document.getElementById("voteSessionList")?.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-action]");
+    if (!button) return;
+    const action = button.dataset.action;
+    const sessionId = String(button.dataset.session || "").trim();
+    if (action === "preview-booking" && sessionId) {
+      const session = state.voteSessions.find((item) => item.sessionId === sessionId);
+      if (session?.bookingImageUrl) openBookingImage(session.bookingImageUrl);
+      return;
+    }
+    if (action === "cancel-vote" && sessionId) {
+      try {
+        await cancelVoteSession(sessionId);
+      } catch (error) {
+        setMessage("voteListMessage", error.message, true);
+      }
+    }
+  });
+
+  document.getElementById("voteSessionList")?.addEventListener("change", async (event) => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement) || input.type !== "file") return;
+    if (input.dataset.action !== "book-vote") return;
+    const sessionId = String(input.dataset.session || "").trim();
+    const file = input.files?.[0];
+    input.value = "";
+    if (!sessionId || !file) return;
+    try {
+      setMessage("voteListMessage", "Đang upload ảnh đặt sân...");
+      await bookVoteSession(sessionId, file);
+    } catch (error) {
+      setMessage("voteListMessage", error.message, true);
+    }
+  });
+
+  document.getElementById("userVoteList")?.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-action]");
+    if (!button) return;
+    const action = button.dataset.action;
+    const sessionId = String(button.dataset.session || "").trim();
+    if (action === "preview-booking" && sessionId) {
+      const session = state.voteSessions.find((item) => item.sessionId === sessionId);
+      if (session?.bookingImageUrl) openBookingImage(session.bookingImageUrl);
+      return;
+    }
+    if (action === "user-respond" && sessionId) {
+      const session = state.voteSessions.find((item) => item.sessionId === sessionId);
+      if (!session) return;
+      state.upcomingSessionId = sessionId;
+      document.getElementById("attendanceModalInfo").textContent = [
+        `Buổi: ${session.date} ${session.time || ""}`,
+        session.location ? `Địa điểm: ${session.location}` : "",
+        session.note ? `Ghi chú: ${session.note}` : ""
+      ]
+        .filter(Boolean)
+        .join(" | ");
+      setMessage("attendanceModalMessage", "");
+      toggleModal("attendanceModal", true);
+    }
+  });
 
   document.getElementById("myDebtQrActions")?.addEventListener("click", async (event) => {
     const target = event.target;

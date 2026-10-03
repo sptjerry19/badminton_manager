@@ -168,6 +168,104 @@
   background: #f8fafc;
 }
 
+.login-card {
+  border: 1px solid #e5e5e0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 30px rgba(17, 17, 17, 0.05);
+  padding: 22px;
+}
+
+.login-eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.login-title {
+  margin: 8px 0 6px;
+  font-family: "Oswald", sans-serif;
+  font-size: 34px;
+  letter-spacing: 0.02em;
+}
+
+.login-lead {
+  margin: 0 0 14px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.login-segment {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #eee;
+  margin-bottom: 14px;
+}
+
+.login-segment-btn {
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 6px;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.login-segment-btn.is-on {
+  background: #111;
+  color: #fff;
+}
+
+.login-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.login-field {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.login-field input,
+.login-field select {
+  width: 100%;
+  border: 1px solid #e5e5e0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+  background: #fff;
+}
+
+.login-submit {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  padding: 12px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  background: #111;
+  color: #fff;
+}
+
+.login-autofill-decoy {
+  position: absolute !important;
+  left: -9999px !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 .app-shell .tabs {
   display: flex;
   gap: 0;
@@ -503,6 +601,154 @@
 #userBasic table {
   min-width: 0;
   margin-top: 12px;
+}
+
+.vote-list {
+  display: grid;
+  gap: 12px;
+}
+
+.vote-card {
+  border: 1px solid #e5e5e0;
+  border-radius: 10px;
+  padding: 14px;
+  background: #fafaf8;
+}
+
+.vote-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vote-card-head p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.vote-badge {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vote-badge.is-open {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.vote-badge.is-booked {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.vote-badge.is-cancelled {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.vote-stats {
+  margin: 10px 0 8px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.vote-yes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.vote-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #111;
+  color: #f8f8f6;
+  font-size: 12px;
+}
+
+.vote-empty,
+.vote-mine {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.vote-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.vote-btn,
+.vote-upload {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vote-btn-primary {
+  background: #059669;
+  color: #fff;
+  border: none;
+}
+
+.vote-btn-danger {
+  background: transparent;
+  color: #be123c;
+  border: 1px solid #fda4af;
+}
+
+.vote-upload {
+  position: relative;
+  overflow: hidden;
+  background: #111;
+  color: #f8f8f6;
+}
+
+.vote-upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.vote-thumb-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: 10px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.vote-thumb {
+  width: min(100%, 220px);
+  max-height: 140px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
 }
 
 /* @media (max-width: 640px) {

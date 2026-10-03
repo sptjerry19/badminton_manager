@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Giải đấu cầu lông</title>
+    <link rel="icon" href="/favicon.ico?v=3" sizes="32x32" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#111111" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/tokens.css" />
+    <link rel="stylesheet" href="/tournament.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section id="loginView" class="auth">
+        <div class="bezel">
+          <div class="core stack">
+            <p class="eyebrow">Tournament</p>
+            <h1>Giải đấu 3 nội dung</h1>
+            <p class="lead">Đôi nam · Đôi nam nữ · Đôi nữ. Đăng ký hoặc đăng nhập để tham dự.</p>
+            <div class="segment" id="authModeSegment">
+              <button type="button" class="segment-btn is-on" data-mode="login">Đăng nhập</button>
+              <button type="button" class="segment-btn" data-mode="register">Đăng ký</button>
+              <button type="button" class="segment-btn" data-mode="admin">Admin</button>
+            </div>
+
+            <form id="loginForm" class="stack">
+              <div id="loginFields" class="stack">
+                <label class="field">
+                  <span>Thành viên</span>
+                  <select id="memberSelect" required></select>
+                </label>
+                <label class="field">
+                  <span>Số điện thoại</span>
+                  <input id="loginPhone" type="tel" inputmode="tel" autocomplete="tel" required />
+                </label>
+              </div>
+              <div id="registerFields" class="stack" hidden>
+                <label class="field">
+                  <span>Họ tên</span>
+                  <input id="registerName" autocomplete="name" />
+                </label>
+                <label class="field">
+                  <span>Số điện thoại</span>
+                  <input id="registerPhone" type="tel" inputmode="tel" autocomplete="tel" />
+                </label>
+              </div>
+              <div id="adminFields" class="stack" hidden>
+                <label class="field">
+                  <span>Mật khẩu admin</span>
+                  <input id="adminPassword" type="password" autocomplete="current-password" />
+                </label>
+              </div>
+              <button class="pill" type="submit"><span id="authSubmitLabel">Vào giải</span></button>
+              <p id="loginError" class="msg"></p>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section id="appView" hidden>
+        <div class="topbar">
+          <div>
+            <p class="eyebrow">Giải đấu</p>
+            <h2 id="identityTitle">...</h2>
+          </div>
+          <button id="logoutBtn" class="btn ghost" type="button">Đăng xuất</button>
+        </div>
+
+        <div id="profileGate" class="bezel" hidden>
+          <div class="core stack">
+            <h3>Hồ sơ tham dự</h3>
+            <p class="note">Điền thông tin và chọn đúng 2/3 nội dung để tiếp tục.</p>
+            <form id="profileForm" class="stack">
+              <div class="grid-2">
+                <label class="field">
+                  <span>Họ tên</span>
+                  <input id="profileName" required />
+                </label>
+                <label class="field">
+                  <span>Số điện thoại</span>
+                  <input id="profilePhone" type="tel" required />
+                </label>
+                <label class="field">
+                  <span>Giới tính</span>
+                  <select id="profileGender" required>
+                    <option value="">Chọn</option>
+                    <option value="Nam">Nam</option>
+                    <option value="Nữ">Nữ</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Trình độ</span>
+                  <select id="profileLevel" required></select>
+                </label>
+              </div>
+              <div class="field">
+                <span>Nội dung (chọn 2)</span>
+                <div class="checkboxes" id="profileEvents"></div>
+              </div>
+              <label class="check">
+                <input id="profileJoinSummary" type="checkbox" required />
+                <span>Xác nhận tham gia tổng kết sau giải đấu</span>
+              </label>
+              <button class="pill" type="submit">Lưu hồ sơ</button>
+              <p id="profileMessage" class="msg"></p>
+            </form>
+          </div>
+        </div>
+
+        <div id="mainApp" hidden>
+          <div class="tabs" id="mainTabs"></div>
+
+          <section class="panel bezel" data-panel="home">
+            <div class="core stack">
+              <h3>Trang của bạn</h3>
+              <div id="userHome" class="stack"></div>
+            </div>
+          </section>
+
+          <section class="panel bezel admin-only" data-panel="players">
+            <div class="core stack">
+              <div class="row" style="justify-content: space-between">
+                <h3>VĐV đăng ký</h3>
+                <div class="row">
+                  <label class="check">
+                    <input id="registrationOpen" type="checkbox" />
+                    <span>Mở đăng ký</span>
+                  </label>
+                  <label class="check">
+                    <input id="pairingOpen" type="checkbox" />
+                    <span>Mở ghép đôi</span>
+                  </label>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Tên</th>
+                      <th>GT</th>
+                      <th>Level</th>
+                      <th>SĐT</th>
+                      <th>Nội dung</th>
+                      <th>Cặp</th>
+                    </tr>
+                  </thead>
+                  <tbody id="playersBody"></tbody>
+                </table>
+              </div>
+              <p id="playersMessage" class="msg"></p>
+            </div>
+          </section>
+
+          <section class="panel bezel admin-only" data-panel="rules">
+            <div class="core stack">
+              <h3>Rule tổng level theo nội dung</h3>
+              <p class="note">minSum ≤ levelA + levelB ≤ maxSum</p>
+              <div id="rulesList" class="stack"></div>
+              <label class="field" style="max-width: 200px">
+                <span>Điểm thắng tối thiểu</span>
+                <input id="pointsToWinInput" type="number" min="1" value="21" />
+              </label>
+              <button id="saveSettingsBtn" class="btn" type="button">Lưu settings</button>
+              <p id="rulesMessage" class="msg"></p>
+            </div>
+          </section>
+
+          <section class="panel bezel" data-panel="pairs">
+            <div class="core stack">
+              <h3>Cặp đôi</h3>
+              <div id="pairsList" class="stack"></div>
+              <p id="pairsMessage" class="msg"></p>
+            </div>
+          </section>
+
+          <section class="panel bezel" data-panel="matches">
+            <div class="core stack">
+              <div class="row" style="justify-content: space-between">
+                <h3>Trận đấu</h3>
+                <div class="row admin-only">
+                  <select id="generateEventSelect" class="input" style="width: auto"></select>
+                  <button id="generateMatchesBtn" class="btn" type="button">Generate vòng tròn</button>
+                </div>
+              </div>
+              <div id="matchesList" class="stack"></div>
+              <p id="matchesMessage" class="msg"></p>
+            </div>
+          </section>
+
+          <section class="panel bezel" data-panel="standings">
+            <div class="core stack">
+              <h3>Bảng xếp hạng</h3>
+              <div class="tabs" id="standingsTabs"></div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Tên</th>
+                      <th>Trận</th>
+                      <th>Thắng</th>
+                      <th>Điểm</th>
+                      <th>Hiệu số</th>
+                      <th>Điểm ghi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="standingsBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <div id="partnerModal" class="modal" aria-hidden="true">
+      <div class="modal-card stack">
+        <div class="row" style="justify-content: space-between">
+          <h3 id="partnerModalTitle">Chọn đồng đội</h3>
+          <button id="partnerModalClose" class="btn ghost" type="button">Đóng</button>
+        </div>
+        <p id="partnerModalHint" class="note"></p>
+        <div id="partnerCandidates" class="stack"></div>
+        <p id="partnerMessage" class="msg"></p>
+      </div>
+    </div>
+
+    <script src="/tournament.js"></script>
+  </body>
+</html>

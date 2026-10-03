@@ -26,6 +26,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/tokens.css" />
     <link rel="stylesheet" href="/ui.css" />
+    <link rel="stylesheet" href="/tournament-embed.css" />
   </head>
   <body class="app-shell">
     <div class="shell">
@@ -36,50 +37,70 @@
         </div>
       </header>
 
-      <section
-        id="loginSection"
-        class="mx-auto max-w-md rounded-xl bg-white p-5 shadow-sm"
-      >
-        <h2 class="text-lg font-semibold">Đăng nhập</h2>
-        <p class="mt-1 text-sm text-slate-500">
-          Admin dùng password, user chọn thành viên + nhập số điện thoại.
+      <section id="loginSection" class="login-card mx-auto max-w-md">
+        <p class="login-eyebrow">Nhóm cầu lông</p>
+        <h2 class="login-title">Đăng nhập</h2>
+        <p class="login-lead">
+          Đăng nhập thành viên, đăng ký mới, hoặc vào bằng mật khẩu admin.
         </p>
-        <form id="loginForm" class="mt-4 space-y-3">
-          <label class="block text-sm">
-            <span class="mb-1 block font-medium">Chế độ đăng nhập</span>
-            <select
-              id="loginModeInput"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
-            >
-              <option value="admin">Admin</option>
-              <option value="user">User</option>
-            </select>
-          </label>
-          <div id="adminLoginFields" class="space-y-3">
-            <input
-              id="passwordInput"
-              type="password"
-              placeholder="Mật khẩu admin"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
-            />
+        <div class="login-segment" id="authModeSegment" role="tablist" aria-label="Cách đăng nhập">
+          <button type="button" class="login-segment-btn is-on" data-mode="login">Đăng nhập</button>
+          <button type="button" class="login-segment-btn" data-mode="register">Đăng ký</button>
+          <button type="button" class="login-segment-btn" data-mode="admin">Admin</button>
+        </div>
+        <form id="loginForm" class="login-stack">
+          <div id="loginFields" class="login-stack">
+            <label class="login-field">
+              <span>Thành viên</span>
+              <select id="memberSelectInput" required></select>
+            </label>
+            <label class="login-field">
+              <span>Số điện thoại</span>
+              <input
+                id="phoneInput"
+                name="phone"
+                type="tel"
+                inputmode="numeric"
+                autocomplete="tel-national"
+                placeholder="09xxxxxxxx"
+                required
+              />
+            </label>
           </div>
-          <div id="userLoginFields" class="hidden space-y-3">
-            <select
-              id="memberSelectInput"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
-            ></select>
+          <div id="registerFields" class="login-stack" hidden>
+            <label class="login-field">
+              <span>Họ tên</span>
+              <input id="registerName" name="name" autocomplete="name" placeholder="Họ và tên" />
+            </label>
+            <!-- Chrome hay autofill email vào field thứ 2 của form đăng ký; decoy nhận email đó. -->
             <input
-              id="phoneInput"
-              type="tel"
-              placeholder="Số điện thoại"
-              class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+              type="email"
+              name="email"
+              autocomplete="email"
+              tabindex="-1"
+              aria-hidden="true"
+              class="login-autofill-decoy"
             />
+            <label class="login-field">
+              <span>Số điện thoại</span>
+              <input
+                id="registerPhone"
+                name="phone"
+                type="tel"
+                inputmode="numeric"
+                autocomplete="tel-national"
+                placeholder="09xxxxxxxx"
+              />
+            </label>
           </div>
-          <button
-            type="submit"
-            class="w-full rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700"
-          >
-            Đăng nhập
+          <div id="adminFields" class="login-stack" hidden>
+            <label class="login-field">
+              <span>Mật khẩu admin</span>
+              <input id="passwordInput" type="password" autocomplete="current-password" />
+            </label>
+          </div>
+          <button type="submit" class="login-submit">
+            <span id="authSubmitLabel">Đăng nhập</span>
           </button>
         </form>
         <button
@@ -130,6 +151,7 @@
             </button>
             <button id="adminTabToolsBtn" type="button" class="tab">Công cụ</button>
             <button id="adminTabCreditBtn" type="button" class="tab">Tiền thừa</button>
+            <button id="adminTabTournamentBtn" type="button" class="tab">Giải đấu</button>
             <button id="adminTabBasicBtn" type="button" class="tab">
               <a href="/basic">Cơ bản</a>
             </button>
@@ -360,6 +382,8 @@
               <h3 class="mb-3 text-lg font-semibold">
                 Theo dõi xác nhận tham gia (Phase 2)
               </h3>
+              <div id="voteSessionList" class="vote-list mb-4 space-y-3"></div>
+              <p id="voteListMessage" class="mb-3 text-sm"></p>
               <div class="mb-3 flex flex-wrap items-center gap-3">
                 <select
                   id="attendanceSessionSelect"
@@ -825,6 +849,12 @@
             </section>
           </div>
 
+          <div id="tournamentTabContent" class="hidden space-y-5">
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <div id="adminTournamentMount" class="tournament-embed"></div>
+            </section>
+          </div>
+
           <div id="creditTabContent" class="hidden space-y-5">
             <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
               <h3 class="mb-3 text-lg font-semibold">Tiền thừa</h3>
@@ -869,6 +899,12 @@
         </section>
 
         <section id="userSection" class="hidden space-y-5">
+          <nav class="tabs" aria-label="Mục người dùng">
+            <button id="userTabHomeBtn" type="button" class="tab is-active">Chung</button>
+            <button id="userTabTournamentBtn" type="button" class="tab">Giải đấu</button>
+          </nav>
+
+          <div id="userHomeTabContent" class="space-y-5">
           <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
             <h3 class="mb-3 text-lg font-semibold">
               Buổi upcoming (bắt buộc phản hồi)
@@ -878,6 +914,11 @@
               Khi có buổi cần phản hồi, hệ thống sẽ tự bật popup để bạn chọn
               nhanh bằng nút.
             </p>
+          </section>
+
+          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+            <h3 class="mb-3 text-lg font-semibold">Danh sách vote sân</h3>
+            <div id="userVoteList" class="vote-list space-y-3"></div>
           </section>
 
           <!-- <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
@@ -929,6 +970,13 @@
               </div>
             </section>
           </section>
+          </div>
+
+          <div id="userTournamentTabContent" class="hidden space-y-5">
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <div id="userTournamentMount" class="tournament-embed"></div>
+            </section>
+          </div>
         </section>
       </main>
     </div>
@@ -1019,6 +1067,23 @@
             >Mở tab mới</a
           >
         </div>
+      </div>
+    </div>
+
+    <div
+      id="bookingImageModal"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/70 p-4"
+    >
+      <div class="relative w-full max-w-3xl rounded-xl bg-white p-4 shadow-xl">
+        <button
+          id="bookingImageCloseBtn"
+          type="button"
+          class="absolute right-3 top-3 rounded-lg border border-slate-300 px-3 py-1 text-sm"
+        >
+          Đóng
+        </button>
+        <h3 class="pr-16 text-lg font-semibold">Ảnh đặt sân</h3>
+        <img id="bookingImagePreview" class="mt-3 max-h-[75vh] w-full rounded-lg object-contain" alt="Ảnh đặt sân" />
       </div>
     </div>
 
@@ -1144,6 +1209,7 @@
 
     <script src="/firebase-config.js"></script>
     <script src="/push.js"></script>
+    <script src="/tournament-panel.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>
