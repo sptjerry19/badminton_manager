@@ -338,8 +338,9 @@ function renderUpcoming(session) {
     .filter(Boolean)
     .join(" | ");
 
-  const needsResponse =
-    voteStatus === "open" && String(session.myStatus || "pending").toLowerCase() === "pending";
+  const myStatus = String(session.myStatus || "pending").toLowerCase();
+  const canStillVote = voteStatus === "open" || voteStatus === "booked";
+  const needsResponse = canStillVote && myStatus === "pending";
   if (needsResponse) {
     toggleModal("attendanceModal", true);
   } else {
@@ -442,8 +443,9 @@ function renderUserVoteList(sessions) {
     .map((session) => {
       const status = String(session.voteStatus || "open").toLowerCase();
       const myStatus = String(session.myStatus || "pending").toLowerCase();
+      const canStillVote = status === "open" || status === "booked";
       const respondBtn =
-        status === "open" && myStatus === "pending"
+        canStillVote && myStatus === "pending"
           ? `<button type="button" class="vote-btn vote-btn-primary" data-action="user-respond" data-session="${escapeHtmlText(session.sessionId)}">Xác nhận tham gia</button>`
           : `<span class="vote-mine">Bạn: ${escapeHtmlText(myStatus)}</span>`;
       const imageBlock =

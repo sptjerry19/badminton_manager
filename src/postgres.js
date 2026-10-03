@@ -33,7 +33,9 @@ function normalizeBirthday(value) {
 }
 
 function safeLower(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
 function dateTimeKey(date, time = "00:00") {
@@ -41,21 +43,34 @@ function dateTimeKey(date, time = "00:00") {
 }
 
 function parseCsvMonth(month) {
-  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("Tham số month phải có định dạng YYYY-MM.");
+  if (!/^\d{4}-\d{2}$/.test(month))
+    throw new Error("Tham số month phải có định dạng YYYY-MM.");
   return month;
 }
 
 function normalizeGender(gender) {
-  const value = String(gender || "").trim().toLowerCase();
+  const value = String(gender || "")
+    .trim()
+    .toLowerCase();
   if (value === "nam" || value === "male" || value === "m") return "Nam";
-  if (value === "nu" || value === "nữ" || value === "female" || value === "f") return "Nữ";
+  if (value === "nu" || value === "nữ" || value === "female" || value === "f")
+    return "Nữ";
   return "";
 }
 
 function normalizeMemberType(type) {
-  const value = String(type || "").trim().toLowerCase();
-  if (value === "cố định" || value === "co dinh" || value === "fixed") return "Cố định";
-  if (value === "gl" || value === "giao lưu" || value === "giao luu" || value === "guest") return "GL";
+  const value = String(type || "")
+    .trim()
+    .toLowerCase();
+  if (value === "cố định" || value === "co dinh" || value === "fixed")
+    return "Cố định";
+  if (
+    value === "gl" ||
+    value === "giao lưu" ||
+    value === "giao luu" ||
+    value === "guest"
+  )
+    return "GL";
   return "GL";
 }
 
@@ -78,12 +93,16 @@ function buildMemberId(name, index = 0) {
 }
 
 if (!process.env.POSTGRES_URL) {
-  throw new Error("Thiếu POSTGRES_URL. Hãy cấu hình Vercel Postgres connection string.");
+  throw new Error(
+    "Thiếu POSTGRES_URL. Hãy cấu hình Vercel Postgres connection string.",
+  );
 }
 
 const pool = new Pool({
   connectionString: process.env.POSTGRES_URL,
-  ssl: process.env.POSTGRES_URL.includes("localhost") ? false : { rejectUnauthorized: false }
+  ssl: process.env.POSTGRES_URL.includes("localhost")
+    ? false
+    : { rejectUnauthorized: false },
 });
 
 async function query(text, params = []) {
@@ -477,7 +496,7 @@ async function initializeDatabase() {
   const defaultEvents = [
     ["MD", "Đôi nam", 2, 20, "MM"],
     ["XD", "Đôi nam nữ", 2, 20, "MF"],
-    ["WD", "Đôi nữ", 2, 20, "FF"]
+    ["WD", "Đôi nữ", 2, 20, "FF"],
   ];
   for (const [eventId, name, minSum, maxSum, genderRule] of defaultEvents) {
     await query(
@@ -486,13 +505,13 @@ async function initializeDatabase() {
       VALUES ($1,$2,$3,$4,$5,TRUE)
       ON CONFLICT (event_id) DO NOTHING
       `,
-      [eventId, name, minSum, maxSum, genderRule]
+      [eventId, name, minSum, maxSum, genderRule],
     );
   }
   const defaultTournamentSettings = {
     points_to_win: "21",
     registration_open: "true",
-    pairing_open: "true"
+    pairing_open: "true",
   };
   for (const [key, value] of Object.entries(defaultTournamentSettings)) {
     await query(
@@ -501,7 +520,7 @@ async function initializeDatabase() {
       VALUES ($1, $2)
       ON CONFLICT (key) DO NOTHING
       `,
-      [key, value]
+      [key, value],
     );
   }
 
@@ -512,7 +531,7 @@ async function initializeDatabase() {
       VALUES ($1, $2)
       ON CONFLICT(key) DO NOTHING
       `,
-      [key, String(value)]
+      [key, String(value)],
     );
   }
 
@@ -526,7 +545,7 @@ async function initializeDatabase() {
         INSERT INTO members(member_id, name, type, level, active, created_at, updated_at)
         VALUES ($1, $2, 'Cố định', 5, TRUE, $3, $3)
         `,
-        [buildMemberId(name, i), name, ts]
+        [buildMemberId(name, i), name, ts],
       );
     }
   }
@@ -540,7 +559,7 @@ async function getSettings() {
   });
   return {
     ...DEFAULT_SETTINGS,
-    ...map
+    ...map,
   };
 }
 
@@ -556,7 +575,7 @@ function mapMember(row) {
     phoneNumber: row.phone_number || "",
     zaloId: row.zalo_id || "",
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
-    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : "",
   };
 }
 
@@ -567,13 +586,15 @@ async function getMembers() {
 
 async function getActiveFixedMembers() {
   const result = await query(
-    `SELECT * FROM members WHERE active = TRUE AND type = 'Cố định' ORDER BY name ASC`
+    `SELECT * FROM members WHERE active = TRUE AND type = 'Cố định' ORDER BY name ASC`,
   );
   return result.rows.map(mapMember);
 }
 
 function normalizeVoteStatus(value) {
-  const status = String(value || "open").trim().toLowerCase();
+  const status = String(value || "open")
+    .trim()
+    .toLowerCase();
   if (status === "cancelled" || status === "booked") return status;
   return "open";
 }
@@ -593,7 +614,7 @@ function mapSessionRow(row, extras = {}) {
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
     voteStatus: normalizeVoteStatus(row.vote_status),
     bookingImageUrl: row.booking_image_url || "",
-    ...extras
+    ...extras,
   };
 }
 
@@ -604,7 +625,7 @@ async function getRecentSessions(limit = 20) {
     ORDER BY date DESC, time DESC
     LIMIT $1
     `,
-    [Math.max(1, limit)]
+    [Math.max(1, limit)],
   );
 
   const statsResult = await query(
@@ -615,14 +636,14 @@ async function getRecentSessions(limit = 20) {
            SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END)::int AS pending
     FROM session_participants
     GROUP BY session_id
-    `
+    `,
   );
   const settledResult = await query(
     `
     SELECT session_id, COUNT(*)::int AS count
     FROM participants
     GROUP BY session_id
-    `
+    `,
   );
 
   const statsBySession = {};
@@ -630,7 +651,7 @@ async function getRecentSessions(limit = 20) {
     statsBySession[row.session_id] = {
       yes: toNumber(row.yes),
       no: toNumber(row.no),
-      pending: toNumber(row.pending)
+      pending: toNumber(row.pending),
     };
   });
   const settledBySession = {};
@@ -641,19 +662,25 @@ async function getRecentSessions(limit = 20) {
   return sessionsResult.rows.map((row) =>
     mapSessionRow(row, {
       stats: statsBySession[row.session_id] || { yes: 0, no: 0, pending: 0 },
-      settled: Boolean(settledBySession[row.session_id])
-    })
+      settled: Boolean(settledBySession[row.session_id]),
+    }),
   );
 }
 
 async function getSessionById(sessionId) {
-  const result = await query(`SELECT * FROM sessions WHERE session_id = $1`, [sessionId]);
+  const result = await query(`SELECT * FROM sessions WHERE session_id = $1`, [
+    sessionId,
+  ]);
   const row = result.rows[0];
   if (!row) return null;
   return mapSessionRow(row);
 }
 
-async function listVoteSessions({ includeCancelled = false, limit = 30, memberName = "" } = {}) {
+async function listVoteSessions({
+  includeCancelled = false,
+  limit = 30,
+  memberName = "",
+} = {}) {
   const max = Math.max(1, Math.min(100, Number(limit) || 30));
   const sessionsResult = await query(
     includeCancelled
@@ -668,7 +695,7 @@ async function listVoteSessions({ includeCancelled = false, limit = 30, memberNa
         ORDER BY date DESC, time DESC, created_at DESC
         LIMIT $1
       `,
-    [max]
+    [max],
   );
   if (!sessionsResult.rows.length) return [];
 
@@ -680,7 +707,7 @@ async function listVoteSessions({ includeCancelled = false, limit = 30, memberNa
     WHERE session_id = ANY($1::text[])
     ORDER BY member_name ASC
     `,
-    [sessionIds]
+    [sessionIds],
   );
 
   const memberNameCi = safeLower(memberName);
@@ -689,7 +716,8 @@ async function listVoteSessions({ includeCancelled = false, limit = 30, memberNa
   const myStatusBySession = {};
   participantsResult.rows.forEach((row) => {
     const sid = row.session_id;
-    if (!statsBySession[sid]) statsBySession[sid] = { yes: 0, no: 0, pending: 0 };
+    if (!statsBySession[sid])
+      statsBySession[sid] = { yes: 0, no: 0, pending: 0 };
     const status = String(row.status || "pending").toLowerCase();
     if (memberNameCi && row.member_name_ci === memberNameCi) {
       myStatusBySession[sid] = status;
@@ -699,9 +727,10 @@ async function listVoteSessions({ includeCancelled = false, limit = 30, memberNa
       if (!yesBySession[sid]) yesBySession[sid] = [];
       yesBySession[sid].push({
         name: row.member_name,
-        level: row.participant_level === null || row.participant_level === undefined
-          ? null
-          : normalizeLevel(row.participant_level)
+        level:
+          row.participant_level === null || row.participant_level === undefined
+            ? null
+            : normalizeLevel(row.participant_level),
       });
     } else if (status === "no") {
       statsBySession[sid].no += 1;
@@ -713,7 +742,7 @@ async function listVoteSessions({ includeCancelled = false, limit = 30, memberNa
   return sessionsResult.rows.map((row) => {
     const mapped = mapSessionRow(row, {
       stats: statsBySession[row.session_id] || { yes: 0, no: 0, pending: 0 },
-      yesMembers: yesBySession[row.session_id] || []
+      yesMembers: yesBySession[row.session_id] || [],
     });
     if (memberNameCi) {
       mapped.myStatus = myStatusBySession[row.session_id] || "pending";
@@ -726,7 +755,6 @@ function assertSessionAcceptsVotes(session) {
   if (!session) throw new Error("Không tìm thấy buổi chơi.");
   const status = normalizeVoteStatus(session.voteStatus);
   if (status === "cancelled") throw new Error("Buổi này đã bị hủy vote.");
-  if (status === "booked") throw new Error("Buổi này đã đặt sân, không cần vote thêm.");
 }
 
 async function cancelVoteSession(sessionId) {
@@ -738,7 +766,7 @@ async function cancelVoteSession(sessionId) {
   }
   await query(
     `UPDATE sessions SET vote_status = 'cancelled' WHERE session_id = $1`,
-    [sessionId]
+    [sessionId],
   );
   return getSessionById(sessionId);
 }
@@ -754,7 +782,10 @@ async function bookVoteSession(sessionId, bookingImageUrl) {
   if (imageUrl.length > 1_800_000) {
     throw new Error("Ảnh quá lớn. Hãy dùng ảnh dưới ~1.3MB.");
   }
-  if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(imageUrl) && !/^https?:\/\//i.test(imageUrl)) {
+  if (
+    !/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(imageUrl) &&
+    !/^https?:\/\//i.test(imageUrl)
+  ) {
     throw new Error("Ảnh đặt sân không hợp lệ.");
   }
   await query(
@@ -763,7 +794,7 @@ async function bookVoteSession(sessionId, bookingImageUrl) {
     SET vote_status = 'booked', booking_image_url = $2
     WHERE session_id = $1
     `,
-    [sessionId, imageUrl]
+    [sessionId, imageUrl],
   );
   return getSessionById(sessionId);
 }
@@ -776,28 +807,35 @@ async function getSessionParticipants(sessionId) {
     WHERE session_id = $1
     ORDER BY member_name ASC
     `,
-    [sessionId]
+    [sessionId],
   );
   return result.rows.map((row) => ({
     sessionId: row.session_id,
     memberId: row.member_id,
     memberName: row.member_name,
     participantType: row.participant_type || "Cố định",
-    level: row.participant_level !== null && row.participant_level !== undefined ? normalizeLevel(row.participant_level) : null,
+    level:
+      row.participant_level !== null && row.participant_level !== undefined
+        ? normalizeLevel(row.participant_level)
+        : null,
     status: safeLower(row.status || "pending"),
-    respondedAt: row.responded_at ? new Date(row.responded_at).toISOString() : ""
+    respondedAt: row.responded_at
+      ? new Date(row.responded_at).toISOString()
+      : "",
   }));
 }
 
 async function getPollBySession(sessionId) {
-  const result = await query(`SELECT * FROM polls WHERE session_id = $1`, [sessionId]);
+  const result = await query(`SELECT * FROM polls WHERE session_id = $1`, [
+    sessionId,
+  ]);
   const row = result.rows[0];
   if (!row) return null;
   return {
     pollId: row.poll_id,
     sessionId: row.session_id,
     question: row.question,
-    createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
   };
 }
 
@@ -827,7 +865,7 @@ async function getActivePollForMember(memberName) {
     ORDER BY s.date ASC, s.time ASC
     LIMIT 1
     `,
-    [nowKey, safeLower(memberName)]
+    [nowKey, safeLower(memberName)],
   );
   const row = result.rows[0];
   if (!row) return null;
@@ -839,7 +877,7 @@ async function getActivePollForMember(memberName) {
     pollId: row.poll_id,
     question: row.question,
     myStatus: row.my_status || "pending",
-    myAnswer: row.my_answer || ""
+    myAnswer: row.my_answer || "",
   };
 }
 
@@ -851,7 +889,7 @@ async function getPollAnswersBySession(sessionId) {
     WHERE session_id = $1
     ORDER BY member_name ASC
     `,
-    [sessionId]
+    [sessionId],
   );
   return result.rows.map((row) => ({
     pollId: row.poll_id,
@@ -859,7 +897,7 @@ async function getPollAnswersBySession(sessionId) {
     memberId: row.member_id,
     memberName: row.member_name,
     answer: row.answer,
-    answeredAt: row.answered_at ? new Date(row.answered_at).toISOString() : ""
+    answeredAt: row.answered_at ? new Date(row.answered_at).toISOString() : "",
   }));
 }
 
@@ -880,7 +918,7 @@ async function getUpcomingSessionForMember(memberName) {
       s.time ASC
     LIMIT 1
     `,
-    [new Date().toISOString().slice(0, 16), memberNameCi]
+    [new Date().toISOString().slice(0, 16), memberNameCi],
   );
   const row = result.rows[0];
   if (!row) return null;
@@ -890,7 +928,8 @@ async function getUpcomingSessionForMember(memberName) {
   if (poll) {
     const answers = await getPollAnswersBySession(sessionId);
     myPollAnswer =
-      answers.find((item) => safeLower(item.memberName) === memberNameCi)?.answer || "";
+      answers.find((item) => safeLower(item.memberName) === memberNameCi)
+        ?.answer || "";
   }
   return {
     sessionId,
@@ -906,9 +945,9 @@ async function getUpcomingSessionForMember(memberName) {
       ? {
           pollId: poll.pollId,
           question: poll.question,
-          myAnswer: myPollAnswer
+          myAnswer: myPollAnswer,
         }
-      : null
+      : null,
   };
 }
 
@@ -930,7 +969,7 @@ async function createSession(payload, createdBy = "admin") {
     )
     VALUES ($1,$2,$3,$4,$5,0,0,0,0,$6,$7,'open','')
     `,
-    [sessionId, date, time, location, note, createdBy, ts]
+    [sessionId, date, time, location, note, createdBy, ts],
   );
 
   const members = await getActiveFixedMembers();
@@ -941,7 +980,13 @@ async function createSession(payload, createdBy = "admin") {
       VALUES ($1,$2,$3,$4,'Cố định',$5,'pending')
       ON CONFLICT(session_id, member_name_ci) DO NOTHING
       `,
-      [sessionId, member.memberId, member.name, safeLower(member.name), normalizeLevel(member.level)]
+      [
+        sessionId,
+        member.memberId,
+        member.name,
+        safeLower(member.name),
+        normalizeLevel(member.level),
+      ],
     );
   }
 
@@ -954,7 +999,7 @@ async function createSession(payload, createdBy = "admin") {
       VALUES ($1,$2,$3,$4)
       ON CONFLICT(session_id) DO UPDATE SET question = EXCLUDED.question
       `,
-      [pollId, sessionId, pollQuestion, ts]
+      [pollId, sessionId, pollQuestion, ts],
     );
     poll = { pollId, question: pollQuestion };
   }
@@ -962,7 +1007,14 @@ async function createSession(payload, createdBy = "admin") {
   return { sessionId, totalCost: 0, poll };
 }
 
-async function settleSession({ sessionId, fixedCourtCost, extraCourts, shuttlecockCost, fixedMembers, guests }) {
+async function settleSession({
+  sessionId,
+  fixedCourtCost,
+  extraCourts,
+  shuttlecockCost,
+  fixedMembers,
+  guests,
+}) {
   const targetSession = await getSessionById(sessionId);
   if (!targetSession) throw new Error("Không tìm thấy buổi chơi cần chốt.");
 
@@ -982,14 +1034,14 @@ async function settleSession({ sessionId, fixedCourtCost, extraCourts, shuttleco
     shuttlecockCost: Math.max(0, toNumber(shuttlecockCost)),
     fixedMembers: activeMembers.map((member) => ({
       name: member.name,
-      present: Boolean(fixedByName[safeLower(member.name)])
+      present: Boolean(fixedByName[safeLower(member.name)]),
     })),
     guests: (Array.isArray(guests) ? guests : [])
       .map((item) => ({
         name: String(item?.name || "").trim(),
-        gender: normalizeGender(item?.gender)
+        gender: normalizeGender(item?.gender),
       }))
-      .filter((item) => item.name)
+      .filter((item) => item.name),
   };
   const calcResult = calculateSession(payload, settings);
   const ts = nowIso();
@@ -1009,8 +1061,8 @@ async function settleSession({ sessionId, fixedCourtCost, extraCourts, shuttleco
         safeLower(member.name),
         normalizeLevel(member.level),
         fixedByName[safeLower(member.name)] ? "yes" : "no",
-        ts
-      ]
+        ts,
+      ],
     );
   }
 
@@ -1028,8 +1080,8 @@ async function settleSession({ sessionId, fixedCourtCost, extraCourts, shuttleco
         participant.type,
         participant.gender || "",
         Boolean(participant.present),
-        Math.round(toNumber(participant.amount))
-      ]
+        Math.round(toNumber(participant.amount)),
+      ],
     );
   }
 
@@ -1042,7 +1094,13 @@ async function settleSession({ sessionId, fixedCourtCost, extraCourts, shuttleco
         total_cost = $5
     WHERE session_id = $1
     `,
-    [sessionId, calcResult.fixedCourtCost, calcResult.extraCourts, calcResult.shuttlecockCost, calcResult.totalCost]
+    [
+      sessionId,
+      calcResult.fixedCourtCost,
+      calcResult.extraCourts,
+      calcResult.shuttlecockCost,
+      calcResult.totalCost,
+    ],
   );
 
   await recomputeDebts();
@@ -1059,7 +1117,7 @@ async function upsertMemberContact(memberName, phoneNumber) {
     WHERE LOWER(name) = LOWER($1)
     RETURNING *
     `,
-    [memberName, phone]
+    [memberName, phone],
   );
   const row = result.rows[0];
   if (!row) throw new Error("Không tìm thấy thành viên.");
@@ -1074,14 +1132,22 @@ async function updateMemberLevel(memberName, level) {
     WHERE LOWER(name) = LOWER($1)
     RETURNING *
     `,
-    [memberName, normalizeLevel(level)]
+    [memberName, normalizeLevel(level)],
   );
   const row = result.rows[0];
   if (!row) throw new Error("Không tìm thấy thành viên.");
   return mapMember(row);
 }
 
-async function createMember({ name, type, gender, birthday, phoneNumber, level, active = true }) {
+async function createMember({
+  name,
+  type,
+  gender,
+  birthday,
+  phoneNumber,
+  level,
+  active = true,
+}) {
   const safeName = String(name || "").trim();
   if (!safeName) throw new Error("Tên thành viên không được để trống.");
   const memberType = normalizeMemberType(type);
@@ -1098,7 +1164,17 @@ async function createMember({ name, type, gender, birthday, phoneNumber, level, 
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)
     RETURNING *
     `,
-    [memberId, safeName, memberType, memberGender, safeBirthday, safeLevel, Boolean(active), safePhone, ts]
+    [
+      memberId,
+      safeName,
+      memberType,
+      memberGender,
+      safeBirthday,
+      safeLevel,
+      Boolean(active),
+      safePhone,
+      ts,
+    ],
   );
   return mapMember(result.rows[0]);
 }
@@ -1106,7 +1182,10 @@ async function createMember({ name, type, gender, birthday, phoneNumber, level, 
 async function deleteMember(memberId) {
   const safeMemberId = String(memberId || "").trim();
   if (!safeMemberId) throw new Error("Thiếu memberId.");
-  const existingResult = await query(`SELECT * FROM members WHERE member_id = $1`, [safeMemberId]);
+  const existingResult = await query(
+    `SELECT * FROM members WHERE member_id = $1`,
+    [safeMemberId],
+  );
   const existing = existingResult.rows[0];
   if (!existing) throw new Error("Không tìm thấy thành viên cần xóa.");
 
@@ -1120,20 +1199,40 @@ async function deleteMember(memberId) {
       WHERE status IN ('pending', 'locked')
         AND (member_a_id = $1 OR member_b_id = $1)
       `,
-      [safeMemberId]
+      [safeMemberId],
     );
-    await client.query(`DELETE FROM tournament_player_events WHERE member_id = $1`, [safeMemberId]);
-    await client.query(`DELETE FROM tournament_member_stats WHERE member_id = $1`, [safeMemberId]);
-    await client.query(`DELETE FROM tournament_registrations WHERE member_id = $1`, [safeMemberId]);
-    await client.query(`DELETE FROM birthday_drink_orders WHERE member_id = $1`, [safeMemberId]);
-    await client.query(`DELETE FROM push_tokens WHERE member_id = $1`, [safeMemberId]);
-    await client.query(`DELETE FROM member_credits WHERE member_id = $1`, [safeMemberId]);
-    await client.query(`DELETE FROM debts WHERE member_id = $1`, [safeMemberId]);
-    await client.query(`DELETE FROM members WHERE member_id = $1`, [safeMemberId]);
+    await client.query(
+      `DELETE FROM tournament_player_events WHERE member_id = $1`,
+      [safeMemberId],
+    );
+    await client.query(
+      `DELETE FROM tournament_member_stats WHERE member_id = $1`,
+      [safeMemberId],
+    );
+    await client.query(
+      `DELETE FROM tournament_registrations WHERE member_id = $1`,
+      [safeMemberId],
+    );
+    await client.query(
+      `DELETE FROM birthday_drink_orders WHERE member_id = $1`,
+      [safeMemberId],
+    );
+    await client.query(`DELETE FROM push_tokens WHERE member_id = $1`, [
+      safeMemberId,
+    ]);
+    await client.query(`DELETE FROM member_credits WHERE member_id = $1`, [
+      safeMemberId,
+    ]);
+    await client.query(`DELETE FROM debts WHERE member_id = $1`, [
+      safeMemberId,
+    ]);
+    await client.query(`DELETE FROM members WHERE member_id = $1`, [
+      safeMemberId,
+    ]);
     await client.query("COMMIT");
     return {
       memberId: safeMemberId,
-      name: String(existing.name || "").trim()
+      name: String(existing.name || "").trim(),
     };
   } catch (error) {
     await client.query("ROLLBACK");
@@ -1146,7 +1245,10 @@ async function deleteMember(memberId) {
 async function updateMemberProfile(memberId, payload) {
   const safeMemberId = String(memberId || "").trim();
   if (!safeMemberId) throw new Error("Thiếu memberId.");
-  const existingResult = await query(`SELECT * FROM members WHERE member_id = $1`, [safeMemberId]);
+  const existingResult = await query(
+    `SELECT * FROM members WHERE member_id = $1`,
+    [safeMemberId],
+  );
   const existing = existingResult.rows[0];
   if (!existing) throw new Error("Không tìm thấy thành viên cần cập nhật.");
 
@@ -1156,11 +1258,17 @@ async function updateMemberProfile(memberId, payload) {
 
   const nextType = normalizeMemberType(payload?.type || existing.type || "GL");
   const nextGender = normalizeGender(payload?.gender ?? existing.gender ?? "");
-  const nextBirthday = normalizeBirthday(payload?.birthday ?? existing.birthday ?? "");
-  const nextPhone = normalizePhone(payload?.phoneNumber ?? existing.phone_number ?? "");
+  const nextBirthday = normalizeBirthday(
+    payload?.birthday ?? existing.birthday ?? "",
+  );
+  const nextPhone = normalizePhone(
+    payload?.phoneNumber ?? existing.phone_number ?? "",
+  );
   const nextLevel = normalizeLevel(payload?.level ?? existing.level ?? 5);
   const nextActive =
-    payload?.active === undefined ? Boolean(existing.active) : String(payload.active).toLowerCase() !== "false";
+    payload?.active === undefined
+      ? Boolean(existing.active)
+      : String(payload.active).toLowerCase() !== "false";
 
   const client = await pool.connect();
   try {
@@ -1179,7 +1287,16 @@ async function updateMemberProfile(memberId, payload) {
       WHERE member_id = $1
       RETURNING *
       `,
-      [safeMemberId, newName, nextType, nextGender, nextBirthday, nextLevel, nextActive, nextPhone]
+      [
+        safeMemberId,
+        newName,
+        nextType,
+        nextGender,
+        nextBirthday,
+        nextLevel,
+        nextActive,
+        nextPhone,
+      ],
     );
     await client.query(
       `
@@ -1188,7 +1305,7 @@ async function updateMemberProfile(memberId, payload) {
           member_name_ci = $3
       WHERE member_id = $1
       `,
-      [safeMemberId, newName, safeLower(newName)]
+      [safeMemberId, newName, safeLower(newName)],
     );
     await client.query(
       `
@@ -1197,12 +1314,21 @@ async function updateMemberProfile(memberId, payload) {
           member_name_ci = $3
       WHERE member_id = $1
       `,
-      [safeMemberId, newName, safeLower(newName)]
+      [safeMemberId, newName, safeLower(newName)],
     );
-    await client.query(`UPDATE payments SET member_name = $2 WHERE member_id = $1`, [safeMemberId, newName]);
-    await client.query(`UPDATE debts SET member_name = $2 WHERE member_id = $1`, [safeMemberId, newName]);
+    await client.query(
+      `UPDATE payments SET member_name = $2 WHERE member_id = $1`,
+      [safeMemberId, newName],
+    );
+    await client.query(
+      `UPDATE debts SET member_name = $2 WHERE member_id = $1`,
+      [safeMemberId, newName],
+    );
     if (oldName !== newName) {
-      await client.query(`UPDATE participants SET name = $2 WHERE LOWER(name) = LOWER($1)`, [oldName, newName]);
+      await client.query(
+        `UPDATE participants SET name = $2 WHERE LOWER(name) = LOWER($1)`,
+        [oldName, newName],
+      );
     }
     await client.query("COMMIT");
     return mapMember(updatedMemberResult.rows[0]);
@@ -1227,8 +1353,12 @@ function normalizeBirthdayEventBrands(value) {
   const brands = list
     .map((item) => String(item || "").trim())
     .filter(Boolean)
-    .filter((item, idx, arr) => arr.findIndex((v) => safeLower(v) === safeLower(item)) === idx);
-  if (!brands.length) throw new Error("Cần ít nhất 1 brand cho birthday event.");
+    .filter(
+      (item, idx, arr) =>
+        arr.findIndex((v) => safeLower(v) === safeLower(item)) === idx,
+    );
+  if (!brands.length)
+    throw new Error("Cần ít nhất 1 brand cho birthday event.");
   return brands;
 }
 
@@ -1239,11 +1369,13 @@ function normalizeBirthdayEventDrinks(value) {
       brandName: String(item?.brandName || "").trim(),
       drinkName: String(item?.drinkName || "").trim(),
       price:
-        item?.price === null || item?.price === undefined || String(item.price).trim() === ""
+        item?.price === null ||
+        item?.price === undefined ||
+        String(item.price).trim() === ""
           ? null
           : Math.max(0, Math.round(toNumber(item.price))),
       imageUrl: String(item?.imageUrl || "").trim(),
-      sortOrder: Math.max(0, Math.round(toNumber(item?.sortOrder, index)))
+      sortOrder: Math.max(0, Math.round(toNumber(item?.sortOrder, index))),
     }))
     .filter((item) => item.brandName && item.drinkName);
 }
@@ -1258,9 +1390,13 @@ async function createBirthdayEvent(payload, createdBy = "admin") {
   if (!drinks.length) throw new Error("Cần ít nhất 1 món nước.");
 
   const brandSet = new Set(brands.map((item) => safeLower(item)));
-  const invalidDrink = drinks.find((item) => !brandSet.has(safeLower(item.brandName)));
+  const invalidDrink = drinks.find(
+    (item) => !brandSet.has(safeLower(item.brandName)),
+  );
   if (invalidDrink) {
-    throw new Error(`Món ${invalidDrink.drinkName} dùng brand không nằm trong danh sách được chọn.`);
+    throw new Error(
+      `Món ${invalidDrink.drinkName} dùng brand không nằm trong danh sách được chọn.`,
+    );
   }
 
   const eventId = `BE_${Date.now().toString(36)}_${Math.floor(Math.random() * 1000)}`;
@@ -1272,7 +1408,7 @@ async function createBirthdayEvent(payload, createdBy = "admin") {
       INSERT INTO birthday_events(event_id, event_name, event_date, description, created_by, created_at, updated_at)
       VALUES ($1,$2,$3,$4,$5,NOW(),NOW())
       `,
-      [eventId, eventName, eventDate, description, createdBy]
+      [eventId, eventName, eventDate, description, createdBy],
     );
     for (let i = 0; i < brands.length; i += 1) {
       await client.query(
@@ -1280,7 +1416,7 @@ async function createBirthdayEvent(payload, createdBy = "admin") {
         INSERT INTO birthday_event_brands(event_id, brand_name, sort_order)
         VALUES ($1,$2,$3)
         `,
-        [eventId, brands[i], i]
+        [eventId, brands[i], i],
       );
     }
     for (let i = 0; i < drinks.length; i += 1) {
@@ -1291,7 +1427,15 @@ async function createBirthdayEvent(payload, createdBy = "admin") {
         INSERT INTO birthday_event_drinks(drink_id, event_id, brand_name, drink_name, price, image_url, is_active, sort_order, created_at, updated_at)
         VALUES ($1,$2,$3,$4,$5,$6,TRUE,$7,NOW(),NOW())
         `,
-        [drinkId, eventId, drink.brandName, drink.drinkName, drink.price, drink.imageUrl, drink.sortOrder]
+        [
+          drinkId,
+          eventId,
+          drink.brandName,
+          drink.drinkName,
+          drink.price,
+          drink.imageUrl,
+          drink.sortOrder,
+        ],
       );
     }
     await client.query("COMMIT");
@@ -1312,7 +1456,7 @@ async function getBirthdayEvents(limit = 50) {
     ORDER BY event_date DESC, created_at DESC
     LIMIT $1
     `,
-    [Math.max(1, Number(limit || 50))]
+    [Math.max(1, Number(limit || 50))],
   );
   return result.rows.map((row) => ({
     eventId: row.event_id,
@@ -1321,33 +1465,34 @@ async function getBirthdayEvents(limit = 50) {
     description: row.description || "",
     createdBy: row.created_by || "admin",
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
-    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : "",
   }));
 }
 
 async function getBirthdayEventDetail(eventId, memberName = "") {
   const safeEventId = String(eventId || "").trim();
   if (!safeEventId) throw new Error("Thiếu eventId.");
-  const [eventResult, brandResult, drinkResult, orderResult] = await Promise.all([
-    query(`SELECT * FROM birthday_events WHERE event_id = $1`, [safeEventId]),
-    query(
-      `SELECT brand_name, sort_order FROM birthday_event_brands WHERE event_id = $1 ORDER BY sort_order ASC, brand_name ASC`,
-      [safeEventId]
-    ),
-    query(
-      `SELECT drink_id, brand_name, drink_name, price, image_url, is_active, sort_order FROM birthday_event_drinks WHERE event_id = $1 ORDER BY brand_name ASC, sort_order ASC, drink_name ASC`,
-      [safeEventId]
-    ),
-    query(
-      `
+  const [eventResult, brandResult, drinkResult, orderResult] =
+    await Promise.all([
+      query(`SELECT * FROM birthday_events WHERE event_id = $1`, [safeEventId]),
+      query(
+        `SELECT brand_name, sort_order FROM birthday_event_brands WHERE event_id = $1 ORDER BY sort_order ASC, brand_name ASC`,
+        [safeEventId],
+      ),
+      query(
+        `SELECT drink_id, brand_name, drink_name, price, image_url, is_active, sort_order FROM birthday_event_drinks WHERE event_id = $1 ORDER BY brand_name ASC, sort_order ASC, drink_name ASC`,
+        [safeEventId],
+      ),
+      query(
+        `
       SELECT o.member_id, o.member_name, o.drink_id, o.quantity, o.updated_at, d.brand_name, d.drink_name
       FROM birthday_drink_orders o
       LEFT JOIN birthday_event_drinks d ON d.drink_id = o.drink_id
       WHERE o.event_id = $1
       `,
-      [safeEventId]
-    )
-  ]);
+        [safeEventId],
+      ),
+    ]);
   const event = eventResult.rows[0];
   if (!event) throw new Error("Không tìm thấy birthday event.");
   const brands = brandResult.rows.map((row) => row.brand_name);
@@ -1355,10 +1500,13 @@ async function getBirthdayEventDetail(eventId, memberName = "") {
     drinkId: row.drink_id,
     brandName: row.brand_name,
     drinkName: row.drink_name,
-    price: row.price === null || row.price === undefined ? null : Math.round(toNumber(row.price)),
+    price:
+      row.price === null || row.price === undefined
+        ? null
+        : Math.round(toNumber(row.price)),
     imageUrl: row.image_url || "",
     isActive: Boolean(row.is_active),
-    sortOrder: Math.round(toNumber(row.sort_order))
+    sortOrder: Math.round(toNumber(row.sort_order)),
   }));
   const orders = orderResult.rows.map((row) => ({
     memberId: row.member_id,
@@ -1367,9 +1515,12 @@ async function getBirthdayEventDetail(eventId, memberName = "") {
     drinkName: row.drink_name || "",
     brandName: row.brand_name || "",
     quantity: Math.max(1, Math.round(toNumber(row.quantity, 1))),
-    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : "",
   }));
-  const selectedOrder = orders.find((item) => safeLower(item.memberName) === safeLower(memberName)) || null;
+  const selectedOrder =
+    orders.find(
+      (item) => safeLower(item.memberName) === safeLower(memberName),
+    ) || null;
   return {
     eventId: event.event_id,
     eventName: event.event_name,
@@ -1381,11 +1532,16 @@ async function getBirthdayEventDetail(eventId, memberName = "") {
     brands,
     drinks,
     selectedOrder,
-    orders
+    orders,
   };
 }
 
-async function upsertBirthdayDrinkSelection({ eventId, memberName, drinkId, quantity = 1 }) {
+async function upsertBirthdayDrinkSelection({
+  eventId,
+  memberName,
+  drinkId,
+  quantity = 1,
+}) {
   const safeEventId = String(eventId || "").trim();
   const safeDrinkId = String(drinkId || "").trim();
   const safeMemberName = String(memberName || "").trim();
@@ -1395,11 +1551,13 @@ async function upsertBirthdayDrinkSelection({ eventId, memberName, drinkId, quan
   const safeQuantity = Math.max(1, Math.round(toNumber(quantity, 1)));
 
   const [memberResult, drinkResult] = await Promise.all([
-    query(`SELECT member_id, name FROM members WHERE LOWER(name) = LOWER($1)`, [safeMemberName]),
+    query(`SELECT member_id, name FROM members WHERE LOWER(name) = LOWER($1)`, [
+      safeMemberName,
+    ]),
     query(
       `SELECT drink_id, event_id, brand_name, drink_name FROM birthday_event_drinks WHERE drink_id = $1 AND event_id = $2 AND is_active = TRUE`,
-      [safeDrinkId, safeEventId]
-    )
+      [safeDrinkId, safeEventId],
+    ),
   ]);
   const member = memberResult.rows[0];
   if (!member) throw new Error("Không tìm thấy member.");
@@ -1417,7 +1575,7 @@ async function upsertBirthdayDrinkSelection({ eventId, memberName, drinkId, quan
         updated_at = EXCLUDED.updated_at
     RETURNING *
     `,
-    [safeEventId, member.member_id, member.name, safeDrinkId, safeQuantity]
+    [safeEventId, member.member_id, member.name, safeDrinkId, safeQuantity],
   );
   const row = result.rows[0];
   return {
@@ -1428,7 +1586,7 @@ async function upsertBirthdayDrinkSelection({ eventId, memberName, drinkId, quan
     quantity: Math.max(1, Math.round(toNumber(row.quantity, 1))),
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : "",
     drinkName: drink.drink_name,
-    brandName: drink.brand_name
+    brandName: drink.brand_name,
   };
 }
 
@@ -1437,7 +1595,13 @@ async function getBirthdayEventAdminView(eventId) {
   const grouped = {};
   detail.orders.forEach((order) => {
     const brand = order.brandName || "Khác";
-    if (!grouped[brand]) grouped[brand] = { brandName: brand, totalQuantity: 0, drinks: {}, users: [] };
+    if (!grouped[brand])
+      grouped[brand] = {
+        brandName: brand,
+        totalQuantity: 0,
+        drinks: {},
+        users: [],
+      };
     grouped[brand].totalQuantity += order.quantity;
     grouped[brand].users.push({
       memberId: order.memberId,
@@ -1445,13 +1609,13 @@ async function getBirthdayEventAdminView(eventId) {
       drinkId: order.drinkId,
       drinkName: order.drinkName,
       quantity: order.quantity,
-      updatedAt: order.updatedAt
+      updatedAt: order.updatedAt,
     });
     if (!grouped[brand].drinks[order.drinkId]) {
       grouped[brand].drinks[order.drinkId] = {
         drinkId: order.drinkId,
         drinkName: order.drinkName,
-        totalQuantity: 0
+        totalQuantity: 0,
       };
     }
     grouped[brand].drinks[order.drinkId].totalQuantity += order.quantity;
@@ -1459,8 +1623,10 @@ async function getBirthdayEventAdminView(eventId) {
   const groupedByBrand = Object.values(grouped).map((item) => ({
     brandName: item.brandName,
     totalQuantity: item.totalQuantity,
-    drinks: Object.values(item.drinks).sort((a, b) => b.totalQuantity - a.totalQuantity),
-    users: item.users.sort((a, b) => a.memberName.localeCompare(b.memberName))
+    drinks: Object.values(item.drinks).sort(
+      (a, b) => b.totalQuantity - a.totalQuantity,
+    ),
+    users: item.users.sort((a, b) => a.memberName.localeCompare(b.memberName)),
   }));
   return {
     eventId: detail.eventId,
@@ -1468,7 +1634,9 @@ async function getBirthdayEventAdminView(eventId) {
     date: detail.date,
     description: detail.description,
     groupedByBrand,
-    allOrders: detail.orders.sort((a, b) => a.memberName.localeCompare(b.memberName))
+    allOrders: detail.orders.sort((a, b) =>
+      a.memberName.localeCompare(b.memberName),
+    ),
   };
 }
 
@@ -1477,7 +1645,10 @@ async function respondToSession({ sessionId, memberName, status, pollAnswer }) {
   if (!["yes", "no"].includes(safeStatus)) {
     throw new Error("Trạng thái tham gia chỉ nhận yes/no.");
   }
-  const memberResult = await query(`SELECT * FROM members WHERE LOWER(name) = LOWER($1)`, [memberName]);
+  const memberResult = await query(
+    `SELECT * FROM members WHERE LOWER(name) = LOWER($1)`,
+    [memberName],
+  );
   const member = memberResult.rows[0];
   if (!member) throw new Error("Không tìm thấy thành viên.");
 
@@ -1492,7 +1663,15 @@ async function respondToSession({ sessionId, memberName, status, pollAnswer }) {
     ON CONFLICT(session_id, member_name_ci) DO UPDATE
     SET status = EXCLUDED.status, responded_at = EXCLUDED.responded_at, member_id = EXCLUDED.member_id, participant_type = 'Cố định', participant_level = EXCLUDED.participant_level
     `,
-    [sessionId, member.member_id, member.name, safeLower(member.name), normalizeLevel(member.level), safeStatus, ts]
+    [
+      sessionId,
+      member.member_id,
+      member.name,
+      safeLower(member.name),
+      normalizeLevel(member.level),
+      safeStatus,
+      ts,
+    ],
   );
 
   const poll = await getPollBySession(sessionId);
@@ -1506,7 +1685,15 @@ async function respondToSession({ sessionId, memberName, status, pollAnswer }) {
         ON CONFLICT(session_id, member_name_ci) DO UPDATE
         SET answer = EXCLUDED.answer, answered_at = EXCLUDED.answered_at, poll_id = EXCLUDED.poll_id, member_id = EXCLUDED.member_id
         `,
-        [poll.pollId, sessionId, member.member_id, member.name, safeLower(member.name), answerText, ts]
+        [
+          poll.pollId,
+          sessionId,
+          member.member_id,
+          member.name,
+          safeLower(member.name),
+          answerText,
+          ts,
+        ],
       );
     }
   }
@@ -1514,7 +1701,7 @@ async function respondToSession({ sessionId, memberName, status, pollAnswer }) {
   return {
     sessionId,
     memberName: member.name,
-    status: safeStatus
+    status: safeStatus,
   };
 }
 
@@ -1524,9 +1711,13 @@ async function answerPoll({ sessionId, memberName, answer }) {
 
   const session = await getSessionById(sessionId);
   if (!session) throw new Error("Không tìm thấy buổi chơi.");
-  if (session.voteStatus === "cancelled") throw new Error("Buổi này đã bị hủy vote.");
+  if (session.voteStatus === "cancelled")
+    throw new Error("Buổi này đã bị hủy vote.");
 
-  const memberResult = await query(`SELECT * FROM members WHERE LOWER(name) = LOWER($1)`, [memberName]);
+  const memberResult = await query(
+    `SELECT * FROM members WHERE LOWER(name) = LOWER($1)`,
+    [memberName],
+  );
   const member = memberResult.rows[0];
   if (!member) throw new Error("Không tìm thấy thành viên.");
 
@@ -1541,7 +1732,15 @@ async function answerPoll({ sessionId, memberName, answer }) {
     ON CONFLICT(session_id, member_name_ci) DO UPDATE
     SET answer = EXCLUDED.answer, answered_at = EXCLUDED.answered_at, poll_id = EXCLUDED.poll_id, member_id = EXCLUDED.member_id
     `,
-    [poll.pollId, sessionId, member.member_id, member.name, safeLower(member.name), answerText, ts]
+    [
+      poll.pollId,
+      sessionId,
+      member.member_id,
+      member.name,
+      safeLower(member.name),
+      answerText,
+      ts,
+    ],
   );
 
   return {
@@ -1549,11 +1748,16 @@ async function answerPoll({ sessionId, memberName, answer }) {
     pollId: poll.pollId,
     memberName: member.name,
     answer: answerText,
-    answeredAt: ts
+    answeredAt: ts,
   };
 }
 
-async function addGuestToSession({ sessionId, guestName, level = 5, status = "yes" }) {
+async function addGuestToSession({
+  sessionId,
+  guestName,
+  level = 5,
+  status = "yes",
+}) {
   const session = await getSessionById(sessionId);
   assertSessionAcceptsVotes(session);
   const name = String(guestName || "").trim();
@@ -1574,14 +1778,22 @@ async function addGuestToSession({ sessionId, guestName, level = 5, status = "ye
         responded_at = EXCLUDED.responded_at,
         member_id = EXCLUDED.member_id
     `,
-    [sessionId, guestId, name, safeLower(name), normalizeLevel(level), safeStatus, nowIso()]
+    [
+      sessionId,
+      guestId,
+      name,
+      safeLower(name),
+      normalizeLevel(level),
+      safeStatus,
+      nowIso(),
+    ],
   );
   return {
     sessionId,
     guestId,
     guestName: name,
     status: safeStatus,
-    level: normalizeLevel(level)
+    level: normalizeLevel(level),
   };
 }
 
@@ -1589,8 +1801,12 @@ async function addPayment({ date, memberName, amount, note }) {
   const safeAmount = toNumber(amount);
   if (safeAmount <= 0) throw new Error("Số tiền thanh toán phải lớn hơn 0.");
   const paymentId = crypto.randomUUID();
-  const paymentDate = String(date || "").trim() || new Date().toISOString().slice(0, 10);
-  const memberResult = await query(`SELECT * FROM members WHERE LOWER(name) = LOWER($1)`, [memberName]);
+  const paymentDate =
+    String(date || "").trim() || new Date().toISOString().slice(0, 10);
+  const memberResult = await query(
+    `SELECT * FROM members WHERE LOWER(name) = LOWER($1)`,
+    [memberName],
+  );
   const member = memberResult.rows[0];
   await query(
     `
@@ -1604,8 +1820,8 @@ async function addPayment({ date, memberName, amount, note }) {
       member?.name || String(memberName || "").trim(),
       Math.round(safeAmount),
       String(note || "").trim(),
-      nowIso()
-    ]
+      nowIso(),
+    ],
   );
   await recomputeDebts();
 }
@@ -1617,7 +1833,9 @@ function computeEqualShares(totalAmountRounded, participantCount) {
   const remainder = totalAmountRounded - base * count;
   // Distribute remainder (+1) to the first `remainder` participants so that:
   // sum(shares) == totalAmountRounded
-  return Array.from({ length: count }).map((_item, idx) => base + (idx < remainder ? 1 : 0));
+  return Array.from({ length: count }).map(
+    (_item, idx) => base + (idx < remainder ? 1 : 0),
+  );
 }
 
 function buildDebtMemberIdFromName(name) {
@@ -1626,7 +1844,14 @@ function buildDebtMemberIdFromName(name) {
   return `d_${hash.slice(0, 12)}`;
 }
 
-async function addExpense({ sessionId, name, totalAmount, participants, splitMethod, note }) {
+async function addExpense({
+  sessionId,
+  name,
+  totalAmount,
+  participants,
+  splitMethod,
+  note,
+}) {
   const safeName = String(name || "").trim();
   if (!safeName) throw new Error("Thiếu tên chi phí.");
   const safeTotal = toNumber(totalAmount);
@@ -1635,13 +1860,20 @@ async function addExpense({ sessionId, name, totalAmount, participants, splitMet
   const safeSessionId = String(sessionId || "").trim();
   if (!safeSessionId) throw new Error("Thiếu sessionId cho chi phí.");
   const targetSession = await getSessionById(safeSessionId);
-  if (!targetSession) throw new Error("Không tìm thấy buổi chơi để gắn chi phí.");
+  if (!targetSession)
+    throw new Error("Không tìm thấy buổi chơi để gắn chi phí.");
 
-  const safeSplitMethod = String(splitMethod || "equal").trim().toLowerCase();
-  if (safeSplitMethod !== "equal") throw new Error("Chỉ hỗ trợ split method = equal tại thời điểm hiện tại.");
+  const safeSplitMethod = String(splitMethod || "equal")
+    .trim()
+    .toLowerCase();
+  if (safeSplitMethod !== "equal")
+    throw new Error("Chỉ hỗ trợ split method = equal tại thời điểm hiện tại.");
 
-  const participantNames = Array.isArray(participants) ? participants.map((p) => String(p || "").trim()).filter(Boolean) : [];
-  if (!participantNames.length) throw new Error("Danh sách participants không được để trống.");
+  const participantNames = Array.isArray(participants)
+    ? participants.map((p) => String(p || "").trim()).filter(Boolean)
+    : [];
+  if (!participantNames.length)
+    throw new Error("Danh sách participants không được để trống.");
 
   const totalRounded = Math.round(safeTotal);
   const shares = computeEqualShares(totalRounded, participantNames.length);
@@ -1649,7 +1881,7 @@ async function addExpense({ sessionId, name, totalAmount, participants, splitMet
   const participantNamesLower = participantNames.map((p) => safeLower(p));
   const membersResult = await query(
     `SELECT member_id, name FROM members WHERE LOWER(name) = ANY($1::text[])`,
-    [participantNamesLower]
+    [participantNamesLower],
   );
 
   const memberByLower = {};
@@ -1665,7 +1897,16 @@ async function addExpense({ sessionId, name, totalAmount, participants, splitMet
       INSERT INTO expenses(expense_id, session_id, date, name, total_amount, split_method, note, created_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
     `,
-    [expenseId, safeSessionId, targetSession.date, safeName, totalRounded, "equal", String(note || "").trim(), ts]
+    [
+      expenseId,
+      safeSessionId,
+      targetSession.date,
+      safeName,
+      totalRounded,
+      "equal",
+      String(note || "").trim(),
+      ts,
+    ],
   );
 
   for (let i = 0; i < participantNames.length; i += 1) {
@@ -1682,7 +1923,14 @@ async function addExpense({ sessionId, name, totalAmount, participants, splitMet
             share_amount = EXCLUDED.share_amount,
             split_method = EXCLUDED.split_method
       `,
-      [expenseId, member?.member_id || "", memberName, pLower, shares[i], "equal"]
+      [
+        expenseId,
+        member?.member_id || "",
+        memberName,
+        pLower,
+        shares[i],
+        "equal",
+      ],
     );
   }
 
@@ -1694,7 +1942,7 @@ async function addExpense({ sessionId, name, totalAmount, participants, splitMet
     name: safeName,
     totalAmount: totalRounded,
     splitMethod: "equal",
-    createdAt: ts
+    createdAt: ts,
   };
 }
 
@@ -1707,7 +1955,7 @@ async function getExpenses(limit = 50) {
       ORDER BY date DESC, created_at DESC
       LIMIT $1
     `,
-    [safeLimit]
+    [safeLimit],
   );
   const expenses = expensesResult.rows.map((row) => ({
     expenseId: row.expense_id,
@@ -1717,7 +1965,7 @@ async function getExpenses(limit = 50) {
     totalAmount: Math.round(toNumber(row.total_amount)),
     splitMethod: row.split_method || "equal",
     note: row.note || "",
-    createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
   }));
 
   if (!expenses.length) return [];
@@ -1730,7 +1978,7 @@ async function getExpenses(limit = 50) {
       WHERE expense_id = ANY($1::text[])
       ORDER BY created_at ASC
     `,
-    [expenseIds]
+    [expenseIds],
   );
 
   const participantsByExpense = {};
@@ -1739,23 +1987,29 @@ async function getExpenses(limit = 50) {
     if (!participantsByExpense[id]) participantsByExpense[id] = [];
     participantsByExpense[id].push({
       memberName: row.member_name || "",
-      shareAmount: Math.round(toNumber(row.share_amount))
+      shareAmount: Math.round(toNumber(row.share_amount)),
     });
   });
 
   return expenses.map((e) => ({
     ...e,
-    participants: participantsByExpense[e.expenseId] || []
+    participants: participantsByExpense[e.expenseId] || [],
   }));
 }
 
 async function recomputeDebts() {
-  const [allMembers, activeFixedMembers, participantsResult, paymentsResult, expenseParticipantsResult] = await Promise.all([
+  const [
+    allMembers,
+    activeFixedMembers,
+    participantsResult,
+    paymentsResult,
+    expenseParticipantsResult,
+  ] = await Promise.all([
     getMembers(),
     getActiveFixedMembers(),
     query(`SELECT * FROM participants`),
     query(`SELECT * FROM payments`),
-    query(`SELECT * FROM expense_participants`)
+    query(`SELECT * FROM expense_participants`),
   ]);
 
   const memberByName = {};
@@ -1774,20 +2028,22 @@ async function recomputeDebts() {
   expenseParticipantsResult.rows.forEach((row) => {
     const name = String(row.member_name || "").trim();
     if (!name) return;
-    dueByName[name] = (dueByName[name] || 0) + Math.round(toNumber(row.share_amount));
+    dueByName[name] =
+      (dueByName[name] || 0) + Math.round(toNumber(row.share_amount));
   });
 
   const paidByName = {};
   paymentsResult.rows.forEach((row) => {
     const name = String(row.member_name || "").trim();
     if (!name) return;
-    paidByName[name] = (paidByName[name] || 0) + Math.round(toNumber(row.amount));
+    paidByName[name] =
+      (paidByName[name] || 0) + Math.round(toNumber(row.amount));
   });
 
   const names = new Set([
     ...activeFixedMembers.map((member) => member.name),
     ...Object.keys(dueByName),
-    ...Object.keys(paidByName)
+    ...Object.keys(paidByName),
   ]);
   const ts = nowIso();
 
@@ -1802,7 +2058,14 @@ async function recomputeDebts() {
       INSERT INTO debts(member_id, member_name, total_due, total_paid, balance, last_updated)
       VALUES ($1,$2,$3,$4,$5,$6)
       `,
-      [debtMemberId, member?.name || name, totalDue, totalPaid, totalDue - totalPaid, ts]
+      [
+        debtMemberId,
+        member?.name || name,
+        totalDue,
+        totalPaid,
+        totalDue - totalPaid,
+        ts,
+      ],
     );
   }
 }
@@ -1815,7 +2078,9 @@ async function getDebts() {
     totalDue: Math.round(toNumber(row.total_due)),
     totalPaid: Math.round(toNumber(row.total_paid)),
     balance: Math.round(toNumber(row.balance)),
-    lastUpdated: row.last_updated ? new Date(row.last_updated).toISOString() : ""
+    lastUpdated: row.last_updated
+      ? new Date(row.last_updated).toISOString()
+      : "",
   }));
 }
 
@@ -1826,7 +2091,7 @@ async function getPayments(limit = 1000) {
     ORDER BY date DESC, created_at DESC
     LIMIT $1
     `,
-    [Math.max(1, limit)]
+    [Math.max(1, limit)],
   );
   return result.rows.map((row) => ({
     paymentId: row.payment_id,
@@ -1835,7 +2100,7 @@ async function getPayments(limit = 1000) {
     memberName: row.member_name,
     amount: Math.round(toNumber(row.amount)),
     note: row.note || "",
-    createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
   }));
 }
 
@@ -1849,7 +2114,7 @@ async function getMemberHistory(memberName, limit = 20) {
     ORDER BY s.date DESC, s.time DESC
     LIMIT $2
     `,
-    [safeLower(memberName), Math.max(1, limit)]
+    [safeLower(memberName), Math.max(1, limit)],
   );
   return result.rows.map((row) => ({
     sessionId: row.session_id,
@@ -1857,12 +2122,14 @@ async function getMemberHistory(memberName, limit = 20) {
     time: row.time || "",
     location: row.location || "",
     status: safeLower(row.status || "pending"),
-    totalCost: Math.round(toNumber(row.total_cost))
+    totalCost: Math.round(toNumber(row.total_cost)),
   }));
 }
 
 async function getPairHistoryCount() {
-  const result = await query(`SELECT pair_key, COUNT(*)::int AS count FROM match_pair_history GROUP BY pair_key`);
+  const result = await query(
+    `SELECT pair_key, COUNT(*)::int AS count FROM match_pair_history GROUP BY pair_key`,
+  );
   const map = {};
   result.rows.forEach((row) => {
     map[row.pair_key] = toNumber(row.count);
@@ -1875,7 +2142,7 @@ async function recordMatchPairs(sessionId, rounds, buildPairKey) {
     for (const match of roundItem.matches) {
       const pairs = [
         [match.teamA[0].name, match.teamA[1].name],
-        [match.teamB[0].name, match.teamB[1].name]
+        [match.teamB[0].name, match.teamB[1].name],
       ];
       for (const pair of pairs) {
         await query(
@@ -1883,7 +2150,14 @@ async function recordMatchPairs(sessionId, rounds, buildPairKey) {
           INSERT INTO match_pair_history(session_id, round, pair_key, member_a, member_b, created_at)
           VALUES ($1,$2,$3,$4,$5,$6)
           `,
-          [sessionId, roundItem.round, buildPairKey(pair[0], pair[1]), pair[0], pair[1], nowIso()]
+          [
+            sessionId,
+            roundItem.round,
+            buildPairKey(pair[0], pair[1]),
+            pair[0],
+            pair[1],
+            nowIso(),
+          ],
         );
       }
     }
@@ -1927,8 +2201,8 @@ async function replaceGeneratedMatchesForDate(sessionId, matchDate, rounds) {
           JSON.stringify(match.teamA || []),
           JSON.stringify(match.teamB || []),
           Number(match.levelDiff || 0),
-          nowIso()
-        ]
+          nowIso(),
+        ],
       );
       inserted += 1;
     }
@@ -1946,7 +2220,7 @@ async function getGeneratedMatchesByDate(matchDate) {
     WHERE match_date = $1
     ORDER BY round ASC, match_no ASC
     `,
-    [date]
+    [date],
   );
   return result.rows.map((row) => ({
     matchDate: row.match_date,
@@ -1959,27 +2233,46 @@ async function getGeneratedMatchesByDate(matchDate) {
     teamB: Array.isArray(row.team_b_json) ? row.team_b_json : [],
     levelDiff: Number(row.level_diff || 0),
     status: row.status || "scheduled",
-    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : "",
   }));
 }
 
 async function getMonthlyReport(month) {
   const safeMonth = parseCsvMonth(month);
-  const [members, sessionsResult, participantsResult, paymentsResult, debts, expensesResult] = await Promise.all([
+  const [
+    members,
+    sessionsResult,
+    participantsResult,
+    paymentsResult,
+    debts,
+    expensesResult,
+  ] = await Promise.all([
     getActiveFixedMembers(),
     query(`SELECT * FROM sessions WHERE date LIKE $1`, [`${safeMonth}%`]),
     query(`SELECT * FROM participants WHERE date LIKE $1`, [`${safeMonth}%`]),
     query(`SELECT * FROM payments WHERE date LIKE $1`, [`${safeMonth}%`]),
     getDebts(),
-    query(`SELECT * FROM expenses WHERE date LIKE $1`, [`${safeMonth}%`])
+    query(`SELECT * FROM expenses WHERE date LIKE $1`, [`${safeMonth}%`]),
   ]);
 
-  const settledSessionSet = new Set(participantsResult.rows.map((row) => row.session_id));
-  const monthlySessions = sessionsResult.rows.filter((session) => settledSessionSet.has(session.session_id));
-  const monthlySessionIds = new Set(monthlySessions.map((session) => session.session_id));
+  const settledSessionSet = new Set(
+    participantsResult.rows.map((row) => row.session_id),
+  );
+  const monthlySessions = sessionsResult.rows.filter((session) =>
+    settledSessionSet.has(session.session_id),
+  );
+  const monthlySessionIds = new Set(
+    monthlySessions.map((session) => session.session_id),
+  );
   const totalSessions = monthlySessions.length;
-  const totalCourtCost = monthlySessions.reduce((sum, session) => sum + Math.round(toNumber(session.total_cost)), 0);
-  const totalExpensesCost = expensesResult.rows.reduce((sum, exp) => sum + Math.round(toNumber(exp.total_amount)), 0);
+  const totalCourtCost = monthlySessions.reduce(
+    (sum, session) => sum + Math.round(toNumber(session.total_cost)),
+    0,
+  );
+  const totalExpensesCost = expensesResult.rows.reduce(
+    (sum, exp) => sum + Math.round(toNumber(exp.total_amount)),
+    0,
+  );
   const totalMonthlyCost = totalCourtCost + totalExpensesCost;
 
   const attendanceYesByMember = {};
@@ -1989,7 +2282,8 @@ async function getMonthlyReport(month) {
     if (String(item.type || "").trim() !== "Cố định") return;
     const memberName = String(item.name || "").trim();
     if (!memberName) return;
-    attendanceYesByMember[memberName] = (attendanceYesByMember[memberName] || 0) + 1;
+    attendanceYesByMember[memberName] =
+      (attendanceYesByMember[memberName] || 0) + 1;
   });
 
   const memberStats = members.map((member) => {
@@ -1999,7 +2293,8 @@ async function getMonthlyReport(month) {
       memberName: member.name,
       attendedSessions: attended,
       totalSessions,
-      attendanceRate: totalSessions > 0 ? Number((attended / totalSessions).toFixed(2)) : 0
+      attendanceRate:
+        totalSessions > 0 ? Number((attended / totalSessions).toFixed(2)) : 0,
     };
   });
 
@@ -2007,13 +2302,14 @@ async function getMonthlyReport(month) {
   paymentsResult.rows.forEach((payment) => {
     const key = String(payment.member_name || "").trim();
     if (!key) return;
-    paidByMember[key] = (paidByMember[key] || 0) + Math.round(toNumber(payment.amount));
+    paidByMember[key] =
+      (paidByMember[key] || 0) + Math.round(toNumber(payment.amount));
   });
 
   const topPayers = Object.entries(paidByMember)
     .map(([memberName, amount]) => ({ memberName, amount }))
     .sort((a, b) => b.amount - a.amount);
-    // .slice(0, 5);
+  // .slice(0, 5);
 
   const topDebtors = debts
     .filter((item) => item.balance > 0)
@@ -2021,7 +2317,7 @@ async function getMonthlyReport(month) {
     // .slice(0, 5)
     .map((item) => ({
       memberName: item.memberName,
-      balance: item.balance
+      balance: item.balance,
     }));
 
   return {
@@ -2030,7 +2326,7 @@ async function getMonthlyReport(month) {
     totalSessions,
     attendanceByMember: memberStats,
     topDebtors,
-    topPayers
+    topPayers,
   };
 }
 
@@ -2052,27 +2348,36 @@ async function getSnapshotForSheetSync() {
     birthdayEvents,
     birthdayEventBrands,
     birthdayEventDrinks,
-    birthdayDrinkOrders
-  ] =
-    await Promise.all([
-      getSettings(),
-      query(`SELECT * FROM members ORDER BY name ASC`),
-      query(`SELECT * FROM sessions ORDER BY created_at ASC`),
-      query(`SELECT * FROM participants ORDER BY id ASC`),
-      query(`SELECT * FROM session_participants ORDER BY id ASC`),
-      query(`SELECT * FROM polls ORDER BY created_at ASC`),
-      query(`SELECT * FROM poll_answers ORDER BY id ASC`),
-      query(`SELECT * FROM payments ORDER BY created_at ASC`),
-      query(`SELECT * FROM expenses ORDER BY created_at ASC`),
-      query(`SELECT * FROM expense_participants ORDER BY id ASC`),
-      query(`SELECT * FROM debts ORDER BY member_name ASC`),
-      query(`SELECT * FROM match_pair_history ORDER BY id ASC`),
-      query(`SELECT * FROM generated_matches ORDER BY match_date ASC, round ASC, match_no ASC`),
-      query(`SELECT * FROM birthday_events ORDER BY event_date DESC, created_at DESC`),
-      query(`SELECT * FROM birthday_event_brands ORDER BY event_id ASC, sort_order ASC, id ASC`),
-      query(`SELECT * FROM birthday_event_drinks ORDER BY event_id ASC, brand_name ASC, sort_order ASC, drink_name ASC`),
-      query(`SELECT * FROM birthday_drink_orders ORDER BY event_id ASC, member_name ASC`)
-    ]);
+    birthdayDrinkOrders,
+  ] = await Promise.all([
+    getSettings(),
+    query(`SELECT * FROM members ORDER BY name ASC`),
+    query(`SELECT * FROM sessions ORDER BY created_at ASC`),
+    query(`SELECT * FROM participants ORDER BY id ASC`),
+    query(`SELECT * FROM session_participants ORDER BY id ASC`),
+    query(`SELECT * FROM polls ORDER BY created_at ASC`),
+    query(`SELECT * FROM poll_answers ORDER BY id ASC`),
+    query(`SELECT * FROM payments ORDER BY created_at ASC`),
+    query(`SELECT * FROM expenses ORDER BY created_at ASC`),
+    query(`SELECT * FROM expense_participants ORDER BY id ASC`),
+    query(`SELECT * FROM debts ORDER BY member_name ASC`),
+    query(`SELECT * FROM match_pair_history ORDER BY id ASC`),
+    query(
+      `SELECT * FROM generated_matches ORDER BY match_date ASC, round ASC, match_no ASC`,
+    ),
+    query(
+      `SELECT * FROM birthday_events ORDER BY event_date DESC, created_at DESC`,
+    ),
+    query(
+      `SELECT * FROM birthday_event_brands ORDER BY event_id ASC, sort_order ASC, id ASC`,
+    ),
+    query(
+      `SELECT * FROM birthday_event_drinks ORDER BY event_id ASC, brand_name ASC, sort_order ASC, drink_name ASC`,
+    ),
+    query(
+      `SELECT * FROM birthday_drink_orders ORDER BY event_id ASC, member_name ASC`,
+    ),
+  ]);
 
   return {
     config: Object.entries(settings).map(([key, value]) => ({ key, value })),
@@ -2087,7 +2392,7 @@ async function getSnapshotForSheetSync() {
       phoneNumber: row.phone_number || "",
       zaloId: row.zalo_id || "",
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
-      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : "",
     })),
     sessions: sessions.rows.map((row) => ({
       sessionId: row.session_id,
@@ -2102,7 +2407,7 @@ async function getSnapshotForSheetSync() {
       createdBy: row.created_by || "admin",
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
       voteStatus: normalizeVoteStatus(row.vote_status),
-      bookingImageUrl: row.booking_image_url || ""
+      bookingImageUrl: row.booking_image_url || "",
     })),
     participants: participants.rows.map((row) => ({
       sessionId: row.session_id,
@@ -2112,20 +2417,22 @@ async function getSnapshotForSheetSync() {
       gender: row.gender || "",
       present: row.present ? "TRUE" : "FALSE",
       amount: toNumber(row.amount),
-      note: row.note || ""
+      note: row.note || "",
     })),
     sessionParticipants: sessionParticipants.rows.map((row) => ({
       sessionId: row.session_id,
       memberId: row.member_id,
       memberName: row.member_name,
       status: row.status,
-      respondedAt: row.responded_at ? new Date(row.responded_at).toISOString() : ""
+      respondedAt: row.responded_at
+        ? new Date(row.responded_at).toISOString()
+        : "",
     })),
     polls: polls.rows.map((row) => ({
       pollId: row.poll_id,
       sessionId: row.session_id,
       question: row.question,
-      createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
     })),
     pollAnswers: pollAnswers.rows.map((row) => ({
       pollId: row.poll_id,
@@ -2133,7 +2440,9 @@ async function getSnapshotForSheetSync() {
       memberId: row.member_id,
       memberName: row.member_name,
       answer: row.answer,
-      answeredAt: row.answered_at ? new Date(row.answered_at).toISOString() : ""
+      answeredAt: row.answered_at
+        ? new Date(row.answered_at).toISOString()
+        : "",
     })),
     payments: payments.rows.map((row) => ({
       paymentId: row.payment_id,
@@ -2142,7 +2451,7 @@ async function getSnapshotForSheetSync() {
       memberName: row.member_name,
       amount: toNumber(row.amount),
       note: row.note || "",
-      createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
     })),
     expenses: expenses.rows.map((row) => ({
       expenseId: row.expense_id,
@@ -2152,7 +2461,7 @@ async function getSnapshotForSheetSync() {
       totalAmount: toNumber(row.total_amount),
       splitMethod: row.split_method || "equal",
       note: row.note || "",
-      createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
     })),
     expenseParticipants: expenseParticipants.rows.map((row) => ({
       expenseId: row.expense_id,
@@ -2161,7 +2470,7 @@ async function getSnapshotForSheetSync() {
       memberNameCi: row.member_name_ci || "",
       shareAmount: toNumber(row.share_amount),
       splitMethod: row.split_method || "equal",
-      createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
     })),
     debts: debts.rows.map((row) => ({
       memberId: row.member_id || "",
@@ -2169,7 +2478,9 @@ async function getSnapshotForSheetSync() {
       totalDue: toNumber(row.total_due),
       totalPaid: toNumber(row.total_paid),
       balance: toNumber(row.balance),
-      lastUpdated: row.last_updated ? new Date(row.last_updated).toISOString() : ""
+      lastUpdated: row.last_updated
+        ? new Date(row.last_updated).toISOString()
+        : "",
     })),
     matchPairHistory: pairHistory.rows.map((row) => ({
       sessionId: row.session_id,
@@ -2177,7 +2488,7 @@ async function getSnapshotForSheetSync() {
       pairKey: row.pair_key,
       memberA: row.member_a,
       memberB: row.member_b,
-      createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
     })),
     generatedMatches: generatedMatches.rows.map((row) => ({
       matchDate: row.match_date,
@@ -2191,7 +2502,7 @@ async function getSnapshotForSheetSync() {
       levelDiff: toNumber(row.level_diff),
       status: row.status || "scheduled",
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
-      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : "",
     })),
     birthdayEvents: birthdayEvents.rows.map((row) => ({
       eventId: row.event_id,
@@ -2200,25 +2511,28 @@ async function getSnapshotForSheetSync() {
       description: row.description || "",
       createdBy: row.created_by || "admin",
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
-      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : "",
     })),
     birthdayEventBrands: birthdayEventBrands.rows.map((row) => ({
       id: toNumber(row.id),
       eventId: row.event_id,
       brandName: row.brand_name,
-      sortOrder: toNumber(row.sort_order)
+      sortOrder: toNumber(row.sort_order),
     })),
     birthdayEventDrinks: birthdayEventDrinks.rows.map((row) => ({
       drinkId: row.drink_id,
       eventId: row.event_id,
       brandName: row.brand_name,
       drinkName: row.drink_name,
-      price: row.price === null || row.price === undefined ? null : toNumber(row.price),
+      price:
+        row.price === null || row.price === undefined
+          ? null
+          : toNumber(row.price),
       imageUrl: row.image_url || "",
       isActive: row.is_active ? "TRUE" : "FALSE",
       sortOrder: toNumber(row.sort_order),
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
-      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : "",
     })),
     birthdayDrinkOrders: birthdayDrinkOrders.rows.map((row) => ({
       id: toNumber(row.id),
@@ -2227,8 +2541,8 @@ async function getSnapshotForSheetSync() {
       memberName: row.member_name,
       drinkId: row.drink_id,
       quantity: toNumber(row.quantity, 1),
-      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ""
-    }))
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : "",
+    })),
   };
 }
 
@@ -2257,7 +2571,7 @@ async function replaceAllDataFromSnapshot(snapshot) {
     for (const row of snapshot.config || []) {
       await client.query(`INSERT INTO settings(key, value) VALUES ($1,$2)`, [
         String(row.key || "").trim(),
-        String(row.value ?? "")
+        String(row.value ?? ""),
       ]);
     }
 
@@ -2278,8 +2592,8 @@ async function replaceAllDataFromSnapshot(snapshot) {
           normalizePhone(row.phoneNumber || row.phone_number),
           String(row.zaloId || row.zalo_id || "").trim(),
           String(row.createdAt || nowIso()),
-          String(row.updatedAt || nowIso())
-        ]
+          String(row.updatedAt || nowIso()),
+        ],
       );
     }
 
@@ -2302,8 +2616,8 @@ async function replaceAllDataFromSnapshot(snapshot) {
           String(row.createdBy || "admin"),
           String(row.createdAt || nowIso()),
           normalizeVoteStatus(row.voteStatus || row.vote_status),
-          String(row.bookingImageUrl || row.booking_image_url || "").trim()
-        ]
+          String(row.bookingImageUrl || row.booking_image_url || "").trim(),
+        ],
       );
     }
 
@@ -2319,9 +2633,11 @@ async function replaceAllDataFromSnapshot(snapshot) {
           String(row.memberId || "").trim(),
           memberName,
           safeLower(memberName),
-          String(row.status || "pending").trim().toLowerCase(),
-          row.respondedAt ? String(row.respondedAt) : null
-        ]
+          String(row.status || "pending")
+            .trim()
+            .toLowerCase(),
+          row.respondedAt ? String(row.respondedAt) : null,
+        ],
       );
     }
 
@@ -2332,8 +2648,8 @@ async function replaceAllDataFromSnapshot(snapshot) {
           String(row.pollId || "").trim(),
           String(row.sessionId || "").trim(),
           String(row.question || "").trim(),
-          String(row.createdAt || nowIso())
-        ]
+          String(row.createdAt || nowIso()),
+        ],
       );
     }
 
@@ -2351,8 +2667,8 @@ async function replaceAllDataFromSnapshot(snapshot) {
           memberName,
           safeLower(memberName),
           String(row.answer || "").trim(),
-          String(row.answeredAt || nowIso())
-        ]
+          String(row.answeredAt || nowIso()),
+        ],
       );
     }
 
@@ -2370,8 +2686,8 @@ async function replaceAllDataFromSnapshot(snapshot) {
           String(row.gender || "").trim(),
           String(row.present || "TRUE").toUpperCase() !== "FALSE",
           Math.round(toNumber(row.amount)),
-          String(row.note || "").trim()
-        ]
+          String(row.note || "").trim(),
+        ],
       );
     }
 
@@ -2388,8 +2704,8 @@ async function replaceAllDataFromSnapshot(snapshot) {
           String(row.memberName || "").trim(),
           Math.round(toNumber(row.amount)),
           String(row.note || "").trim(),
-          String(row.createdAt || nowIso())
-        ]
+          String(row.createdAt || nowIso()),
+        ],
       );
     }
 
@@ -2405,10 +2721,14 @@ async function replaceAllDataFromSnapshot(snapshot) {
           String(row.date || "").trim(),
           String(row.name || "").trim(),
           Math.round(toNumber(row.totalAmount)),
-          String(row.splitMethod || "equal").trim().toLowerCase() === "equal" ? "equal" : "equal",
+          String(row.splitMethod || "equal")
+            .trim()
+            .toLowerCase() === "equal"
+            ? "equal"
+            : "equal",
           String(row.note || "").trim(),
-          String(row.createdAt || nowIso())
-        ]
+          String(row.createdAt || nowIso()),
+        ],
       );
     }
 
@@ -2422,11 +2742,17 @@ async function replaceAllDataFromSnapshot(snapshot) {
           String(row.expenseId || "").trim(),
           String(row.memberId || "").trim(),
           String(row.memberName || "").trim(),
-          String(row.memberNameCi || row.memberName || "").trim().toLowerCase(),
+          String(row.memberNameCi || row.memberName || "")
+            .trim()
+            .toLowerCase(),
           Math.round(toNumber(row.shareAmount)),
-          String(row.splitMethod || "equal").trim().toLowerCase() === "equal" ? "equal" : "equal",
-          String(row.createdAt || nowIso())
-        ]
+          String(row.splitMethod || "equal")
+            .trim()
+            .toLowerCase() === "equal"
+            ? "equal"
+            : "equal",
+          String(row.createdAt || nowIso()),
+        ],
       );
     }
 
@@ -2442,8 +2768,8 @@ async function replaceAllDataFromSnapshot(snapshot) {
           Math.round(toNumber(row.totalDue)),
           Math.round(toNumber(row.totalPaid)),
           Math.round(toNumber(row.balance)),
-          String(row.lastUpdated || nowIso())
-        ]
+          String(row.lastUpdated || nowIso()),
+        ],
       );
     }
 
@@ -2459,8 +2785,8 @@ async function replaceAllDataFromSnapshot(snapshot) {
           String(row.pairKey || "").trim(),
           String(row.memberA || "").trim(),
           String(row.memberB || "").trim(),
-          String(row.createdAt || nowIso())
-        ]
+          String(row.createdAt || nowIso()),
+        ],
       );
     }
 
@@ -2484,8 +2810,8 @@ async function replaceAllDataFromSnapshot(snapshot) {
           Math.round(toNumber(row.levelDiff)),
           String(row.status || "scheduled"),
           String(row.createdAt || nowIso()),
-          String(row.updatedAt || nowIso())
-        ]
+          String(row.updatedAt || nowIso()),
+        ],
       );
     }
 
@@ -2502,8 +2828,8 @@ async function replaceAllDataFromSnapshot(snapshot) {
           String(row.description || "").trim(),
           String(row.createdBy || "admin").trim() || "admin",
           String(row.createdAt || nowIso()),
-          String(row.updatedAt || nowIso())
-        ]
+          String(row.updatedAt || nowIso()),
+        ],
       );
     }
 
@@ -2513,7 +2839,11 @@ async function replaceAllDataFromSnapshot(snapshot) {
         INSERT INTO birthday_event_brands(event_id, brand_name, sort_order)
         VALUES ($1,$2,$3)
         `,
-        [String(row.eventId || "").trim(), String(row.brandName || "").trim(), Math.round(toNumber(row.sortOrder))]
+        [
+          String(row.eventId || "").trim(),
+          String(row.brandName || "").trim(),
+          Math.round(toNumber(row.sortOrder)),
+        ],
       );
     }
 
@@ -2528,13 +2858,17 @@ async function replaceAllDataFromSnapshot(snapshot) {
           String(row.eventId || "").trim(),
           String(row.brandName || "").trim(),
           String(row.drinkName || "").trim(),
-          row.price === null || row.price === undefined || String(row.price).trim() === "" ? null : Math.round(toNumber(row.price)),
+          row.price === null ||
+          row.price === undefined ||
+          String(row.price).trim() === ""
+            ? null
+            : Math.round(toNumber(row.price)),
           String(row.imageUrl || row.image_url || "").trim(),
           String(row.isActive || "TRUE").toUpperCase() !== "FALSE",
           Math.round(toNumber(row.sortOrder)),
           String(row.createdAt || nowIso()),
-          String(row.updatedAt || nowIso())
-        ]
+          String(row.updatedAt || nowIso()),
+        ],
       );
     }
 
@@ -2550,8 +2884,8 @@ async function replaceAllDataFromSnapshot(snapshot) {
           String(row.memberName || "").trim(),
           String(row.drinkId || "").trim(),
           Math.max(1, Math.round(toNumber(row.quantity, 1))),
-          String(row.updatedAt || nowIso())
-        ]
+          String(row.updatedAt || nowIso()),
+        ],
       );
     }
 
@@ -2572,7 +2906,7 @@ function mapBasicSession(row) {
     courtFee: Math.round(toNumber(row.court_fee)),
     shuttleFee: Math.round(toNumber(row.shuttle_fee)),
     totalFee: Math.round(toNumber(row.total_fee)),
-    createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
   };
 }
 
@@ -2583,7 +2917,7 @@ function mapBasicShare(row) {
     memberName: row.member_name || "",
     shareAmount: Math.round(toNumber(row.share_amount)),
     paid: Boolean(row.paid),
-    paidAt: row.paid_at ? new Date(row.paid_at).toISOString() : ""
+    paidAt: row.paid_at ? new Date(row.paid_at).toISOString() : "",
   };
 }
 
@@ -2592,7 +2926,7 @@ async function getBasicLedger() {
     `
     SELECT * FROM basic_sessions
     ORDER BY play_date DESC, created_at DESC
-    `
+    `,
   );
   const sessions = sessionsResult.rows.map(mapBasicSession);
   if (!sessions.length) return [];
@@ -2603,7 +2937,7 @@ async function getBasicLedger() {
     WHERE basic_session_id = ANY($1::text[])
     ORDER BY member_name ASC
     `,
-    [sessions.map((session) => session.id)]
+    [sessions.map((session) => session.id)],
   );
 
   const sharesBySession = {};
@@ -2615,7 +2949,7 @@ async function getBasicLedger() {
 
   return sessions.map((session) => ({
     ...session,
-    shares: sharesBySession[session.id] || []
+    shares: sharesBySession[session.id] || [],
   }));
 }
 
@@ -2624,7 +2958,9 @@ function normalizeGuestNames(guestNames) {
   const seen = new Set();
   const names = [];
   raw.forEach((item) => {
-    const name = String(item || "").trim().replace(/\s+/g, " ");
+    const name = String(item || "")
+      .trim()
+      .replace(/\s+/g, " ");
     if (!name) return;
     if (name.length > 60) throw new Error("Tên người giao lưu quá dài.");
     const key = safeLower(name);
@@ -2635,7 +2971,14 @@ function normalizeGuestNames(guestNames) {
   return names;
 }
 
-async function createBasicSession({ date, court, courtFee, shuttleFee, memberIds, guestNames }) {
+async function createBasicSession({
+  date,
+  court,
+  courtFee,
+  shuttleFee,
+  memberIds,
+  guestNames,
+}) {
   const playDate = String(date || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(playDate)) {
     throw new Error("Ngày đánh phải có định dạng YYYY-MM-DD.");
@@ -2654,7 +2997,11 @@ async function createBasicSession({ date, court, courtFee, shuttleFee, memberIds
   if (totalFee <= 0) throw new Error("Tổng tiền phải lớn hơn 0.");
 
   const ids = Array.isArray(memberIds)
-    ? [...new Set(memberIds.map((id) => String(id || "").trim()).filter(Boolean))]
+    ? [
+        ...new Set(
+          memberIds.map((id) => String(id || "").trim()).filter(Boolean),
+        ),
+      ]
     : [];
   const guestsInput = normalizeGuestNames(guestNames);
 
@@ -2666,24 +3013,35 @@ async function createBasicSession({ date, court, courtFee, shuttleFee, memberIds
       FROM members
       WHERE active = TRUE AND member_id = ANY($1::text[])
       `,
-      [ids]
+      [ids],
     );
     if (membersResult.rows.length !== ids.length) {
       throw new Error("Có thành viên không tồn tại hoặc đã bị khóa.");
     }
-    members = membersResult.rows.map((row) => ({ memberId: row.member_id, name: row.name }));
+    members = membersResult.rows.map((row) => ({
+      memberId: row.member_id,
+      name: row.name,
+    }));
   }
 
-  const activeMembers = await query(`SELECT name FROM members WHERE active = TRUE`);
-  const activeNames = new Set(activeMembers.rows.map((row) => safeLower(row.name)));
+  const activeMembers = await query(
+    `SELECT name FROM members WHERE active = TRUE`,
+  );
+  const activeNames = new Set(
+    activeMembers.rows.map((row) => safeLower(row.name)),
+  );
   const guests = guestsInput.map((name) => {
     if (activeNames.has(safeLower(name))) {
-      throw new Error(`"${name}" đã có trong danh sách thành viên. Hãy chọn người đó thay vì thêm giao lưu.`);
+      throw new Error(
+        `"${name}" đã có trong danh sách thành viên. Hãy chọn người đó thay vì thêm giao lưu.`,
+      );
     }
     return { memberId: "", name };
   });
 
-  const people = [...members, ...guests].sort((a, b) => a.name.localeCompare(b.name, "vi", { sensitivity: "base" }));
+  const people = [...members, ...guests].sort((a, b) =>
+    a.name.localeCompare(b.name, "vi", { sensitivity: "base" }),
+  );
   if (!people.length) throw new Error("Chọn ít nhất một người tham gia.");
 
   const shares = computeEqualShares(totalFee, people.length);
@@ -2700,7 +3058,15 @@ async function createBasicSession({ date, court, courtFee, shuttleFee, memberIds
       )
       VALUES ($1,$2,$3,$4,$5,$6,$7)
       `,
-      [sessionId, playDate, safeCourt, safeCourtFee, safeShuttleFee, totalFee, ts]
+      [
+        sessionId,
+        playDate,
+        safeCourt,
+        safeCourtFee,
+        safeShuttleFee,
+        totalFee,
+        ts,
+      ],
     );
 
     for (let i = 0; i < people.length; i += 1) {
@@ -2712,7 +3078,13 @@ async function createBasicSession({ date, court, courtFee, shuttleFee, memberIds
         )
         VALUES ($1,$2,$3,$4,$5,FALSE)
         `,
-        [sessionId, member.memberId, member.name, safeLower(member.name), shares[i]]
+        [
+          sessionId,
+          member.memberId,
+          member.name,
+          safeLower(member.name),
+          shares[i],
+        ],
       );
     }
 
@@ -2729,7 +3101,8 @@ async function createBasicSession({ date, court, courtFee, shuttleFee, memberIds
 }
 
 async function setBasicSharePaid(shareId, paid) {
-  if (typeof paid !== "boolean") throw new Error("Thiếu trạng thái thanh toán.");
+  if (typeof paid !== "boolean")
+    throw new Error("Thiếu trạng thái thanh toán.");
   const id = String(shareId || "").trim();
   if (!/^\d+$/.test(id)) throw new Error("Không tìm thấy phần tiền.");
 
@@ -2741,7 +3114,7 @@ async function setBasicSharePaid(shareId, paid) {
     WHERE id = $1::bigint
     RETURNING *
     `,
-    [id, paid]
+    [id, paid],
   );
   if (!result.rows[0]) throw new Error("Không tìm thấy phần tiền.");
   return mapBasicShare(result.rows[0]);
@@ -2756,7 +3129,7 @@ async function settleBasicPerson({ memberId, memberName }) {
     id
       ? `SELECT id FROM basic_shares WHERE member_id = $1 LIMIT 1`
       : `SELECT id FROM basic_shares WHERE member_id = '' AND member_name_ci = $1 LIMIT 1`,
-    [id || safeLower(name)]
+    [id || safeLower(name)],
   );
   if (!existing.rows[0]) throw new Error("Không tìm thấy người này trong sổ.");
 
@@ -2772,7 +3145,7 @@ async function settleBasicPerson({ memberId, memberName }) {
         SET paid = TRUE, paid_at = NOW()
         WHERE member_id = '' AND member_name_ci = $1 AND paid = FALSE
       `,
-    [id || safeLower(name)]
+    [id || safeLower(name)],
   );
   return getBasicLedger();
 }
@@ -2782,7 +3155,7 @@ function vietnamToday() {
     timeZone: "Asia/Ho_Chi_Minh",
     year: "numeric",
     month: "2-digit",
-    day: "2-digit"
+    day: "2-digit",
   }).format(new Date());
 }
 
@@ -2791,24 +3164,24 @@ async function getPlaysForDate(date) {
   const [mainResult, basicResult] = await Promise.all([
     query(
       `SELECT date, time, location FROM sessions WHERE date = $1 AND COALESCE(vote_status, 'open') <> 'cancelled' ORDER BY time ASC, created_at ASC`,
-      [day]
+      [day],
     ),
     query(
       `SELECT play_date, court FROM basic_sessions WHERE play_date = $1 ORDER BY created_at ASC`,
-      [day]
-    )
+      [day],
+    ),
   ]);
   return {
     date: day,
     sessions: mainResult.rows.map((row) => ({
       date: row.date || "",
       time: row.time || "",
-      location: row.location || ""
+      location: row.location || "",
     })),
     basicSessions: basicResult.rows.map((row) => ({
       date: row.play_date || "",
-      court: row.court || ""
-    }))
+      court: row.court || "",
+    })),
   };
 }
 
@@ -2816,7 +3189,8 @@ async function upsertPushToken(memberId, token) {
   const id = String(memberId || "").trim();
   const value = String(token || "").trim();
   if (!id) throw new Error("Thiếu thành viên.");
-  if (!value || value.length > 4096) throw new Error("Token thông báo không hợp lệ.");
+  if (!value || value.length > 4096)
+    throw new Error("Token thông báo không hợp lệ.");
   await query(
     `
     INSERT INTO push_tokens(token, member_id, updated_at)
@@ -2824,7 +3198,7 @@ async function upsertPushToken(memberId, token) {
     ON CONFLICT (token) DO UPDATE
       SET member_id = EXCLUDED.member_id, updated_at = NOW()
     `,
-    [value, id]
+    [value, id],
   );
 }
 
@@ -2846,14 +3220,18 @@ async function getPushTokensForMemberKey(memberKey) {
     LEFT JOIN members m ON m.member_id = pt.member_id
     WHERE pt.member_id = $1 OR lower(m.name) = lower($1)
     `,
-    [key]
+    [key],
   );
   return result.rows.map((row) => row.token);
 }
 
 function pickEarlierPlay(mainRow, basicRow) {
   const mainItem = mainRow
-    ? { date: mainRow.date || "", time: mainRow.time || "", location: mainRow.location || "" }
+    ? {
+        date: mainRow.date || "",
+        time: mainRow.time || "",
+        location: mainRow.location || "",
+      }
     : null;
   const basicItem = basicRow
     ? { date: basicRow.date || "", time: "", location: basicRow.location || "" }
@@ -2865,18 +3243,19 @@ function pickEarlierPlay(mainRow, basicRow) {
   return {
     date: mainItem.date,
     time: mainItem.time,
-    location: mainItem.location || basicItem.location
+    location: mainItem.location || basicItem.location,
   };
 }
 
 async function getWeeklyReminderAudience() {
   const today = vietnamToday();
-  const [members, debts, tokenResult, mainResult, basicResult, unpaidResult] = await Promise.all([
-    getActiveFixedMembers(),
-    getDebts(),
-    query(`SELECT token, member_id FROM push_tokens`),
-    query(
-      `
+  const [members, debts, tokenResult, mainResult, basicResult, unpaidResult] =
+    await Promise.all([
+      getActiveFixedMembers(),
+      getDebts(),
+      query(`SELECT token, member_id FROM push_tokens`),
+      query(
+        `
       SELECT date, time, location
       FROM sessions
       WHERE date >= $1
@@ -2884,27 +3263,27 @@ async function getWeeklyReminderAudience() {
       ORDER BY date ASC, time ASC
       LIMIT 1
       `,
-      [today]
-    ),
-    query(
-      `
+        [today],
+      ),
+      query(
+        `
       SELECT play_date AS date, court AS location
       FROM basic_sessions
       WHERE play_date >= $1
       ORDER BY play_date ASC, created_at ASC
       LIMIT 1
       `,
-      [today]
-    ),
-    query(
-      `
+        [today],
+      ),
+      query(
+        `
       SELECT member_id, SUM(share_amount)::int AS unpaid
       FROM basic_shares
       WHERE paid = FALSE AND member_id <> ''
       GROUP BY member_id
-      `
-    )
-  ]);
+      `,
+      ),
+    ]);
 
   const debtById = new Map();
   const debtByName = new Map();
@@ -2912,7 +3291,12 @@ async function getWeeklyReminderAudience() {
     if (item.memberId) debtById.set(item.memberId, item.balance);
     debtByName.set(String(item.memberName || "").toLowerCase(), item.balance);
   });
-  const unpaidById = new Map(unpaidResult.rows.map((row) => [row.member_id, Math.round(toNumber(row.unpaid))]));
+  const unpaidById = new Map(
+    unpaidResult.rows.map((row) => [
+      row.member_id,
+      Math.round(toNumber(row.unpaid)),
+    ]),
+  );
   const tokensById = new Map();
   tokenResult.rows.forEach((row) => {
     const list = tokensById.get(row.member_id) || [];
@@ -2929,8 +3313,8 @@ async function getWeeklyReminderAudience() {
       debtBalance: debtById.has(member.memberId)
         ? debtById.get(member.memberId)
         : debtByName.get(String(member.name || "").toLowerCase()) || 0,
-      basicUnpaid: unpaidById.get(member.memberId) || 0
-    }))
+      basicUnpaid: unpaidById.get(member.memberId) || 0,
+    })),
   };
 }
 
@@ -2938,7 +3322,10 @@ async function addMemberCredit({ memberId, amount, note }) {
   const delta = Math.round(toNumber(amount));
   if (!delta) throw new Error("Số tiền thừa phải khác 0.");
   const safeMemberId = String(memberId || "").trim();
-  const memberResult = await query(`SELECT member_id, name FROM members WHERE member_id = $1`, [safeMemberId]);
+  const memberResult = await query(
+    `SELECT member_id, name FROM members WHERE member_id = $1`,
+    [safeMemberId],
+  );
   const member = memberResult.rows[0];
   if (!member) throw new Error("Không tìm thấy thành viên.");
   if (delta < 0) {
@@ -2950,7 +3337,14 @@ async function addMemberCredit({ memberId, amount, note }) {
     INSERT INTO member_credits(credit_id, member_id, member_name, amount, note, created_at)
     VALUES ($1,$2,$3,$4,$5,$6)
     `,
-    [crypto.randomUUID(), member.member_id, member.name, delta, String(note || "").trim(), nowIso()]
+    [
+      crypto.randomUUID(),
+      member.member_id,
+      member.name,
+      delta,
+      String(note || "").trim(),
+      nowIso(),
+    ],
   );
   return getMemberCreditSummary();
 }
@@ -2958,7 +3352,7 @@ async function addMemberCredit({ memberId, amount, note }) {
 async function getMemberCreditBalanceById(memberId) {
   const result = await query(
     `SELECT COALESCE(SUM(amount), 0)::int AS balance FROM member_credits WHERE member_id = $1`,
-    [String(memberId || "").trim()]
+    [String(memberId || "").trim()],
   );
   return Math.round(toNumber(result.rows[0]?.balance));
 }
@@ -2971,7 +3365,7 @@ async function getMemberCreditBalanceByName(memberName) {
     JOIN members m ON m.member_id = c.member_id
     WHERE LOWER(m.name) = LOWER($1)
     `,
-    [String(memberName || "").trim()]
+    [String(memberName || "").trim()],
   );
   return Math.round(toNumber(result.rows[0]?.balance));
 }
@@ -2985,13 +3379,13 @@ async function getMemberCreditSummary() {
       HAVING SUM(amount) <> 0
       ORDER BY MAX(member_name) ASC
     `),
-    query(`SELECT * FROM member_credits ORDER BY created_at DESC LIMIT 40`)
+    query(`SELECT * FROM member_credits ORDER BY created_at DESC LIMIT 40`),
   ]);
   return {
     balances: balances.rows.map((row) => ({
       memberId: row.member_id,
       memberName: row.member_name,
-      balance: Math.round(toNumber(row.balance))
+      balance: Math.round(toNumber(row.balance)),
     })),
     entries: entries.rows.map((row) => ({
       creditId: row.credit_id,
@@ -2999,8 +3393,8 @@ async function getMemberCreditSummary() {
       memberName: row.member_name,
       amount: Math.round(toNumber(row.amount)),
       note: row.note || "",
-      createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
-    }))
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
+    })),
   };
 }
 
@@ -3009,7 +3403,7 @@ async function deleteBasicSession(sessionId) {
   if (!id) throw new Error("Thiếu mã buổi.");
   const result = await query(
     `DELETE FROM basic_sessions WHERE basic_session_id = $1 RETURNING basic_session_id`,
-    [id]
+    [id],
   );
   if (!result.rows[0]) throw new Error("Không tìm thấy buổi.");
   return { id };
@@ -3072,5 +3466,5 @@ module.exports = {
   getPlaysForDate,
   addMemberCredit,
   getMemberCreditSummary,
-  getMemberCreditBalanceByName
+  getMemberCreditBalanceByName,
 };

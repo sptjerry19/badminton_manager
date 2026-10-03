@@ -43,10 +43,25 @@
         <p class="login-lead">
           Đăng nhập thành viên, đăng ký mới, hoặc vào bằng mật khẩu admin.
         </p>
-        <div class="login-segment" id="authModeSegment" role="tablist" aria-label="Cách đăng nhập">
-          <button type="button" class="login-segment-btn is-on" data-mode="login">Đăng nhập</button>
-          <button type="button" class="login-segment-btn" data-mode="register">Đăng ký</button>
-          <button type="button" class="login-segment-btn" data-mode="admin">Admin</button>
+        <div
+          class="login-segment"
+          id="authModeSegment"
+          role="tablist"
+          aria-label="Cách đăng nhập"
+        >
+          <button
+            type="button"
+            class="login-segment-btn is-on"
+            data-mode="login"
+          >
+            Đăng nhập
+          </button>
+          <button type="button" class="login-segment-btn" data-mode="register">
+            Đăng ký
+          </button>
+          <button type="button" class="login-segment-btn" data-mode="admin">
+            Admin
+          </button>
         </div>
         <form id="loginForm" class="login-stack">
           <div id="loginFields" class="login-stack">
@@ -70,7 +85,12 @@
           <div id="registerFields" class="login-stack" hidden>
             <label class="login-field">
               <span>Họ tên</span>
-              <input id="registerName" name="name" autocomplete="name" placeholder="Họ và tên" />
+              <input
+                id="registerName"
+                name="name"
+                autocomplete="name"
+                placeholder="Họ và tên"
+              />
             </label>
             <!-- Chrome hay autofill email vào field thứ 2 của form đăng ký; decoy nhận email đó. -->
             <input
@@ -96,7 +116,11 @@
           <div id="adminFields" class="login-stack" hidden>
             <label class="login-field">
               <span>Mật khẩu admin</span>
-              <input id="passwordInput" type="password" autocomplete="current-password" />
+              <input
+                id="passwordInput"
+                type="password"
+                autocomplete="current-password"
+              />
             </label>
           </div>
           <button type="submit" class="login-submit">
@@ -149,9 +173,15 @@
             <button id="adminTabGamesBtn" type="button" class="tab">
               Trận
             </button>
-            <button id="adminTabToolsBtn" type="button" class="tab">Công cụ</button>
-            <button id="adminTabCreditBtn" type="button" class="tab">Tiền thừa</button>
-            <button id="adminTabTournamentBtn" type="button" class="tab">Giải đấu</button>
+            <button id="adminTabToolsBtn" type="button" class="tab">
+              Công cụ
+            </button>
+            <button id="adminTabCreditBtn" type="button" class="tab">
+              Tiền thừa
+            </button>
+            <button id="adminTabTournamentBtn" type="button" class="tab">
+              Giải đấu
+            </button>
             <button id="adminTabBasicBtn" type="button" class="tab">
               <a href="/basic">Cơ bản</a>
             </button>
@@ -438,8 +468,12 @@
                       <th class="attendance-col-extra text-left">Loại</th>
                       <th class="text-left">Level</th>
                       <th class="text-left">Trạng thái</th>
-                      <th class="attendance-col-extra text-left">Trả lời poll</th>
-                      <th class="attendance-col-extra text-left">Thời gian phản hồi</th>
+                      <th class="attendance-col-extra text-left">
+                        Trả lời poll
+                      </th>
+                      <th class="attendance-col-extra text-left">
+                        Thời gian phản hồi
+                      </th>
                     </tr>
                   </thead>
                   <tbody id="attendanceTableBody"></tbody>
@@ -858,16 +892,43 @@
           <div id="creditTabContent" class="hidden space-y-5">
             <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
               <h3 class="mb-3 text-lg font-semibold">Tiền thừa</h3>
-              <p class="mb-3 text-sm text-slate-500">Khi thành viên chuyển dư, ghi phần thừa vào đây. Số còn lại hiện trên màn công nợ của họ.</p>
-              <form id="creditForm" class="grid grid-cols-1 gap-3 sm:grid-cols-4">
-                <select id="creditMemberSelect" class="rounded-lg border border-slate-300 px-3 py-2" required></select>
-                <input id="creditAmountInput" inputmode="numeric" placeholder="Số tiền" class="rounded-lg border border-slate-300 px-3 py-2" required />
-                <select id="creditDirectionInput" class="rounded-lg border border-slate-300 px-3 py-2">
+              <p class="mb-3 text-sm text-slate-500">
+                Khi thành viên chuyển dư, ghi phần thừa vào đây. Số còn lại hiện
+                trên màn công nợ của họ.
+              </p>
+              <form
+                id="creditForm"
+                class="grid grid-cols-1 gap-3 sm:grid-cols-4"
+              >
+                <select
+                  id="creditMemberSelect"
+                  class="rounded-lg border border-slate-300 px-3 py-2"
+                  required
+                ></select>
+                <input
+                  id="creditAmountInput"
+                  inputmode="numeric"
+                  placeholder="Số tiền"
+                  class="rounded-lg border border-slate-300 px-3 py-2"
+                  required
+                />
+                <select
+                  id="creditDirectionInput"
+                  class="rounded-lg border border-slate-300 px-3 py-2"
+                >
                   <option value="add">Ghi tiền thừa</option>
                   <option value="use">Trừ tiền thừa</option>
                 </select>
-                <input id="creditNoteInput" placeholder="Ghi chú" class="rounded-lg border border-slate-300 px-3 py-2" />
-                <button class="rounded-lg bg-indigo-600 px-4 py-2 text-white sm:col-span-4">Lưu</button>
+                <input
+                  id="creditNoteInput"
+                  placeholder="Ghi chú"
+                  class="rounded-lg border border-slate-300 px-3 py-2"
+                />
+                <button
+                  class="rounded-lg bg-indigo-600 px-4 py-2 text-white sm:col-span-4"
+                >
+                  Lưu
+                </button>
               </form>
               <p id="creditMessage" class="mt-2 text-sm"></p>
               <div class="mt-4 overflow-x-auto">
@@ -900,28 +961,32 @@
 
         <section id="userSection" class="hidden space-y-5">
           <nav class="tabs" aria-label="Mục người dùng">
-            <button id="userTabHomeBtn" type="button" class="tab is-active">Chung</button>
-            <button id="userTabTournamentBtn" type="button" class="tab">Giải đấu</button>
+            <button id="userTabHomeBtn" type="button" class="tab is-active">
+              Chung
+            </button>
+            <button id="userTabTournamentBtn" type="button" class="tab">
+              Giải đấu
+            </button>
           </nav>
 
           <div id="userHomeTabContent" class="space-y-5">
-          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-            <h3 class="mb-3 text-lg font-semibold">
-              Buổi upcoming (bắt buộc phản hồi)
-            </h3>
-            <div id="upcomingInfo" class="mb-3 text-sm text-slate-600"></div>
-            <p class="text-sm text-slate-500">
-              Khi có buổi cần phản hồi, hệ thống sẽ tự bật popup để bạn chọn
-              nhanh bằng nút.
-            </p>
-          </section>
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-3 text-lg font-semibold">
+                Buổi upcoming (bắt buộc phản hồi)
+              </h3>
+              <div id="upcomingInfo" class="mb-3 text-sm text-slate-600"></div>
+              <p class="text-sm text-slate-500">
+                Khi có buổi cần phản hồi, hệ thống sẽ tự bật popup để bạn chọn
+                nhanh bằng nút.
+              </p>
+            </section>
 
-          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-            <h3 class="mb-3 text-lg font-semibold">Danh sách vote sân</h3>
-            <div id="userVoteList" class="vote-list space-y-3"></div>
-          </section>
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-3 text-lg font-semibold">Danh sách vote sân</h3>
+              <div id="userVoteList" class="vote-list space-y-3"></div>
+            </section>
 
-          <!-- <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+            <!-- <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
             <h3 class="mb-3 text-lg font-semibold">Birthday Drink Event</h3>
             <div class="mb-3 flex flex-wrap items-center gap-2">
               <select id="birthdayUserEventSelect" class="rounded-lg border border-slate-300 px-3 py-2 text-sm"></select>
@@ -933,43 +998,43 @@
             <p id="birthdayUserMessage" class="mt-2 text-sm"></p>
           </section> -->
 
-          <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-            <h3 class="mb-3 text-lg font-semibold">Công nợ cá nhân</h3>
-            <div id="myDebtCard" class="text-sm"></div>
-            <div id="myDebtQrActions" class="mt-3"></div>
-          </section>
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-3 text-lg font-semibold">Công nợ cá nhân</h3>
+              <div id="myDebtCard" class="text-sm"></div>
+              <div id="myDebtQrActions" class="mt-3"></div>
+            </section>
 
-          <section id="userBasic" class="basic-embed">
-            <div class="summary bezel">
-              <div class="core summary-core">
-                <p class="eyebrow">Chưa thu</p>
-                <strong id="userUnpaidValue">0đ</strong>
-                <p id="userUnpaidMeta">Chưa có buổi nào.</p>
-              </div>
-            </div>
-            <p id="userViewerNote" class="note">
-              Bạn đang xem sổ sân. Chỉ admin nhập buổi và đánh dấu thanh toán.
-            </p>
-            <div id="userSessionList" class="ledger"></div>
-            <section id="userPeopleTotals" class="totals bezel" hidden>
-              <div class="core">
-                <p class="eyebrow">Tổng kết</p>
-                <h2>Tiền cần thanh toán</h2>
-                <div class="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Thành viên</th>
-                        <th>Cần thanh toán</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody id="userPeopleTotalsBody"></tbody>
-                  </table>
+            <section id="userBasic" class="basic-embed">
+              <div class="summary bezel">
+                <div class="core summary-core">
+                  <p class="eyebrow">Chưa thu</p>
+                  <strong id="userUnpaidValue">0đ</strong>
+                  <p id="userUnpaidMeta">Chưa có buổi nào.</p>
                 </div>
               </div>
+              <p id="userViewerNote" class="note">
+                Bạn đang xem sổ sân. Chỉ admin nhập buổi và đánh dấu thanh toán.
+              </p>
+              <div id="userSessionList" class="ledger"></div>
+              <section id="userPeopleTotals" class="totals bezel" hidden>
+                <div class="core">
+                  <p class="eyebrow">Tổng kết</p>
+                  <h2>Tiền cần thanh toán</h2>
+                  <div class="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Thành viên</th>
+                          <th>Cần thanh toán</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody id="userPeopleTotalsBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
             </section>
-          </section>
           </div>
 
           <div id="userTournamentTabContent" class="hidden space-y-5">
@@ -1083,7 +1148,11 @@
           Đóng
         </button>
         <h3 class="pr-16 text-lg font-semibold">Ảnh đặt sân</h3>
-        <img id="bookingImagePreview" class="mt-3 max-h-[75vh] w-full rounded-lg object-contain" alt="Ảnh đặt sân" />
+        <img
+          id="bookingImagePreview"
+          class="mt-3 max-h-[75vh] w-full rounded-lg object-contain"
+          alt="Ảnh đặt sân"
+        />
       </div>
     </div>
 
