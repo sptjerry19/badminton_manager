@@ -639,6 +639,35 @@
   color: #be123c;
 }
 
+.tp-modal .tp-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.tp-modal .tp-field {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tp-modal .tp-select-wrap {
+  position: relative;
+  display: block;
+}
+
+.tp-modal .tp-control,
+.tp-modal select.tp-control {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #e5e5e0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  font: inherit;
+  font-weight: 500;
+}
+
 @media (max-width: 520px) {
   .tp-candidate {
     align-items: stretch;

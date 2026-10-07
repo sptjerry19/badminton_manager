@@ -28,7 +28,9 @@
     partnerEventId: "",
     catalogView: "list",
     catalogSelectedId: "",
-    catalogEditingId: ""
+    catalogEditingId: "",
+    adminPairMemberId: "",
+    adminPairEventId: ""
   };
 
   function qs(sel) {
@@ -111,13 +113,13 @@
     }
   }
 
-  function fillProfileEvents() {
-    const box = qs("#tpProfileEvents");
+  function fillEventCheckboxes(containerId, inputName = "eventId") {
+    const box = qs(`#${containerId}`);
     if (!box) return;
     box.innerHTML = ["MD", "XD", "WD"]
       .map(
         (id) => `<label class="tp-event-option">
-          <input type="checkbox" name="eventId" value="${id}" />
+          <input type="checkbox" name="${inputName}" value="${id}" />
           <span class="tp-event-option-ui">
             <span class="tp-event-option-mark" aria-hidden="true"></span>
             <span class="tp-event-option-text">${EVENT_NAMES[id]}</span>
@@ -125,6 +127,27 @@
         </label>`
       )
       .join("");
+  }
+
+  function fillProfileEvents() {
+    fillEventCheckboxes("tpProfileEvents", "eventId");
+  }
+
+  function fillAdminRegisterForm() {
+    fillLevelSelect(qs("#tpAdminRegLevel"));
+    fillEventCheckboxes("tpAdminRegEvents", "adminEventId");
+    const select = qs("#tpAdminRegMemberSelect");
+    if (!select) return;
+    const registeredIds = new Set((state.data?.players || []).map((item) => item.memberId));
+    const members = (state.data?.clubMembers || []).filter((item) => !registeredIds.has(item.memberId));
+    select.innerHTML =
+      `<option value="">-- Tạo mới / nhập tay --</option>` +
+      members
+        .map(
+          (item) =>
+            `<option value="${escapeHtml(item.memberId)}">${escapeHtml(item.name)}${item.gender ? ` · ${escapeHtml(item.gender)}` : ""} · Lv${item.level}</option>`
+        )
+        .join("");
   }
 
   function ensureModal() {
@@ -167,6 +190,160 @@
       }
     });
     return modal;
+  }
+
+  function ensureAdminPairModal() {
+    let modal = document.getElementById("tpAdminPairModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = "tpAdminPairModal";
+    modal.className = "tp-modal";
+    modal.innerHTML = `
+      <div class="tp-modal-card" role="dialog" aria-modal="true">
+        <div class="tp-modal-head">
+          <div>
+            <p class="tp-modal-eyebrow">Admin</p>
+            <h3>Ghép cặp VĐV</h3>
+          </div>
+          <button id="tpAdminPairClose" class="tp-modal-close" type="button" aria-label="Đóng">×</button>
+        </div>
+        <div class="tp-stack">
+          <label class="tp-field">
+            <span>Nội dung</span>
+            <span class="tp-select-wrap">
+              <select id="tpAdminPairEvent" class="tp-control">
+                <option value="MD">Đôi nam</option>
+                <option value="XD">Đôi nam nữ</option>
+                <option value="WD">Đôi nữ</option>
+              </select>
+            </span>
+          </label>
+          <label class="tp-field">
+            <span>Thành viên A</span>
+            <span class="tp-select-wrap"><select id="tpAdminPairMemberA" class="tp-control"></select></span>
+          </label>
+          <div id="tpAdminPairHint" class="tp-modal-hint"></div>
+          <div id="tpAdminPairCandidates" class="tp-candidate-list"></div>
+          <p id="tpAdminPairMessage" class="tp-msg"></p>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector("#tpAdminPairClose").addEventListener("click", () => {
+      modal.classList.remove("is-open");
+    });
+    modal.querySelector("#tpAdminPairEvent").addEventListener("change", () => {
+      loadAdminPairCandidates().catch((error) => {
+        const msg = modal.querySelector("#tpAdminPairMessage");
+        msg.textContent = error.message;
+        msg.classList.add("is-error");
+      });
+    });
+    modal.querySelector("#tpAdminPairMemberA").addEventListener("change", () => {
+      loadAdminPairCandidates().catch((error) => {
+        const msg = modal.querySelector("#tpAdminPairMessage");
+        msg.textContent = error.message;
+        msg.classList.add("is-error");
+      });
+    });
+    modal.querySelector("#tpAdminPairCandidates").addEventListener("click", async (event) => {
+      const btn = event.target.closest("[data-action='admin-invite']");
+      if (!btn) return;
+      try {
+        await api("/api/tournament/pairs/admin", {
+          method: "POST",
+          body: {
+            eventId: modal.querySelector("#tpAdminPairEvent").value,
+            memberAId: modal.querySelector("#tpAdminPairMemberA").value,
+            memberBId: btn.dataset.member
+          }
+        });
+        modal.classList.remove("is-open");
+        await refresh();
+      } catch (error) {
+        const msg = modal.querySelector("#tpAdminPairMessage");
+        msg.textContent = error.message;
+        msg.classList.add("is-error");
+      }
+    });
+    return modal;
+  }
+
+  async function openAdminPairModal(prefillMemberId = "", prefillEventId = "") {
+    const modal = ensureAdminPairModal();
+    const memberSelect = modal.querySelector("#tpAdminPairMemberA");
+    const eventSelect = modal.querySelector("#tpAdminPairEvent");
+    const approved = (state.data?.players || []).filter((item) => item.status === "approved");
+    memberSelect.innerHTML = approved.length
+      ? approved
+          .map(
+            (item) =>
+              `<option value="${escapeHtml(item.memberId)}">${escapeHtml(item.name)} · ${escapeHtml(item.gender || "-")} · Lv${item.level}</option>`
+          )
+          .join("")
+      : `<option value="">Chưa có VĐV đã duyệt</option>`;
+    if (prefillMemberId) memberSelect.value = prefillMemberId;
+    if (prefillEventId) eventSelect.value = prefillEventId;
+    else if (prefillMemberId) {
+      const player = approved.find((item) => item.memberId === prefillMemberId);
+      const firstOpen = (player?.eventIds || []).find((eventId) => {
+        return !(player.pairs || []).some(
+          (pair) => pair.eventId === eventId && ["pending", "locked"].includes(pair.status)
+        );
+      });
+      if (firstOpen) eventSelect.value = firstOpen;
+    }
+    modal.classList.add("is-open");
+    modal.querySelector("#tpAdminPairMessage").textContent = "";
+    modal.querySelector("#tpAdminPairMessage").classList.remove("is-error");
+    await loadAdminPairCandidates();
+  }
+
+  async function loadAdminPairCandidates() {
+    const modal = ensureAdminPairModal();
+    const eventId = modal.querySelector("#tpAdminPairEvent")?.value || "";
+    const memberId = modal.querySelector("#tpAdminPairMemberA")?.value || "";
+    const box = modal.querySelector("#tpAdminPairCandidates");
+    const hint = modal.querySelector("#tpAdminPairHint");
+    const msg = modal.querySelector("#tpAdminPairMessage");
+    box.innerHTML = "";
+    msg.textContent = "Đang tải...";
+    msg.classList.remove("is-error");
+    if (!memberId || !eventId) {
+      msg.textContent = "Chọn thành viên và nội dung.";
+      return;
+    }
+    const event = (state.data?.events || []).find((item) => item.eventId === eventId);
+    hint.innerHTML = `<span class="tp-modal-hint-label">Rule tổng level</span>
+      <strong>${event?.minLevelSum ?? "?"} – ${event?.maxLevelSum ?? "?"}</strong>
+      <span class="tp-modal-hint-text">Admin khóa cặp ngay, không cần đối phương chấp nhận.</span>`;
+    const data = await api(
+      `/api/tournament/pairs/admin-candidates?memberId=${encodeURIComponent(memberId)}&eventId=${encodeURIComponent(eventId)}`,
+      { loading: true }
+    );
+    if (!(data.candidates || []).length) {
+      box.innerHTML = `<p class="tp-modal-empty">Không còn ứng viên phù hợp.</p>`;
+      msg.textContent = "";
+      return;
+    }
+    box.innerHTML = data.candidates
+      .map(
+        (item) => `<article class="tp-candidate">
+          <div class="tp-candidate-main">
+            <div class="tp-candidate-avatar" aria-hidden="true">${escapeHtml(String(item.name || "?").slice(0, 1).toUpperCase())}</div>
+            <div class="tp-candidate-meta">
+              <strong>${escapeHtml(item.name)}</strong>
+              <div class="tp-candidate-tags">
+                <span class="tp-chip">${escapeHtml(item.gender || "-")}</span>
+                <span class="tp-chip">Lv${item.level} · ${escapeHtml(item.levelLabel || "")}</span>
+                <span class="tp-chip tp-chip-sum">Tổng ${item.levelSum}</span>
+              </div>
+            </div>
+          </div>
+          <button class="tp-modal-invite" type="button" data-action="admin-invite" data-member="${escapeHtml(item.memberId)}">Khóa cặp</button>
+        </article>`
+      )
+      .join("");
+    msg.textContent = "";
   }
 
   function template() {
@@ -279,9 +456,52 @@
             <div class="tp-row" style="justify-content:space-between">
               <h3>VĐV đăng ký</h3>
               <div class="tp-row">
+                <button class="tp-btn tp-btn-sm" type="button" data-action="admin-register-toggle">+ Đăng ký VĐV</button>
+                <button class="tp-btn tp-btn-sm tp-ok" type="button" data-action="admin-pair-open">Ghép cặp</button>
                 <label class="tp-check"><input id="tpRegistrationOpen" type="checkbox" /><span>Mở đăng ký</span></label>
                 <label class="tp-check"><input id="tpPairingOpen" type="checkbox" /><span>Mở ghép đôi</span></label>
               </div>
+            </div>
+            <div id="tpAdminRegisterBox" class="tp-subcard" hidden>
+              <h4>Admin đăng ký VĐV</h4>
+              <p class="tp-note">Có thể chọn member có sẵn hoặc tạo mới. Hồ sơ sẽ được duyệt ngay.</p>
+              <form id="tpAdminRegisterForm" class="tp-stack">
+                <label class="tp-field">
+                  <span>Member có sẵn (tuỳ chọn)</span>
+                  <span class="tp-select-wrap">
+                    <select id="tpAdminRegMemberSelect" class="tp-control">
+                      <option value="">-- Tạo mới / nhập tay --</option>
+                    </select>
+                  </span>
+                </label>
+                <div class="tp-grid">
+                  <label class="tp-field"><span>Họ tên</span><input id="tpAdminRegName" class="tp-control" required /></label>
+                  <label class="tp-field"><span>SĐT</span><input id="tpAdminRegPhone" class="tp-control" type="tel" required /></label>
+                  <label class="tp-field">
+                    <span>Giới tính</span>
+                    <span class="tp-select-wrap">
+                      <select id="tpAdminRegGender" class="tp-control" required>
+                        <option value="">Chọn</option>
+                        <option value="Nam">Nam</option>
+                        <option value="Nữ">Nữ</option>
+                      </select>
+                    </span>
+                  </label>
+                  <label class="tp-field">
+                    <span>Trình độ</span>
+                    <span class="tp-select-wrap"><select id="tpAdminRegLevel" class="tp-control" required></select></span>
+                  </label>
+                </div>
+                <div class="tp-field tp-events-field">
+                  <span>Nội dung <em>(chọn 2)</em></span>
+                  <div id="tpAdminRegEvents" class="tp-event-options"></div>
+                </div>
+                <div class="tp-row">
+                  <button class="tp-btn" type="submit">Lưu đăng ký</button>
+                  <button class="tp-btn tp-ghost" type="button" data-action="admin-register-toggle">Đóng</button>
+                </div>
+                <p id="tpAdminRegisterMessage" class="tp-msg"></p>
+              </form>
             </div>
             <div class="tp-table-wrap"><table><thead><tr>
               <th>Tên</th><th>GT</th><th>Level</th><th>SĐT</th><th>Nội dung</th><th>Cặp</th><th>Status</th><th></th>
@@ -433,6 +653,7 @@
     const pairOpen = qs("#tpPairingOpen");
     if (regOpen) regOpen.checked = Boolean(state.data?.settings?.registrationOpen);
     if (pairOpen) pairOpen.checked = Boolean(state.data?.settings?.pairingOpen);
+    fillAdminRegisterForm();
     body.innerHTML = (state.data?.players || [])
       .map((player) => {
         const events = (player.eventIds || []).map((id) => EVENT_NAMES[id] || id).join(", ");
@@ -444,7 +665,17 @@
             )
             .join("<br>") || "-";
         const status = player.status || "pending";
+        const canPair =
+          status === "approved" &&
+          (player.eventIds || []).some((eventId) => {
+            return !(player.pairs || []).some(
+              (pair) => pair.eventId === eventId && ["pending", "locked"].includes(pair.status)
+            );
+          });
         const actions = [
+          canPair
+            ? `<button class="tp-btn tp-ok tp-btn-sm" type="button" data-action="admin-pair-open" data-member="${escapeHtml(player.memberId)}">Ghép cặp</button>`
+            : "",
           status !== "approved"
             ? `<button class="tp-btn tp-ok tp-btn-sm" type="button" data-action="approve-player" data-member="${escapeHtml(player.memberId)}">Duyệt</button>`
             : "",
@@ -771,6 +1002,32 @@
 
   function bind() {
     state.root.addEventListener("submit", async (event) => {
+      if (event.target.id === "tpAdminRegisterForm") {
+        event.preventDefault();
+        const eventIds = [
+          ...state.root.querySelectorAll('#tpAdminRegEvents input[name="adminEventId"]:checked')
+        ].map((input) => input.value);
+        try {
+          await api("/api/tournament/players", {
+            method: "POST",
+            body: {
+              memberId: qs("#tpAdminRegMemberSelect")?.value || "",
+              name: qs("#tpAdminRegName")?.value.trim() || "",
+              phoneNumber: qs("#tpAdminRegPhone")?.value.trim() || "",
+              gender: qs("#tpAdminRegGender")?.value || "",
+              level: Number(qs("#tpAdminRegLevel")?.value || 5),
+              eventIds
+            }
+          });
+          setMsg("#tpAdminRegisterMessage", "Đã đăng ký VĐV (đã duyệt).");
+          setMsg("#tpPlayersMessage", "Đã đăng ký thêm VĐV.");
+          qs("#tpAdminRegisterBox").hidden = true;
+          await refresh();
+        } catch (error) {
+          setMsg("#tpAdminRegisterMessage", error.message, true);
+        }
+        return;
+      }
       if (event.target.id === "tpCatalogForm") {
         event.preventDefault();
         const tournamentId = qs("#tpCatalogFormId")?.value.trim() || "";
@@ -929,6 +1186,20 @@
           setMsg("#tpMatchesMessage", "Đã lưu tỉ số.");
           return refresh();
         }
+        if (action === "admin-register-toggle") {
+          const box = qs("#tpAdminRegisterBox");
+          if (!box) return;
+          box.hidden = !box.hidden;
+          if (!box.hidden) {
+            fillAdminRegisterForm();
+            setMsg("#tpAdminRegisterMessage", "");
+          }
+          return;
+        }
+        if (action === "admin-pair-open") {
+          await openAdminPairModal(btn.dataset.member || "", btn.dataset.event || "");
+          return;
+        }
         if (action === "approve-player" || action === "block-player") {
           const status = action === "approve-player" ? "approved" : "blocked";
           await api(`/api/tournament/players/${encodeURIComponent(btn.dataset.member)}`, {
@@ -956,6 +1227,15 @@
 
     state.root.addEventListener("change", async (event) => {
       const target = event.target;
+      if (target instanceof HTMLSelectElement && target.id === "tpAdminRegMemberSelect") {
+        const member = (state.data?.clubMembers || []).find((item) => item.memberId === target.value);
+        if (!member) return;
+        qs("#tpAdminRegName").value = member.name || "";
+        qs("#tpAdminRegPhone").value = member.phoneNumber || "";
+        qs("#tpAdminRegGender").value = member.gender || "";
+        qs("#tpAdminRegLevel").value = String(member.level || 5);
+        return;
+      }
       if (!(target instanceof HTMLInputElement)) return;
       if (target.id === "tpRegistrationOpen" || target.id === "tpPairingOpen") {
         try {
@@ -1036,8 +1316,10 @@
     state.root = container;
     container.innerHTML = template();
     ensureModal();
+    ensureAdminPairModal();
     fillLevelSelect(qs("#tpProfileLevel"));
     fillProfileEvents();
+    fillAdminRegisterForm();
     bind();
     await refresh();
   }
