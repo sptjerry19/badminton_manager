@@ -1144,11 +1144,9 @@ app.post("/api/push/subscribe", requireAuth, async (req, res) => {
   try {
     const memberName = String(req.session.memberName || "").trim();
     if (!memberName) {
-      return res
-        .status(400)
-        .json({
-          message: "Hãy đăng nhập bằng tài khoản thành viên để bật thông báo.",
-        });
+      return res.status(400).json({
+        message: "Hãy đăng nhập bằng tài khoản thành viên để bật thông báo.",
+      });
     }
     const members = await getMembers();
     const member = members.find(
@@ -1746,7 +1744,11 @@ app.post(
   async (req, res) => {
     try {
       const player = await adminRegisterPlayer(req.body || {});
-      return res.json({ ok: true, player, message: "Đã đăng ký VĐV (đã duyệt)." });
+      return res.json({
+        ok: true,
+        player,
+        message: "Đã đăng ký VĐV (đã duyệt).",
+      });
     } catch (error) {
       return res.status(400).json({ message: error.message });
     }
@@ -1856,7 +1858,11 @@ app.post(
         memberAId: req.body?.memberAId,
         memberBId: req.body?.memberBId,
       });
-      return res.json({ ok: true, pair, message: "Đã khóa cặp do admin ghép." });
+      return res.json({
+        ok: true,
+        pair,
+        message: "Đã khóa cặp do admin ghép.",
+      });
     } catch (error) {
       return res.status(400).json({ message: error.message });
     }
