@@ -219,13 +219,6 @@ async function completeTournamentProfile(memberName, payload) {
     throw new Error("Cần chọn đúng 2 trong 3 nội dung.");
   }
 
-  if (gender === "Nam" && eventIds.includes("WD")) {
-    throw new Error("Nam không thể đăng ký Đôi nữ.");
-  }
-  if (gender === "Nữ" && eventIds.includes("MD")) {
-    throw new Error("Nữ không thể đăng ký Đôi nam.");
-  }
-
   const nextName = String(payload?.name || member.name).trim() || member.name;
   await updateMemberProfile(member.memberId, {
     name: nextName,
@@ -270,18 +263,6 @@ async function completeTournamentProfile(memberName, payload) {
     member: updated,
     registration: await getRegistration(updated.memberId)
   };
-}
-
-function genderOkForEvent(genderRule, genderA, genderB) {
-  const a = normalizeGender(genderA);
-  const b = normalizeGender(genderB);
-  if (!a || !b) return false;
-  if (genderRule === "MM") return a === "Nam" && b === "Nam";
-  if (genderRule === "FF") return a === "Nữ" && b === "Nữ";
-  if (genderRule === "MF") {
-    return (a === "Nam" && b === "Nữ") || (a === "Nữ" && b === "Nam");
-  }
-  return false;
 }
 
 async function getActivePairMemberIds(eventId) {
@@ -347,7 +328,6 @@ async function listPairCandidates(memberName, eventId) {
 
   return result.rows
     .filter((row) => !busy.has(row.member_id))
-    .filter((row) => genderOkForEvent(event.genderRule, me.gender, row.gender))
     .filter((row) => {
       const sum = me.level + normalizeLevel(row.level);
       return sum >= event.minLevelSum && sum <= event.maxLevelSum;
@@ -621,6 +601,175 @@ async function adminRemovePlayer(memberId) {
   await query(`DELETE FROM tournament_member_stats WHERE member_id = $1`, [id]);
   await query(`DELETE FROM tournament_registrations WHERE member_id = $1`, [id]);
   return { memberId: id };
+}
+
+async function findMemberById(memberId) {
+  const id = String(memberId || "").trim();
+  if (!id) return null;
+  const result = await query(`SELECT * FROM members WHERE member_id = $1`, [id]);
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    memberId: row.member_id,
+    name: row.name,
+    type: row.type,
+    gender: row.gender || "",
+    level: normalizeLevel(row.level),
+    active: Boolean(row.active),
+    phoneNumber: row.phone_number || ""
+  };
+}
+
+function validateEventIds(eventIds) {
+  const ids = [...new Set((Array.isArray(eventIds) ? eventIds : []).map((id) => String(id || "").trim().toUpperCase()))];
+  if (ids.length !== 2 || ids.some((id) => !EVENT_IDS.includes(id))) {
+    throw new Error("Cần chọn đúng 2 trong 3 nội dung.");
+  }
+  return ids;
+}
+
+async function adminRegisterPlayer(payload = {}) {
+  const gender = normalizeGender(payload?.gender);
+  if (!gender) throw new Error("Cần chọn giới tính.");
+  const level = normalizeLevel(payload?.level);
+  const phone = normalizePhone(payload?.phoneNumber);
+  if (!phone) throw new Error("Số điện thoại không được để trống.");
+  const eventIds = validateEventIds(payload?.eventIds);
+
+  let member = payload?.memberId ? await findMemberById(payload.memberId) : null;
+  const safeName = String(payload?.name || member?.name || "").trim();
+  if (!safeName) throw new Error("Tên không được để trống.");
+
+  if (!member) {
+    member = await findMemberByName(safeName);
+  }
+  if (!member) {
+    member = await createMember({
+      name: safeName,
+      type: "GL",
+      phoneNumber: phone,
+      gender,
+      level,
+      active: true
+    });
+  } else {
+    await updateMemberProfile(member.memberId, {
+      name: safeName,
+      type: member.type,
+      gender,
+      phoneNumber: phone,
+      level,
+      active: true
+    });
+    member = await findMemberById(member.memberId);
+  }
+
+  const existingReg = await getRegistration(member.memberId);
+  if (existingReg?.profileCompleted) {
+    throw new Error("Thành viên này đã đăng ký giải rồi.");
+  }
+
+  const ts = nowIso();
+  await query(
+    `
+    INSERT INTO tournament_registrations(member_id, member_name, join_summary, profile_completed, status, created_at, updated_at)
+    VALUES ($1,$2,TRUE,TRUE,'approved',$3,$3)
+    ON CONFLICT (member_id) DO UPDATE
+    SET member_name = EXCLUDED.member_name,
+        join_summary = TRUE,
+        profile_completed = TRUE,
+        status = 'approved',
+        updated_at = EXCLUDED.updated_at
+    `,
+    [member.memberId, member.name, ts]
+  );
+  await query(`DELETE FROM tournament_player_events WHERE member_id = $1`, [member.memberId]);
+  for (const eventId of eventIds) {
+    await query(
+      `INSERT INTO tournament_player_events(member_id, event_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+      [member.memberId, eventId]
+    );
+  }
+  const players = await listTournamentPlayers();
+  return players.find((item) => item.memberId === member.memberId);
+}
+
+async function listAdminPairCandidates(memberId, eventId) {
+  const id = String(eventId || "").trim().toUpperCase();
+  const meId = String(memberId || "").trim();
+  if (!EVENT_IDS.includes(id)) throw new Error("Nội dung không hợp lệ.");
+  if (!meId) throw new Error("Thiếu thành viên.");
+
+  const me = await findMemberById(meId);
+  if (!me) throw new Error("Không tìm thấy thành viên.");
+  const reg = await getRegistration(me.memberId);
+  if (!reg?.profileCompleted || !reg.eventIds.includes(id)) {
+    throw new Error("Thành viên chưa đăng ký nội dung này.");
+  }
+  if (reg.status !== "approved") throw new Error("Thành viên chưa được duyệt.");
+
+  const events = await getTournamentEvents();
+  const event = events.find((item) => item.eventId === id);
+  if (!event) throw new Error("Không tìm thấy nội dung.");
+
+  const busy = await getActivePairMemberIds(id);
+  if (busy.has(me.memberId)) throw new Error("Thành viên đã có cặp/lời mời ở nội dung này.");
+
+  const result = await query(
+    `
+    SELECT m.member_id, m.name, m.gender, m.level, m.phone_number
+    FROM tournament_player_events tpe
+    INNER JOIN members m ON m.member_id = tpe.member_id
+    INNER JOIN tournament_registrations tr
+      ON tr.member_id = m.member_id
+     AND tr.profile_completed = TRUE
+     AND COALESCE(tr.status, 'pending') = 'approved'
+    WHERE tpe.event_id = $1
+      AND m.active = TRUE
+      AND m.member_id <> $2
+    ORDER BY m.name ASC
+    `,
+    [id, me.memberId]
+  );
+
+  return result.rows
+    .filter((row) => !busy.has(row.member_id))
+    .filter((row) => {
+      const sum = me.level + normalizeLevel(row.level);
+      return sum >= event.minLevelSum && sum <= event.maxLevelSum;
+    })
+    .map((row) => ({
+      memberId: row.member_id,
+      name: row.name,
+      gender: row.gender || "",
+      level: normalizeLevel(row.level),
+      levelLabel: levelLabel(row.level),
+      levelSum: me.level + normalizeLevel(row.level)
+    }));
+}
+
+async function adminCreatePair({ eventId, memberAId, memberBId }) {
+  const id = String(eventId || "").trim().toUpperCase();
+  const aId = String(memberAId || "").trim();
+  const bId = String(memberBId || "").trim();
+  if (!EVENT_IDS.includes(id)) throw new Error("Nội dung không hợp lệ.");
+  if (!aId || !bId) throw new Error("Cần chọn đủ 2 thành viên.");
+  if (aId === bId) throw new Error("Hai thành viên phải khác nhau.");
+
+  const candidates = await listAdminPairCandidates(aId, id);
+  const partner = candidates.find((item) => item.memberId === bId);
+  if (!partner) throw new Error("Cặp không hợp lệ với rule hiện tại (nội dung / tổng level / đã có cặp).");
+
+  const pairId = `TP${Date.now()}_${crypto.randomUUID().slice(0, 6)}`;
+  await query(
+    `
+    INSERT INTO tournament_pairs(pair_id, event_id, member_a_id, member_b_id, status, invited_by, created_at, responded_at)
+    VALUES ($1,$2,$3,$4,'locked','admin',$5,$5)
+    `,
+    [pairId, id, aId, bId, nowIso()]
+  );
+  const pairs = await listPairs({ eventId: id, memberId: aId, statuses: ["locked"] });
+  return pairs.find((item) => item.pairId === pairId) || pairs[0];
 }
 
 async function listMatches(eventId = "") {
@@ -984,11 +1133,13 @@ async function getTournamentBootstrap({ role, memberName }) {
   ]);
 
   if (role === "admin") {
-    const [players, pairs, matches] = await Promise.all([
+    const [players, pairs, matches, allMembers] = await Promise.all([
       listTournamentPlayers(),
       listPairs(),
-      listMatches()
+      listMatches(),
+      getMembers()
     ]);
+    const registeredIds = new Set(players.map((item) => item.memberId));
     return {
       role,
       settings,
@@ -999,6 +1150,16 @@ async function getTournamentBootstrap({ role, memberName }) {
       standings,
       catalog,
       activeTournament,
+      clubMembers: (allMembers || [])
+        .filter((item) => item.active)
+        .map((item) => ({
+          memberId: item.memberId,
+          name: item.name,
+          gender: item.gender || "",
+          level: item.level,
+          phoneNumber: item.phoneNumber || "",
+          registered: registeredIds.has(item.memberId)
+        })),
       levelLabels: LEVEL_LABELS
     };
   }
@@ -1047,6 +1208,9 @@ module.exports = {
   adminUpdatePlayer,
   adminSetPlayerStatus,
   adminRemovePlayer,
+  adminRegisterPlayer,
+  listAdminPairCandidates,
+  adminCreatePair,
   listMatches,
   generateMatches,
   setMatchScore,

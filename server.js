@@ -74,6 +74,9 @@ const {
   adminUpdatePlayer,
   adminSetPlayerStatus,
   adminRemovePlayer,
+  adminRegisterPlayer,
+  listAdminPairCandidates,
+  adminCreatePair,
   listPairCandidates,
   invitePartner,
   respondPair,
@@ -1736,6 +1739,20 @@ app.get(
   },
 );
 
+app.post(
+  "/api/tournament/players",
+  requireAuth,
+  requireRole(["admin"]),
+  async (req, res) => {
+    try {
+      const player = await adminRegisterPlayer(req.body || {});
+      return res.json({ ok: true, player, message: "Đã đăng ký VĐV (đã duyệt)." });
+    } catch (error) {
+      return res.status(400).json({ message: error.message });
+    }
+  },
+);
+
 app.patch(
   "/api/tournament/players/:memberId",
   requireAuth,
@@ -1805,6 +1822,41 @@ app.get(
         eventId,
       );
       return res.json({ candidates });
+    } catch (error) {
+      return res.status(400).json({ message: error.message });
+    }
+  },
+);
+
+app.get(
+  "/api/tournament/pairs/admin-candidates",
+  requireAuth,
+  requireRole(["admin"]),
+  async (req, res) => {
+    try {
+      const candidates = await listAdminPairCandidates(
+        req.query.memberId,
+        req.query.eventId,
+      );
+      return res.json({ candidates });
+    } catch (error) {
+      return res.status(400).json({ message: error.message });
+    }
+  },
+);
+
+app.post(
+  "/api/tournament/pairs/admin",
+  requireAuth,
+  requireRole(["admin"]),
+  async (req, res) => {
+    try {
+      const pair = await adminCreatePair({
+        eventId: req.body?.eventId,
+        memberAId: req.body?.memberAId,
+        memberBId: req.body?.memberBId,
+      });
+      return res.json({ ok: true, pair, message: "Đã khóa cặp do admin ghép." });
     } catch (error) {
       return res.status(400).json({ message: error.message });
     }
