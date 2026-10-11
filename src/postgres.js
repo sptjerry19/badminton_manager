@@ -388,6 +388,17 @@ async function initializeDatabase() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS notices (
+      notice_id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      created_by TEXT NOT NULL DEFAULT 'admin',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query(`
+    CREATE INDEX IF NOT EXISTS notices_created_at_idx ON notices(created_at DESC);
+  `);
 
   await query(`
     CREATE TABLE IF NOT EXISTS tournaments (
@@ -478,6 +489,10 @@ async function initializeDatabase() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE (event_id, round, match_no)
     );
+  `);
+  await query(`
+    ALTER TABLE tournament_matches
+    ADD COLUMN IF NOT EXISTS play_order INTEGER NOT NULL DEFAULT 0;
   `);
   await query(`
     CREATE TABLE IF NOT EXISTS tournament_member_stats (
@@ -3398,6 +3413,47 @@ async function getMemberCreditSummary() {
   };
 }
 
+async function listNotices(limit = 40) {
+  const safeLimit = Math.min(100, Math.max(1, Math.round(Number(limit) || 40)));
+  const result = await query(
+    `
+    SELECT notice_id, content, created_by, created_at
+    FROM notices
+    ORDER BY created_at DESC
+    LIMIT $1
+    `,
+    [safeLimit]
+  );
+  return result.rows.map((row) => ({
+    noticeId: row.notice_id,
+    content: row.content || "",
+    createdBy: row.created_by || "",
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+  }));
+}
+
+async function createNotice({ content, createdBy }) {
+  const text = String(content || "").trim();
+  if (!text) throw new Error("Nội dung thông báo không được để trống.");
+  if (text.length > 2000) throw new Error("Nội dung tối đa 2000 ký tự.");
+  const noticeId = `n_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+  const result = await query(
+    `
+    INSERT INTO notices(notice_id, content, created_by, created_at)
+    VALUES ($1,$2,$3,NOW())
+    RETURNING notice_id, content, created_by, created_at
+    `,
+    [noticeId, text, String(createdBy || "admin").trim() || "admin"]
+  );
+  const row = result.rows[0];
+  return {
+    noticeId: row.notice_id,
+    content: row.content || "",
+    createdBy: row.created_by || "",
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+  };
+}
+
 async function deleteBasicSession(sessionId) {
   const id = String(sessionId || "").trim();
   if (!id) throw new Error("Thiếu mã buổi.");
@@ -3467,4 +3523,6 @@ module.exports = {
   addMemberCredit,
   getMemberCreditSummary,
   getMemberCreditBalanceByName,
+  listNotices,
+  createNotice,
 };

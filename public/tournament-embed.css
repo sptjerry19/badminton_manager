@@ -753,6 +753,265 @@
   padding: 0;
 }
 
+.sched-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  background: rgba(15, 23, 42, 0.45);
+  overflow: auto;
+  font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif;
+  color: #0f172a;
+}
+
+.sched-modal.is-open {
+  display: flex;
+}
+
+.sched-sheet {
+  width: min(760px, 100%);
+  margin: auto;
+  background: #eef3f8;
+  border-radius: 22px;
+  padding: 22px 18px 18px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+
+.sched-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.sched-head h3 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.sched-count {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.sched-close {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sched-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sched-filter {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: #fff;
+  color: #334155;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sched-filter.is-on {
+  background: #0f172a;
+  color: #fff;
+}
+
+.sched-hint,
+.sched-msg,
+.sched-empty {
+  margin: 0 0 10px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.sched-msg:empty {
+  display: none;
+}
+
+.sched-list {
+  display: grid;
+  gap: 10px;
+}
+
+.sched-card {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  background: #fff;
+  border-radius: 16px;
+  padding: 14px 14px 14px 10px;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+}
+
+.sched-move {
+  display: grid;
+  gap: 4px;
+}
+
+.sched-move button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.sched-move button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.sched-no,
+.sched-order {
+  width: 48px;
+  height: 42px;
+  border-radius: 12px;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: #334155;
+  text-align: center;
+}
+
+.sched-order {
+  border: 1px solid #e2e8f0;
+  font: inherit;
+  font-weight: 800;
+  padding: 0 4px;
+}
+
+.sched-order:focus {
+  outline: 2px solid #0f172a;
+  background: #fff;
+}
+
+.sched-event {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sched-event.is-MD { color: #2563eb; }
+.sched-event.is-XD { color: #16a34a; }
+.sched-event.is-WD { color: #c026d3; }
+
+.sched-pairs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.sched-pairs strong {
+  font-size: 16px;
+}
+
+.sched-pairs span {
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sched-status {
+  margin: 6px 0 0;
+  color: #ca8a04;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sched-status::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: #eab308;
+  vertical-align: middle;
+}
+
+.sched-status.is-done {
+  color: #15803d;
+}
+
+.sched-status.is-done::before {
+  background: #22c55e;
+}
+
+.sched-round {
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sched-score {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.sched-score input {
+  width: 64px;
+  height: 36px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0 8px;
+}
+
+.sched-score button {
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #0f172a;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sched-result {
+  margin: 6px 0 0;
+  font-weight: 800;
+}
+
+@media (max-width: 640px) {
+  .sched-card {
+    grid-template-columns: auto 1fr;
+  }
+
+  .sched-round {
+    grid-column: 2;
+  }
+}
+
 .tournament-embed textarea.tp-textarea {
   min-height: 180px;
   resize: vertical;

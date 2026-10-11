@@ -30,7 +30,8 @@
     catalogSelectedId: "",
     catalogEditingId: "",
     adminPairMemberId: "",
-    adminPairEventId: ""
+    adminPairEventId: "",
+    scheduleFilter: ""
   };
 
   function qs(sel) {
@@ -529,11 +530,13 @@
           <section class="tp-panel tp-card" data-panel="matches" hidden>
             <div class="tp-row" style="justify-content:space-between">
               <h3>Trận đấu</h3>
-              <div class="tp-row admin-only">
-                <select id="tpGenerateEventSelect"></select>
-                <button id="tpGenerateMatchesBtn" class="tp-btn" type="button">Generate vòng tròn</button>
+              <div class="tp-row">
+                <button id="tpOpenScheduleBtn" class="tp-btn" type="button" data-action="open-schedule">Lịch thi đấu</button>
+                <select id="tpGenerateEventSelect" class="admin-only"></select>
+                <button id="tpGenerateMatchesBtn" class="tp-btn admin-only" type="button">Generate vòng tròn</button>
               </div>
             </div>
+            <p class="tp-note">Generate tạo các cặp vòng tròn. Mở lịch để xem và sắp thứ tự đánh.</p>
             <div id="tpMatchesList" class="tp-stack"></div>
             <p id="tpMatchesMessage" class="tp-msg"></p>
           </section>
@@ -747,6 +750,219 @@
       .join("");
   }
 
+  const SCHEDULE_EVENTS = [
+    { id: "", label: "Tất cả trận" },
+    { id: "MD", label: "Đôi nam" },
+    { id: "WD", label: "Đôi nữ" },
+    { id: "XD", label: "Đôi nam nữ" }
+  ];
+
+  function ensureScheduleModal() {
+    let modal = document.getElementById("tpScheduleModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = "tpScheduleModal";
+    modal.className = "sched-modal";
+    modal.innerHTML = `
+      <div class="sched-sheet" role="dialog" aria-modal="true" aria-labelledby="tpScheduleTitle">
+        <div class="sched-head">
+          <div>
+            <h3 id="tpScheduleTitle">Lịch thi đấu</h3>
+            <p id="tpScheduleCount" class="sched-count"></p>
+          </div>
+          <button id="tpScheduleClose" class="sched-close" type="button" aria-label="Đóng">×</button>
+        </div>
+        <div id="tpScheduleFilters" class="sched-filters"></div>
+        <p id="tpScheduleHint" class="sched-hint admin-only"></p>
+        <div id="tpScheduleList" class="sched-list"></div>
+        <p id="tpScheduleMessage" class="sched-msg"></p>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector("#tpScheduleClose").addEventListener("click", () => {
+      modal.classList.remove("is-open");
+    });
+    modal.addEventListener("change", async (event) => {
+      const input = event.target.closest(".sched-order");
+      if (!input) return;
+      try {
+        await setSchedulePosition(input.dataset.match, input.value);
+      } catch (error) {
+        const msg = modal.querySelector("#tpScheduleMessage");
+        if (msg) msg.textContent = error.message;
+        renderScheduleModal();
+      }
+    });
+    modal.addEventListener("click", async (event) => {
+      if (event.target === modal) {
+        modal.classList.remove("is-open");
+        return;
+      }
+      const filter = event.target.closest("[data-schedule-filter]");
+      if (filter) {
+        state.scheduleFilter = filter.dataset.scheduleFilter || "";
+        renderScheduleModal();
+        return;
+      }
+      const btn = event.target.closest("[data-action]");
+      if (!btn) return;
+      const action = btn.dataset.action;
+      try {
+        if (action === "schedule-move") {
+          await moveScheduleMatch(Number(btn.dataset.index), Number(btn.dataset.dir));
+          return;
+        }
+        if (action === "save-score") {
+          const matchId = btn.dataset.match;
+          const scoreA = modal.querySelector(`.score-a[data-match="${matchId}"]`)?.value;
+          const scoreB = modal.querySelector(`.score-b[data-match="${matchId}"]`)?.value;
+          await api(`/api/tournament/matches/${encodeURIComponent(matchId)}/score`, {
+            method: "PATCH",
+            body: { scoreA: Number(scoreA), scoreB: Number(scoreB) }
+          });
+          const msg = modal.querySelector("#tpScheduleMessage");
+          if (msg) msg.textContent = "Đã lưu tỉ số.";
+          await refresh();
+          renderScheduleModal();
+        }
+      } catch (error) {
+        const msg = modal.querySelector("#tpScheduleMessage");
+        if (msg) msg.textContent = error.message;
+      }
+    });
+    return modal;
+  }
+
+  function sortedMatches() {
+    return [...(state.data?.matches || [])].sort((a, b) => {
+      const orderA = Number(a.playOrder || 0);
+      const orderB = Number(b.playOrder || 0);
+      if (orderA !== orderB) return orderA - orderB;
+      return String(a.eventId).localeCompare(String(b.eventId)) || a.round - b.round || a.matchNo - b.matchNo;
+    });
+  }
+
+  async function saveScheduleOrder(ids) {
+    await api("/api/tournament/matches/order", {
+      method: "POST",
+      body: { matchIds: ids }
+    });
+    await refresh();
+    renderScheduleModal();
+  }
+
+  async function moveScheduleMatch(index, dir) {
+    const matches = sortedMatches();
+    const next = index + dir;
+    if (index < 0 || next < 0 || index >= matches.length || next >= matches.length) return;
+    const ids = matches.map((match) => match.matchId);
+    const [moved] = ids.splice(index, 1);
+    ids.splice(next, 0, moved);
+    await saveScheduleOrder(ids);
+  }
+
+  async function setSchedulePosition(matchId, rawValue) {
+    const matches = sortedMatches();
+    const from = matches.findIndex((match) => match.matchId === matchId);
+    if (from < 0) return;
+    let target = Math.round(Number(rawValue));
+    if (!Number.isFinite(target)) {
+      renderScheduleModal();
+      return;
+    }
+    target = Math.min(matches.length, Math.max(1, target));
+    const to = target - 1;
+    if (to === from) {
+      renderScheduleModal();
+      return;
+    }
+    const ids = matches.map((match) => match.matchId);
+    const [moved] = ids.splice(from, 1);
+    ids.splice(to, 0, moved);
+    await saveScheduleOrder(ids);
+  }
+
+  function renderScheduleModal() {
+    const modal = ensureScheduleModal();
+    const matches = sortedMatches();
+    const title = modal.querySelector("#tpScheduleTitle");
+    const count = modal.querySelector("#tpScheduleCount");
+    const filters = modal.querySelector("#tpScheduleFilters");
+    const list = modal.querySelector("#tpScheduleList");
+    const hint = modal.querySelector("#tpScheduleHint");
+    if (title) title.textContent = "Lịch thi đấu";
+    if (count) count.textContent = `${matches.length} trận trong lịch thi đấu`;
+    if (hint) {
+      hint.textContent = "Nhập số thứ tự hoặc dùng mũi tên. Thứ tự được lưu ngay.";
+      hint.hidden = state.role !== "admin";
+    }
+    if (filters) {
+      filters.innerHTML = SCHEDULE_EVENTS.map(
+        (item) =>
+          `<button type="button" class="sched-filter ${state.scheduleFilter === item.id ? "is-on" : ""}" data-schedule-filter="${item.id}">${item.label}</button>`
+      ).join("");
+    }
+    const visible = state.scheduleFilter
+      ? matches.filter((match) => match.eventId === state.scheduleFilter)
+      : matches;
+    if (!list) return;
+    if (!visible.length) {
+      list.innerHTML = `<p class="sched-empty">Chưa có trận trong lịch.</p>`;
+      return;
+    }
+    const canReorder = state.role === "admin";
+    list.innerHTML = visible
+      .map((match) => {
+        const index = matches.findIndex((item) => item.matchId === match.matchId);
+        const orderNo = index + 1;
+        const done = match.status === "done";
+        const reorder =
+          canReorder
+            ? `<div class="sched-move">
+                <button type="button" data-action="schedule-move" data-index="${index}" data-dir="-1" ${index === 0 ? "disabled" : ""} aria-label="Lên">↑</button>
+                <button type="button" data-action="schedule-move" data-index="${index}" data-dir="1" ${index === matches.length - 1 ? "disabled" : ""} aria-label="Xuống">↓</button>
+              </div>`
+            : "";
+        const orderMark = canReorder
+          ? `<input class="sched-order" type="number" min="1" max="${matches.length}" inputmode="numeric" data-match="${escapeHtml(match.matchId)}" value="${orderNo}" aria-label="Thứ tự trận" />`
+          : `<div class="sched-no">${String(orderNo).padStart(2, "0")}</div>`;
+        const score =
+          state.role === "admin"
+            ? `<div class="sched-score">
+                <input type="number" min="0" class="score-a" data-match="${escapeHtml(match.matchId)}" value="${match.scoreA ?? ""}" />
+                <span>-</span>
+                <input type="number" min="0" class="score-b" data-match="${escapeHtml(match.matchId)}" value="${match.scoreB ?? ""}" />
+                <button type="button" data-action="save-score" data-match="${escapeHtml(match.matchId)}">Lưu</button>
+              </div>`
+            : done
+              ? `<p class="sched-result">${match.scoreA} : ${match.scoreB}</p>`
+              : "";
+        return `<article class="sched-card">
+          ${reorder}
+          ${orderMark}
+          <div class="sched-main">
+            <p class="sched-event is-${escapeHtml(match.eventId)}">${escapeHtml(EVENT_NAMES[match.eventId] || match.eventId)}</p>
+            <div class="sched-pairs">
+              <strong>${escapeHtml(match.pairALabel)}</strong>
+              <span>vs</span>
+              <strong>${escapeHtml(match.pairBLabel)}</strong>
+            </div>
+            <p class="sched-status ${done ? "is-done" : ""}">${done ? "Đã đấu" : "Đã lên lịch"}</p>
+            ${score}
+          </div>
+          <div class="sched-round">R${match.round} · #${match.matchNo}</div>
+        </article>`;
+      })
+      .join("");
+  }
+
+  function openScheduleModal() {
+    const modal = ensureScheduleModal();
+    modal.classList.add("is-open");
+    const msg = modal.querySelector("#tpScheduleMessage");
+    if (msg) msg.textContent = "";
+    renderScheduleModal();
+  }
+
   function renderMatches() {
     const box = qs("#tpMatchesList");
     const select = qs("#tpGenerateEventSelect");
@@ -759,32 +975,10 @@
     if (!box) return;
     const matches = state.data?.matches || [];
     if (!matches.length) {
-      box.innerHTML = `<p class="tp-note">Chưa có trận.</p>`;
+      box.innerHTML = `<p class="tp-note">Chưa có trận. Admin generate vòng tròn rồi mở lịch để sắp thứ tự.</p>`;
       return;
     }
-    box.innerHTML = matches
-      .map((match) => {
-        const scoreForm =
-          state.role === "admin"
-            ? `<div class="tp-score">
-                <input type="number" min="0" class="score-a" data-match="${match.matchId}" value="${match.scoreA ?? ""}" />
-                <span>-</span>
-                <input type="number" min="0" class="score-b" data-match="${match.matchId}" value="${match.scoreB ?? ""}" />
-                <button class="tp-btn" type="button" data-action="save-score" data-match="${match.matchId}">Lưu</button>
-              </div>`
-            : `<p>${match.scoreA ?? "-"} : ${match.scoreB ?? "-"}</p>`;
-        return `<article class="tp-subcard">
-          <div class="tp-row" style="justify-content:space-between">
-            <div>
-              <strong>${EVENT_NAMES[match.eventId] || match.eventId} · R${match.round} #${match.matchNo}</strong>
-              <p>${escapeHtml(match.pairALabel)} vs ${escapeHtml(match.pairBLabel)}</p>
-            </div>
-            <span class="tp-badge ${match.status}">${match.status}</span>
-          </div>
-          ${scoreForm}
-        </article>`;
-      })
-      .join("");
+    box.innerHTML = `<p class="tp-note">${matches.length} trận đã có trong lịch. Bấm Lịch thi đấu để xem và sắp thứ tự.</p>`;
   }
 
   function renderStandings() {
@@ -1149,6 +1343,10 @@
           setMsg("#tpCatalogMessage", "Đã xóa giải đấu.");
           return refresh();
         }
+        if (action === "open-schedule") {
+          openScheduleModal();
+          return;
+        }
         if (action === "open-partner") return openPartnerModal(btn.dataset.event);
         if (action === "accept-pair" || action === "reject-pair") {
           await api(`/api/tournament/pairs/${encodeURIComponent(btn.dataset.pair)}/respond`, {
@@ -1278,6 +1476,7 @@
         });
         setMsg("#tpMatchesMessage", data.message || "Đã generate.");
         await refresh();
+        openScheduleModal();
       } catch (error) {
         setMsg("#tpMatchesMessage", error.message, true);
       }
@@ -1317,6 +1516,7 @@
     container.innerHTML = template();
     ensureModal();
     ensureAdminPairModal();
+    ensureScheduleModal();
     fillLevelSelect(qs("#tpProfileLevel"));
     fillProfileEvents();
     fillAdminRegisterForm();

@@ -1092,18 +1092,62 @@ async function mountTournamentPanel(role) {
   state.tournamentMountedFor = key;
 }
 
+function formatNoticeTime(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
+function renderNoticeList(containerId, notices) {
+  const box = document.getElementById(containerId);
+  if (!box) return;
+  const list = Array.isArray(notices) ? notices : [];
+  if (!list.length) {
+    box.innerHTML = `<p class="text-sm text-slate-500">Chưa có thông báo nào.</p>`;
+    return;
+  }
+  box.innerHTML = list
+    .map(
+      (item) => `<article class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <p class="whitespace-pre-wrap text-sm text-slate-800">${escapeHtmlText(item.content || "")}</p>
+        <p class="mt-2 text-xs text-slate-500">${escapeHtmlText(formatNoticeTime(item.createdAt))}</p>
+      </article>`
+    )
+    .join("");
+}
+
+async function loadNotices(containerId) {
+  const data = await api("/api/notices");
+  renderNoticeList(containerId, data.notices || []);
+}
+
 function activateUserTab(tabId) {
   state.activeUserTab = tabId;
   const home = document.getElementById("userHomeTabContent");
   const tournament = document.getElementById("userTournamentTabContent");
+  const notices = document.getElementById("userNoticeTabContent");
   home?.classList.toggle("hidden", tabId !== "home");
   tournament?.classList.toggle("hidden", tabId !== "tournament");
+  notices?.classList.toggle("hidden", tabId !== "notices");
   document.getElementById("userTabHomeBtn")?.classList.toggle("is-active", tabId === "home");
   document.getElementById("userTabTournamentBtn")?.classList.toggle("is-active", tabId === "tournament");
+  document.getElementById("userTabNoticeBtn")?.classList.toggle("is-active", tabId === "notices");
   if (tabId === "tournament") {
     mountTournamentPanel("user").catch((error) => {
       const mount = document.getElementById("userTournamentMount");
       if (mount) mount.innerHTML = `<p class="text-sm text-rose-600">${error.message}</p>`;
+    });
+  }
+  if (tabId === "notices") {
+    loadNotices("userNoticeList").catch((error) => {
+      const box = document.getElementById("userNoticeList");
+      if (box) box.innerHTML = `<p class="text-sm text-rose-600">${escapeHtmlText(error.message)}</p>`;
     });
   }
 }
@@ -1117,7 +1161,8 @@ function activateAdminTab(tabId) {
     games: "gamesTabContent",
     tools: "toolsTabContent",
     credit: "creditTabContent",
-    tournament: "tournamentTabContent"
+    tournament: "tournamentTabContent",
+    notices: "noticeTabContent"
   };
   Object.entries(contentDefs).forEach(([key, contentId]) => {
     const el = document.getElementById(contentId);
@@ -1131,7 +1176,8 @@ function activateAdminTab(tabId) {
     games: "adminTabGamesBtn",
     tools: "adminTabToolsBtn",
     credit: "adminTabCreditBtn",
-    tournament: "adminTabTournamentBtn"
+    tournament: "adminTabTournamentBtn",
+    notices: "adminTabNoticeBtn"
   };
   Object.entries(btnDefs).forEach(([key, btnId]) => {
     const btn = document.getElementById(btnId);
@@ -1146,6 +1192,10 @@ function activateAdminTab(tabId) {
   if (tabId === "expenses") {
     renderAdminPaymentsTableForCurrentInput();
     renderAdminExpensesTable(state.adminExpenses || []);
+  }
+
+  if (tabId === "notices") {
+    loadNotices("adminNoticeList").catch((error) => setMessage("noticeMessage", error.message, true));
   }
 
   if (tabId === "tournament") {
@@ -1565,8 +1615,30 @@ function bindEvents() {
   document.getElementById("adminTabGamesBtn")?.addEventListener("click", () => activateAdminTab("games"));
   document.getElementById("adminTabToolsBtn")?.addEventListener("click", () => activateAdminTab("tools"));
   document.getElementById("adminTabTournamentBtn")?.addEventListener("click", () => activateAdminTab("tournament"));
+  document.getElementById("adminTabNoticeBtn")?.addEventListener("click", () => activateAdminTab("notices"));
   document.getElementById("userTabHomeBtn")?.addEventListener("click", () => activateUserTab("home"));
   document.getElementById("userTabTournamentBtn")?.addEventListener("click", () => activateUserTab("tournament"));
+  document.getElementById("userTabNoticeBtn")?.addEventListener("click", () => activateUserTab("notices"));
+
+  document.getElementById("noticeForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const content = document.getElementById("noticeContentInput")?.value.trim() || "";
+    if (!content) {
+      setMessage("noticeMessage", "Nội dung không được để trống.", true);
+      return;
+    }
+    try {
+      const data = await api("/api/notices", {
+        method: "POST",
+        body: JSON.stringify({ content })
+      });
+      document.getElementById("noticeContentInput").value = "";
+      setMessage("noticeMessage", data.message || "Đã gửi thông báo.");
+      await loadNotices("adminNoticeList");
+    } catch (error) {
+      setMessage("noticeMessage", error.message, true);
+    }
+  });
 
   document.getElementById("refreshMembersBtn")?.addEventListener("click", loadAdminDashboard);
 }

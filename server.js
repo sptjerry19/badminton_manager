@@ -60,6 +60,8 @@ const {
   getMemberCreditSummary,
   getMemberCreditBalanceByName,
   getPlaysForDate,
+  listNotices,
+  createNotice,
   pool,
 } = require("./src/postgres");
 const { syncSnapshotToSheets, getSnapshotFromSheets } = require("./src/sheets");
@@ -84,6 +86,7 @@ const {
   listPairs,
   listMatches,
   generateMatches,
+  reorderMatches,
   setMatchScore,
   getStandings,
   getTournamentEvents,
@@ -567,6 +570,39 @@ async function notifyActiveMembers(message) {
   const members = (await getMembers()).filter((member) => member.active);
   return notificationService.broadcast(members, () => message);
 }
+
+app.get("/api/notices", requireAuth, async (_req, res) => {
+  try {
+    return res.json({ notices: await listNotices(50) });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.post("/api/notices", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const notice = await createNotice({
+      content: req.body?.content,
+      createdBy: req.session.username || "admin"
+    });
+    const pushText = notice.content.replace(/\s+/g, " ").trim().slice(0, 180);
+    let push = { configured: false, sent: 0, failed: 0 };
+    try {
+      push = await notifyActiveMembers(pushText);
+    } catch (error) {
+      console.error("Không gửi được thông báo:", error.message);
+      push = { configured: true, sent: 0, failed: 1 };
+    }
+    return res.json({
+      ok: true,
+      notice,
+      push,
+      message: describePush("Đã lưu thông báo.", push)
+    });
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
 
 app.post(
   "/api/sessions",
@@ -1962,6 +1998,20 @@ app.post(
         ...result,
         message: `Đã tạo ${result.created} trận.`,
       });
+    } catch (error) {
+      return res.status(400).json({ message: error.message });
+    }
+  },
+);
+
+app.post(
+  "/api/tournament/matches/order",
+  requireAuth,
+  requireRole(["admin"]),
+  async (req, res) => {
+    try {
+      const matches = await reorderMatches(req.body?.matchIds || []);
+      return res.json({ ok: true, matches, message: "Đã lưu thứ tự đánh." });
     } catch (error) {
       return res.status(400).json({ message: error.message });
     }
