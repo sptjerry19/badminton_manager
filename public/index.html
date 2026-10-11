@@ -182,6 +182,9 @@
             <button id="adminTabTournamentBtn" type="button" class="tab">
               Giải đấu
             </button>
+            <button id="adminTabNoticeBtn" type="button" class="tab">
+              Thông báo
+            </button>
             <button id="adminTabBasicBtn" type="button" class="tab">
               <a href="/basic">Cơ bản</a>
             </button>
@@ -889,6 +892,27 @@
             </section>
           </div>
 
+          <div id="noticeTabContent" class="hidden space-y-5">
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-1 text-lg font-semibold">Gửi thông báo</h3>
+              <p class="mb-3 text-sm text-slate-500">Nội dung được lưu lại và push tới thành viên đang bật thông báo.</p>
+              <form id="noticeForm" class="space-y-3">
+                <textarea
+                  id="noticeContentInput"
+                  rows="5"
+                  maxlength="2000"
+                  placeholder="Nhập nội dung thông báo..."
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  required
+                ></textarea>
+                <button class="rounded-lg bg-indigo-600 px-4 py-2 text-white">Gửi thông báo</button>
+              </form>
+              <p id="noticeMessage" class="mt-2 text-sm"></p>
+              <h4 class="mb-2 mt-5 font-medium">Đã gửi</h4>
+              <div id="adminNoticeList" class="space-y-3"></div>
+            </section>
+          </div>
+
           <div id="creditTabContent" class="hidden space-y-5">
             <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
               <h3 class="mb-3 text-lg font-semibold">Tiền thừa</h3>
@@ -967,6 +991,9 @@
             <button id="userTabTournamentBtn" type="button" class="tab">
               Giải đấu
             </button>
+            <button id="userTabNoticeBtn" type="button" class="tab">
+              Thông báo
+            </button>
           </nav>
 
           <div id="userHomeTabContent" class="space-y-5">
@@ -1040,6 +1067,13 @@
           <div id="userTournamentTabContent" class="hidden space-y-5">
             <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
               <div id="userTournamentMount" class="tournament-embed"></div>
+            </section>
+          </div>
+
+          <div id="userNoticeTabContent" class="hidden space-y-5">
+            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
+              <h3 class="mb-3 text-lg font-semibold">Thông báo</h3>
+              <div id="userNoticeList" class="space-y-3"></div>
             </section>
           </div>
         </section>

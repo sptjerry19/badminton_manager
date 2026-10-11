@@ -783,7 +783,7 @@ async function listMatches(eventId = "") {
     `
     SELECT * FROM tournament_matches
     ${where}
-    ORDER BY event_id ASC, round ASC, match_no ASC
+    ORDER BY play_order ASC, event_id ASC, round ASC, match_no ASC
     `,
     params
   );
@@ -799,6 +799,7 @@ async function listMatches(eventId = "") {
     eventId: row.event_id,
     round: toNumber(row.round),
     matchNo: toNumber(row.match_no),
+    playOrder: toNumber(row.play_order),
     pairAId: row.pair_a_id,
     pairBId: row.pair_b_id,
     pairA: pairById[row.pair_a_id] || null,
@@ -842,16 +843,19 @@ async function generateMatches(eventId = "") {
     ]);
     await query(`DELETE FROM tournament_member_stats WHERE event_id = $1`, [event.eventId]);
 
+    const maxOrder = await query(`SELECT COALESCE(MAX(play_order), 0)::int AS max_order FROM tournament_matches`);
+    let nextOrder = toNumber(maxOrder.rows[0]?.max_order);
     const rr = generateRoundRobin(locked.map((pair) => pair.pairId));
     for (const match of rr) {
+      nextOrder += 1;
       const matchId = `TM${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
       await query(
         `
         INSERT INTO tournament_matches(
-          match_id, event_id, round, match_no, pair_a_id, pair_b_id, status, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,'scheduled',$7,$7)
+          match_id, event_id, round, match_no, pair_a_id, pair_b_id, status, play_order, created_at, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,'scheduled',$7,$8,$8)
         `,
-        [matchId, event.eventId, match.round, match.matchNo, match.pairAId, match.pairBId, nowIso()]
+        [matchId, event.eventId, match.round, match.matchNo, match.pairAId, match.pairBId, nextOrder, nowIso()]
       );
       created.push(matchId);
     }
@@ -934,6 +938,33 @@ async function recomputeEventStats(eventId) {
       ]
     );
   }
+}
+
+async function reorderMatches(matchIds) {
+  const ids = [...new Set((Array.isArray(matchIds) ? matchIds : []).map((id) => String(id || "").trim()).filter(Boolean))];
+  const existing = await query(`SELECT match_id FROM tournament_matches`);
+  const known = existing.rows.map((row) => row.match_id);
+  if (!ids.length || ids.length !== known.length || ids.some((id) => !known.includes(id))) {
+    throw new Error("Danh sách thứ tự phải gồm đúng tất cả trận hiện có.");
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const ts = nowIso();
+    for (let index = 0; index < ids.length; index += 1) {
+      await client.query(
+        `UPDATE tournament_matches SET play_order = $2, updated_at = $3 WHERE match_id = $1`,
+        [ids[index], index + 1, ts]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+  return listMatches();
 }
 
 async function setMatchScore(matchId, scoreA, scoreB) {
@@ -1213,6 +1244,7 @@ module.exports = {
   adminCreatePair,
   listMatches,
   generateMatches,
+  reorderMatches,
   setMatchScore,
   getStandings,
   listTournaments,
