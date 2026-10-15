@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { AsyncLocalStorage } = require("async_hooks");
 const { Pool } = require("pg");
 const { calculateSession } = require("./calc");
 const { DEFAULT_SETTINGS, DEFAULT_FIXED_MEMBERS } = require("./config");
@@ -98,6 +99,9 @@ if (!process.env.POSTGRES_URL) {
   );
 }
 
+// Node mặc định chỉ chờ 250ms cho mỗi địa chỉ IP (Happy Eyeballs) -> dễ timeout khi mạng quốc tế chậm.
+require("net").setDefaultAutoSelectFamilyAttemptTimeout(5000);
+
 const pool = new Pool({
   connectionString: process.env.POSTGRES_URL,
   ssl: process.env.POSTGRES_URL.includes("localhost")
@@ -105,8 +109,29 @@ const pool = new Pool({
     : { rejectUnauthorized: false },
 });
 
+const txStorage = new AsyncLocalStorage();
+
 async function query(text, params = []) {
-  return pool.query(text, params);
+  const client = txStorage.getStore();
+  return (client || pool).query(text, params);
+}
+
+// Mọi query() gọi bên trong fn dùng chung 1 client/transaction.
+// Gọi lồng nhau thì tái sử dụng transaction đang chạy.
+async function withTransaction(fn) {
+  if (txStorage.getStore()) return fn();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await txStorage.run(client, fn);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function initializeDatabase() {
@@ -355,6 +380,12 @@ async function initializeDatabase() {
   await query(`
     ALTER TABLE members
     ADD COLUMN IF NOT EXISTS birthday TEXT NOT NULL DEFAULT '';
+  `);
+  await query(`
+    ALTER TABLE basic_sessions
+    ADD COLUMN IF NOT EXISTS extra_fee INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS extra_note TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS vote_session_id TEXT NOT NULL DEFAULT '';
   `);
   await query(`
     ALTER TABLE birthday_event_brands
@@ -717,7 +748,7 @@ async function listVoteSessions({
   const sessionIds = sessionsResult.rows.map((row) => row.session_id);
   const participantsResult = await query(
     `
-    SELECT session_id, member_name, member_name_ci, participant_level, status
+    SELECT session_id, member_id, member_name, member_name_ci, participant_level, status
     FROM session_participants
     WHERE session_id = ANY($1::text[])
     ORDER BY member_name ASC
@@ -725,8 +756,23 @@ async function listVoteSessions({
     [sessionIds],
   );
 
+  const chargedResult = await query(
+    `
+    SELECT vote_session_id, MAX(basic_session_id) AS basic_session_id
+    FROM basic_sessions
+    WHERE vote_session_id = ANY($1::text[])
+    GROUP BY vote_session_id
+    `,
+    [sessionIds],
+  );
+  const basicIdBySession = {};
+  chargedResult.rows.forEach((row) => {
+    basicIdBySession[row.vote_session_id] = row.basic_session_id;
+  });
+
   const memberNameCi = safeLower(memberName);
   const yesBySession = {};
+  const membersBySession = {};
   const statsBySession = {};
   const myStatusBySession = {};
   participantsResult.rows.forEach((row) => {
@@ -734,6 +780,12 @@ async function listVoteSessions({
     if (!statsBySession[sid])
       statsBySession[sid] = { yes: 0, no: 0, pending: 0 };
     const status = String(row.status || "pending").toLowerCase();
+    if (!membersBySession[sid]) membersBySession[sid] = [];
+    membersBySession[sid].push({
+      memberId: row.member_id || "",
+      name: row.member_name,
+      status: ["yes", "no"].includes(status) ? status : "pending",
+    });
     if (memberNameCi && row.member_name_ci === memberNameCi) {
       myStatusBySession[sid] = status;
     }
@@ -758,6 +810,8 @@ async function listVoteSessions({
     const mapped = mapSessionRow(row, {
       stats: statsBySession[row.session_id] || { yes: 0, no: 0, pending: 0 },
       yesMembers: yesBySession[row.session_id] || [],
+      members: membersBySession[row.session_id] || [],
+      basicSessionId: basicIdBySession[row.session_id] || "",
     });
     if (memberNameCi) {
       mapped.myStatus = myStatusBySession[row.session_id] || "pending";
@@ -1022,7 +1076,11 @@ async function createSession(payload, createdBy = "admin") {
   return { sessionId, totalCost: 0, poll };
 }
 
-async function settleSession({
+async function settleSession(input) {
+  return withTransaction(() => settleSessionTx(input));
+}
+
+async function settleSessionTx({
   sessionId,
   fixedCourtCost,
   extraCourts,
@@ -1812,7 +1870,11 @@ async function addGuestToSession({
   };
 }
 
-async function addPayment({ date, memberName, amount, note }) {
+async function addPayment(input) {
+  return withTransaction(() => addPaymentTx(input));
+}
+
+async function addPaymentTx({ date, memberName, amount, note }) {
   const safeAmount = toNumber(amount);
   if (safeAmount <= 0) throw new Error("Số tiền thanh toán phải lớn hơn 0.");
   const paymentId = crypto.randomUUID();
@@ -1859,7 +1921,11 @@ function buildDebtMemberIdFromName(name) {
   return `d_${hash.slice(0, 12)}`;
 }
 
-async function addExpense({
+async function addExpense(input) {
+  return withTransaction(() => addExpenseTx(input));
+}
+
+async function addExpenseTx({
   sessionId,
   name,
   totalAmount,
@@ -2013,19 +2079,20 @@ async function getExpenses(limit = 50) {
 }
 
 async function recomputeDebts() {
-  const [
-    allMembers,
-    activeFixedMembers,
-    participantsResult,
-    paymentsResult,
-    expenseParticipantsResult,
-  ] = await Promise.all([
-    getMembers(),
-    getActiveFixedMembers(),
-    query(`SELECT * FROM participants`),
-    query(`SELECT * FROM payments`),
-    query(`SELECT * FROM expense_participants`),
-  ]);
+  return withTransaction(recomputeDebtsTx);
+}
+
+async function recomputeDebtsTx() {
+  // Tuần tự hóa các lần recompute đồng thời; khóa tự nhả khi COMMIT/ROLLBACK.
+  await query(`SELECT pg_advisory_xact_lock(hashtext('recompute_debts'))`);
+  // Tuần tự: 1 client trong transaction không chạy query song song được.
+  const allMembers = await getMembers();
+  const activeFixedMembers = await getActiveFixedMembers();
+  const participantsResult = await query(`SELECT * FROM participants`);
+  const paymentsResult = await query(`SELECT * FROM payments`);
+  const expenseParticipantsResult = await query(
+    `SELECT * FROM expense_participants`,
+  );
 
   const memberByName = {};
   allMembers.forEach((member) => {
@@ -2920,6 +2987,9 @@ function mapBasicSession(row) {
     court: row.court || "",
     courtFee: Math.round(toNumber(row.court_fee)),
     shuttleFee: Math.round(toNumber(row.shuttle_fee)),
+    extraFee: Math.round(toNumber(row.extra_fee)),
+    extraNote: row.extra_note || "",
+    voteSessionId: row.vote_session_id || "",
     totalFee: Math.round(toNumber(row.total_fee)),
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
   };
@@ -2991,6 +3061,9 @@ async function createBasicSession({
   court,
   courtFee,
   shuttleFee,
+  extraFee,
+  extraNote,
+  voteSessionId,
   memberIds,
   guestNames,
 }) {
@@ -3004,11 +3077,17 @@ async function createBasicSession({
 
   const safeCourtFee = Math.round(toNumber(courtFee));
   const safeShuttleFee = Math.round(toNumber(shuttleFee));
-  if (safeCourtFee < 0 || safeShuttleFee < 0) {
-    throw new Error("Tiền sân và tiền cầu không được âm.");
+  const safeExtraFee = Math.round(toNumber(extraFee));
+  if (safeCourtFee < 0 || safeShuttleFee < 0 || safeExtraFee < 0) {
+    throw new Error("Tiền sân, tiền cầu và phát sinh không được âm.");
+  }
+  const safeExtraNote = String(extraNote || "").trim().slice(0, 200);
+  const safeVoteSessionId = String(voteSessionId || "").trim();
+  if (safeVoteSessionId && !(await getSessionById(safeVoteSessionId))) {
+    throw new Error("Không tìm thấy buổi vote cần tính tiền.");
   }
 
-  const totalFee = safeCourtFee + safeShuttleFee;
+  const totalFee = safeCourtFee + safeShuttleFee + safeExtraFee;
   if (totalFee <= 0) throw new Error("Tổng tiền phải lớn hơn 0.");
 
   const ids = Array.isArray(memberIds)
@@ -3069,9 +3148,10 @@ async function createBasicSession({
     await client.query(
       `
       INSERT INTO basic_sessions(
-        basic_session_id, play_date, court, court_fee, shuttle_fee, total_fee, created_at
+        basic_session_id, play_date, court, court_fee, shuttle_fee,
+        extra_fee, extra_note, vote_session_id, total_fee, created_at
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
       `,
       [
         sessionId,
@@ -3079,6 +3159,9 @@ async function createBasicSession({
         safeCourt,
         safeCourtFee,
         safeShuttleFee,
+        safeExtraFee,
+        safeExtraNote,
+        safeVoteSessionId,
         totalFee,
         ts,
       ],
@@ -3135,33 +3218,65 @@ async function setBasicSharePaid(shareId, paid) {
   return mapBasicShare(result.rows[0]);
 }
 
-async function settleBasicPerson({ memberId, memberName }) {
+async function settleBasicPerson(input) {
+  return withTransaction(() => settleBasicPersonTx(input));
+}
+
+// Đánh dấu toàn bộ phần chưa trả của 1 người là đã trả. Nếu người đó có
+// tiền nạp trước thì trừ phần đã dùng để không bị tính 2 lần.
+async function settleBasicPersonTx({ memberId, memberName }) {
   const id = String(memberId || "").trim();
   const name = String(memberName || "").trim();
   if (!id && !name) throw new Error("Thiếu người cần cập nhật.");
 
-  const existing = await query(
-    id
-      ? `SELECT id FROM basic_shares WHERE member_id = $1 LIMIT 1`
-      : `SELECT id FROM basic_shares WHERE member_id = '' AND member_name_ci = $1 LIMIT 1`,
-    [id || safeLower(name)],
-  );
-  if (!existing.rows[0]) throw new Error("Không tìm thấy người này trong sổ.");
-
-  await query(
+  const updated = await query(
     id
       ? `
         UPDATE basic_shares
         SET paid = TRUE, paid_at = NOW()
         WHERE member_id = $1 AND paid = FALSE
+        RETURNING share_amount
       `
       : `
         UPDATE basic_shares
         SET paid = TRUE, paid_at = NOW()
         WHERE member_id = '' AND member_name_ci = $1 AND paid = FALSE
+        RETURNING share_amount
       `,
     [id || safeLower(name)],
   );
+  if (!updated.rows.length) {
+    throw new Error("Người này không còn phần nào chưa trả.");
+  }
+
+  if (id) {
+    const unpaid = updated.rows.reduce(
+      (sum, row) => sum + Math.round(toNumber(row.share_amount)),
+      0,
+    );
+    const credit = await getMemberCreditBalanceById(id);
+    const used = Math.min(Math.max(0, credit), unpaid);
+    if (used > 0) {
+      const member = await query(
+        `SELECT name FROM members WHERE member_id = $1`,
+        [id],
+      );
+      await query(
+        `
+        INSERT INTO member_credits(credit_id, member_id, member_name, amount, note, created_at)
+        VALUES ($1,$2,$3,$4,$5,$6)
+        `,
+        [
+          crypto.randomUUID(),
+          id,
+          member.rows[0]?.name || name,
+          -used,
+          "Trừ vào tiền sân",
+          nowIso(),
+        ],
+      );
+    }
+  }
   return getBasicLedger();
 }
 
@@ -3499,6 +3614,7 @@ module.exports = {
   addPayment,
   addExpense,
   recomputeDebts,
+  withTransaction,
   getDebts,
   getPayments,
   getExpenses,

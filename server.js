@@ -23,17 +23,11 @@ const {
   createSession,
   cancelVoteSession,
   bookVoteSession,
-  settleSession,
   upsertMemberContact,
   updateMemberLevel,
   createMember,
   updateMemberProfile,
   deleteMember,
-  createBirthdayEvent,
-  getBirthdayEvents,
-  getBirthdayEventDetail,
-  upsertBirthdayDrinkSelection,
-  getBirthdayEventAdminView,
   respondToSession,
   answerPoll,
   addGuestToSession,
@@ -43,11 +37,7 @@ const {
   getGeneratedMatchesByDate,
   getMonthlyReport,
   getMemberHistory,
-  getPayments,
   getDebts,
-  addPayment,
-  addExpense,
-  getExpenses,
   getSnapshotForSheetSync,
   replaceAllDataFromSnapshot,
   getBasicLedger,
@@ -131,11 +121,30 @@ app.get("/tournament", (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "tournament.html"));
 });
 
-app.get("/basic", (_req, res) => {
-  res.sendFile(path.join(__dirname, "public", "basic.html"));
+app.get(["/basic", "/basic.html"], (_req, res) => {
+  res.redirect(302, "/");
 });
 
 app.use(express.static(path.join(__dirname, "public")));
+
+const RETIRED_ROUTES = [
+  ["post", "/api/sessions/:sessionId/settle"],
+  ["post", "/api/payments"],
+  ["post", "/api/expenses"],
+  ["get", "/api/birthday-events"],
+  ["post", "/api/birthday-events"],
+  ["get", "/api/birthday-events/:eventId"],
+  ["post", "/api/birthday-events/:eventId/select-drink"],
+  ["get", "/api/birthday-events/:eventId/admin-view"],
+];
+RETIRED_ROUTES.forEach(([method, route]) => {
+  app[method](route, (_req, res) =>
+    res.status(410).json({
+      message:
+        "Tính năng này đã tắt. Chi phí, công nợ được ghi trong Sổ tiền sân.",
+    }),
+  );
+});
 
 function requireAuth(req, res, next) {
   if (req.session?.authenticated && req.session?.role) return next();
@@ -272,73 +281,34 @@ app.get("/api/bootstrap", requireAuth, async (req, res) => {
     const role = req.session.role;
     const memberName = req.session.memberName || "";
     if (role === "admin") {
-      const [
-        members,
-        debts,
-        sessions,
-        payments,
-        expenses,
-        birthdayEvents,
-        voteSessions,
-      ] = await Promise.all([
+      const [members, sessions, voteSessions] = await Promise.all([
         getMembers(),
-        getDebts(),
         getRecentSessions(30),
-        getPayments(100),
-        getExpenses(100),
-        getBirthdayEvents(50),
         listVoteSessions({ includeCancelled: true, limit: 30 }),
       ]);
       return res.json({
         auth: { role },
         members,
-        debts,
         sessions,
-        payments,
-        expenses,
-        birthdayEvents,
         voteSessions,
       });
     }
 
     const today = new Date().toISOString().slice(0, 10);
-    const [
-      upcomingSession,
-      debts,
-      history,
-      payments,
-      activeVote,
-      todaysMatches,
-      birthdayEvents,
-      voteSessions,
-    ] = await Promise.all([
-      getUpcomingSessionForMember(memberName),
-      getDebts(),
-      getMemberHistory(memberName, 20),
-      getPayments(200),
-      getActivePollForMember(memberName),
-      getGeneratedMatchesByDate(today),
-      getBirthdayEvents(20),
-      listVoteSessions({ includeCancelled: false, limit: 30, memberName }),
-    ]);
+    const [upcomingSession, activeVote, todaysMatches, voteSessions] =
+      await Promise.all([
+        getUpcomingSessionForMember(memberName),
+        getActivePollForMember(memberName),
+        getGeneratedMatchesByDate(today),
+        listVoteSessions({ includeCancelled: false, limit: 30, memberName }),
+      ]);
 
     return res.json({
       auth: { role, memberName },
       upcomingSession,
       activeVote,
       todaysMatches,
-      birthdayEvents,
       voteSessions,
-      myDebt:
-        debts.find(
-          (item) => item.memberName.toLowerCase() === memberName.toLowerCase(),
-        ) || null,
-      myHistory: history,
-      myPayments: payments
-        .filter(
-          (item) => item.memberName.toLowerCase() === memberName.toLowerCase(),
-        )
-        .slice(0, 20),
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -720,37 +690,6 @@ app.post(
 );
 
 app.post(
-  "/api/sessions/:sessionId/settle",
-  requireAuth,
-  requireRole(["admin"]),
-  async (req, res) => {
-    try {
-      const sessionId = String(req.params.sessionId || "").trim();
-      const fixedMembers = Array.isArray(req.body?.fixedMembers)
-        ? req.body.fixedMembers
-        : [];
-      const guests = Array.isArray(req.body?.guests) ? req.body.guests : [];
-      const result = await settleSession({
-        sessionId,
-        fixedCourtCost: req.body?.fixedCourtCost,
-        extraCourts: req.body?.extraCourts,
-        shuttlecockCost: req.body?.shuttlecockCost,
-        fixedMembers,
-        guests,
-      });
-      return res.json({
-        ok: true,
-        result,
-        message:
-          "Đã chốt buổi sau khi đánh và tính công nợ theo dữ liệu thực tế.",
-      });
-    } catch (error) {
-      return res.status(400).json({ message: error.message });
-    }
-  },
-);
-
-app.post(
   "/api/sessions/:sessionId/respond",
   requireAuth,
   requireRole(["user", "admin"]),
@@ -950,154 +889,6 @@ app.get("/api/matches", requireAuth, async (req, res) => {
     return res.status(400).json({ message: error.message });
   }
 });
-
-app.post(
-  "/api/payments",
-  requireAuth,
-  requireRole(["admin"]),
-  async (req, res) => {
-    try {
-      const payload = {
-        date:
-          String(req.body?.date || "").trim() ||
-          new Date().toISOString().slice(0, 10),
-        memberName: String(req.body?.memberName || "").trim(),
-        amount: req.body?.amount,
-        note: String(req.body?.note || "").trim(),
-      };
-      await addPayment(payload);
-      await notificationService.sendToMember(
-        payload.memberName,
-        `Đã ghi nhận thanh toán ${payload.amount} cho ${payload.memberName}.`,
-      );
-      return res.json({
-        ok: true,
-        message: "Đã ghi nhận thanh toán và cập nhật công nợ.",
-      });
-    } catch (error) {
-      return res.status(400).json({ message: error.message });
-    }
-  },
-);
-
-app.post(
-  "/api/expenses",
-  requireAuth,
-  requireRole(["admin"]),
-  async (req, res) => {
-    try {
-      const payload = {
-        sessionId: String(req.body?.sessionId || "").trim(),
-        name: String(req.body?.name || "").trim(),
-        totalAmount: req.body?.totalAmount,
-        participants: Array.isArray(req.body?.participants)
-          ? req.body.participants
-          : [],
-        splitMethod: String(req.body?.splitMethod || "equal").trim(),
-        note: String(req.body?.note || "").trim(),
-      };
-      const expense = await addExpense(payload);
-      return res.json({
-        ok: true,
-        message: "Đã ghi nhận chi phí phát sinh.",
-        expense,
-      });
-    } catch (error) {
-      return res.status(400).json({ message: error.message });
-    }
-  },
-);
-
-app.get("/api/birthday-events", requireAuth, async (req, res) => {
-  try {
-    const events = await getBirthdayEvents(100);
-    return res.json({ events });
-  } catch (error) {
-    return res.status(400).json({ message: error.message });
-  }
-});
-
-app.post(
-  "/api/birthday-events",
-  requireAuth,
-  requireRole(["admin"]),
-  async (req, res) => {
-    try {
-      const event = await createBirthdayEvent(
-        {
-          eventName: req.body?.eventName,
-          date: req.body?.date,
-          description: req.body?.description,
-          brands: req.body?.brands,
-          drinks: req.body?.drinks,
-        },
-        req.session.username || "admin",
-      );
-      return res.json({ ok: true, event, message: "Đã tạo birthday event." });
-    } catch (error) {
-      return res.status(400).json({ message: error.message });
-    }
-  },
-);
-
-app.get("/api/birthday-events/:eventId", requireAuth, async (req, res) => {
-  try {
-    const eventId = String(req.params.eventId || "").trim();
-    const memberName =
-      req.session.role === "admin"
-        ? String(req.query.memberName || "").trim()
-        : req.session.memberName;
-    const event = await getBirthdayEventDetail(eventId, memberName);
-    return res.json({ event });
-  } catch (error) {
-    return res.status(400).json({ message: error.message });
-  }
-});
-
-app.post(
-  "/api/birthday-events/:eventId/select-drink",
-  requireAuth,
-  requireRole(["user", "admin"]),
-  async (req, res) => {
-    try {
-      const eventId = String(req.params.eventId || "").trim();
-      const memberName =
-        req.session.role === "admin"
-          ? String(req.body?.memberName || "").trim()
-          : req.session.memberName;
-      const drinkId = String(req.body?.drinkId || "").trim();
-      const quantity = req.body?.quantity;
-      const selection = await upsertBirthdayDrinkSelection({
-        eventId,
-        memberName,
-        drinkId,
-        quantity,
-      });
-      return res.json({
-        ok: true,
-        selection,
-        message: "Đã cập nhật lựa chọn món.",
-      });
-    } catch (error) {
-      return res.status(400).json({ message: error.message });
-    }
-  },
-);
-
-app.get(
-  "/api/birthday-events/:eventId/admin-view",
-  requireAuth,
-  requireRole(["admin"]),
-  async (req, res) => {
-    try {
-      const eventId = String(req.params.eventId || "").trim();
-      const result = await getBirthdayEventAdminView(eventId);
-      return res.json(result);
-    } catch (error) {
-      return res.status(400).json({ message: error.message });
-    }
-  },
-);
 
 async function runSyncToSheets() {
   const snapshot = await getSnapshotForSheetSync();
@@ -1364,9 +1155,10 @@ app.get(
 
 app.get("/api/basic", requireAuth, async (req, res) => {
   try {
-    const [members, sessions] = await Promise.all([
+    const [members, sessions, creditSummary] = await Promise.all([
       getMembers(),
       getBasicLedger(),
+      getMemberCreditSummary(),
     ]);
     return res.json({
       role: req.session.role,
@@ -1375,6 +1167,10 @@ app.get("/api/basic", requireAuth, async (req, res) => {
         .filter((member) => member.active)
         .map((member) => ({ memberId: member.memberId, name: member.name })),
       sessions,
+      credits: creditSummary.balances.map((item) => ({
+        memberId: item.memberId,
+        balance: item.balance,
+      })),
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -1419,6 +1215,9 @@ app.post(
         court: req.body?.court,
         courtFee: req.body?.courtFee,
         shuttleFee: req.body?.shuttleFee,
+        extraFee: req.body?.extraFee,
+        extraNote: req.body?.extraNote,
+        voteSessionId: req.body?.voteSessionId,
         memberIds: req.body?.memberIds,
         guestNames: req.body?.guestNames,
       });

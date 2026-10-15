@@ -4,14 +4,6 @@ const state = {
   sessions: [],
   voteSessions: [],
   members: [],
-  adminPayments: [],
-  adminExpenses: [],
-  adminExpenseExtraGuests: [],
-  birthdayEvents: [],
-  birthdayEventDetail: null,
-  birthdayAdminView: null,
-  selectedBirthdayEventId: "",
-  selectedBirthdayBrand: "",
   activeAdminTab: "court",
   activeUserTab: "home",
   tournamentMountedFor: "",
@@ -185,40 +177,6 @@ function renderRoleHeader(auth) {
   document.getElementById("userSection").classList.toggle("hidden", isAdmin);
 }
 
-function createGuestRow() {
-  const row = document.createElement("div");
-  row.className = "grid grid-cols-12 gap-2";
-  row.innerHTML = `
-    <input class="guest-name col-span-6 rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Tên GL" />
-    <select class="guest-gender col-span-4 rounded-lg border border-slate-300 px-2 py-2 text-sm">
-      <option value="Nam">Nam</option>
-      <option value="Nữ">Nữ</option>
-    </select>
-    <button type="button" class="guest-remove col-span-2 rounded-lg border border-slate-300 px-2 py-2 text-sm hover:bg-slate-100">Xóa</button>
-  `;
-  row.querySelector(".guest-remove")?.addEventListener("click", () => row.remove());
-  return row;
-}
-
-function renderSettleFixedMembers(members) {
-  const container = document.getElementById("settleFixedMembersContainer");
-  if (!container) return;
-  container.innerHTML = "";
-  members
-    .filter((member) => member.active && member.type === "Cố định")
-    .forEach((member) => {
-      const id = `fixed_${member.memberId}`;
-      const wrapper = document.createElement("label");
-      wrapper.className = "flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2";
-      wrapper.dataset.name = member.name;
-      wrapper.innerHTML = `
-        <input id="${id}" type="checkbox" class="fixed-present h-4 w-4" />
-        <span class="text-sm">${member.name}</span>
-      `;
-      container.appendChild(wrapper);
-    });
-}
-
 function renderMemberLevels(members) {
   const tbody = document.getElementById("memberLevelTable");
   tbody.innerHTML = "";
@@ -277,59 +235,23 @@ function openMemberModal(member = null) {
 function renderSessionSelect(sessions) {
   state.sessions = sessions;
   const matchSelect = document.getElementById("matchSessionSelect");
-  const settleSelect = document.getElementById("settleSessionSelect");
-  const attendanceSelect = document.getElementById("attendanceSessionSelect");
-  const expenseSelect = document.getElementById("expenseSessionSelect");
-  matchSelect.innerHTML = "";
-  settleSelect.innerHTML = "";
-  attendanceSelect.innerHTML = "";
-  if (expenseSelect) expenseSelect.innerHTML = "";
-  sessions.forEach((session) => {
-    const optionText = `${session.date} ${session.time} - ${session.sessionId}${session.settled ? " (đã chốt)" : ""}`;
-    const matchOption = document.createElement("option");
-    matchOption.value = session.sessionId;
-    matchOption.textContent = optionText;
-    matchSelect.appendChild(matchOption);
-
-    const settleOption = document.createElement("option");
-    settleOption.value = session.sessionId;
-    settleOption.textContent = optionText;
-    settleSelect.appendChild(settleOption);
-
-    const attendanceOption = document.createElement("option");
-    attendanceOption.value = session.sessionId;
-    attendanceOption.textContent = optionText;
-    attendanceSelect.appendChild(attendanceOption);
-
-    if (expenseSelect) {
-      const expenseOption = document.createElement("option");
-      expenseOption.value = session.sessionId;
-      expenseOption.textContent = optionText;
-      expenseSelect.appendChild(expenseOption);
-    }
-  });
+  if (!matchSelect) return;
+  matchSelect.innerHTML = sessions
+    .map(
+      (session) =>
+        `<option value="${escapeHtmlText(session.sessionId)}">${escapeHtmlText(`${session.date} ${session.time} · ${session.location || session.sessionId}`)}</option>`
+    )
+    .join("");
 }
 
+// Popup nhắc phản hồi khi user còn "pending" ở buổi sắp tới.
 function renderUpcoming(session) {
-  const info = document.getElementById("upcomingInfo");
   if (!session) {
-    info.textContent = "Hiện chưa có buổi upcoming.";
     state.upcomingSessionId = "";
     toggleModal("attendanceModal", false);
     return;
   }
   state.upcomingSessionId = session.sessionId;
-  const voteStatus = String(session.voteStatus || "open").toLowerCase();
-  const statusLabel =
-    voteStatus === "booked" ? "đã đặt sân" : voteStatus === "cancelled" ? "đã hủy" : "đang vote";
-  info.innerHTML = [
-    `Buổi: ${session.date} ${session.time}`,
-    session.location ? `Địa điểm: ${session.location}` : "",
-    `Vote: ${statusLabel}`,
-    `Trạng thái hiện tại: ${session.myStatus || "pending"}`
-  ]
-    .filter(Boolean)
-    .join(" | ");
   document.getElementById("attendanceModalInfo").textContent = [
     `Buổi: ${session.date} ${session.time}`,
     session.location ? `Địa điểm: ${session.location}` : "",
@@ -338,14 +260,10 @@ function renderUpcoming(session) {
     .filter(Boolean)
     .join(" | ");
 
+  const voteStatus = String(session.voteStatus || "open").toLowerCase();
   const myStatus = String(session.myStatus || "pending").toLowerCase();
   const canStillVote = voteStatus === "open" || voteStatus === "booked";
-  const needsResponse = canStillVote && myStatus === "pending";
-  if (needsResponse) {
-    toggleModal("attendanceModal", true);
-  } else {
-    toggleModal("attendanceModal", false);
-  }
+  toggleModal("attendanceModal", canStillVote && myStatus === "pending");
 }
 
 function voteStatusLabel(status) {
@@ -362,14 +280,39 @@ function voteStatusClass(status) {
   return "is-open";
 }
 
-function renderYesMemberChips(yesMembers) {
-  const list = Array.isArray(yesMembers) ? yesMembers : [];
-  if (!list.length) return `<span class="vote-empty">Chưa có ai đồng ý</span>`;
-  return list
+function voteCardHead(session) {
+  const status = String(session.voteStatus || "open").toLowerCase();
+  const stats = session.stats || { yes: 0, no: 0, pending: 0 };
+  const charged = session.basicSessionId ? `<span class="vote-badge is-charged">Đã tính tiền</span>` : "";
+  return `<div class="vote-card-head">
+      <div>
+        <strong>${escapeHtmlText(session.date)} ${escapeHtmlText(session.time || "")}</strong>
+        <p>${escapeHtmlText(session.location || "Chưa có địa điểm")}${session.note ? ` · ${escapeHtmlText(session.note)}` : ""}</p>
+      </div>
+      <div class="vote-badges">${charged}<span class="vote-badge ${voteStatusClass(status)}">${voteStatusLabel(status)}</span></div>
+    </div>
+    <p class="vote-stats"><b>${stats.yes || 0}</b> tham gia · ${stats.no || 0} không · ${stats.pending || 0} chưa trả lời</p>`;
+}
+
+function voteBookingImage(session) {
+  const status = String(session.voteStatus || "open").toLowerCase();
+  if (status !== "booked" || !session.bookingImageUrl) return "";
+  return `<button type="button" class="vote-thumb-btn" data-action="preview-booking" data-session="${escapeHtmlText(session.sessionId)}">
+      <img src="${escapeHtmlText(session.bookingImageUrl)}" alt="Ảnh đặt sân" class="vote-thumb" />
+    </button>`;
+}
+
+function voteMemberChips(session, editable) {
+  const members = Array.isArray(session.members) ? session.members : [];
+  if (!members.length) return `<span class="vote-empty">Chưa có ai trong danh sách.</span>`;
+  const order = { yes: 0, pending: 1, no: 2 };
+  return [...members]
+    .sort((a, b) => order[a.status] - order[b.status] || a.name.localeCompare(b.name, "vi"))
     .map((member) => {
-      const level =
-        member.level === null || member.level === undefined ? "" : ` · Lv${member.level}`;
-      return `<span class="vote-chip">${escapeHtmlText(member.name)}${escapeHtmlText(level)}</span>`;
+      const label = escapeHtmlText(member.name);
+      const cls = `vote-chip is-${member.status}`;
+      if (!editable) return `<span class="${cls}">${label}</span>`;
+      return `<button type="button" class="${cls}" data-action="toggle-member" data-session="${escapeHtmlText(session.sessionId)}" data-member="${label}" data-status="${member.status}">${label}</button>`;
     })
     .join("");
 }
@@ -386,42 +329,22 @@ function renderAdminVoteList(sessions) {
   container.innerHTML = state.voteSessions
     .map((session) => {
       const status = String(session.voteStatus || "open").toLowerCase();
-      const stats = session.stats || { yes: 0, no: 0, pending: 0 };
-      const imageBlock =
-        status === "booked" && session.bookingImageUrl
-          ? `<button type="button" class="vote-thumb-btn" data-action="preview-booking" data-session="${escapeHtmlText(session.sessionId)}">
-              <img src="${escapeHtmlText(session.bookingImageUrl)}" alt="Ảnh đặt sân" class="vote-thumb" />
-            </button>`
-          : "";
-      const actions =
-        status === "open"
-          ? `<div class="vote-actions">
-              <label class="vote-upload">
-                <span>Đánh dấu đã đặt</span>
-                <input type="file" accept="image/*" data-action="book-vote" data-session="${escapeHtmlText(session.sessionId)}" />
-              </label>
-              <button type="button" class="vote-btn vote-btn-danger" data-action="cancel-vote" data-session="${escapeHtmlText(session.sessionId)}">Hủy vote</button>
-            </div>`
-          : status === "booked"
-            ? `<div class="vote-actions">
-                <label class="vote-upload">
-                  <span>Đổi ảnh đặt sân</span>
-                  <input type="file" accept="image/*" data-action="book-vote" data-session="${escapeHtmlText(session.sessionId)}" />
-                </label>
-              </div>`
-            : "";
-
-      return `<article class="vote-card" data-session="${escapeHtmlText(session.sessionId)}">
-        <div class="vote-card-head">
-          <div>
-            <strong>${escapeHtmlText(session.date)} ${escapeHtmlText(session.time || "")}</strong>
-            <p>${escapeHtmlText(session.location || "Chưa có địa điểm")}${session.note ? ` · ${escapeHtmlText(session.note)}` : ""}</p>
-          </div>
-          <span class="vote-badge ${voteStatusClass(status)}">${voteStatusLabel(status)}</span>
-        </div>
-        <p class="vote-stats">Đồng ý ${stats.yes || 0} · Không ${stats.no || 0} · Chờ ${stats.pending || 0}</p>
-        <div class="vote-yes">${renderYesMemberChips(session.yesMembers)}</div>
-        ${imageBlock}
+      const sid = escapeHtmlText(session.sessionId);
+      const active = status !== "cancelled";
+      const actions = active
+        ? `<div class="vote-actions">
+            <button type="button" class="vote-btn vote-btn-primary" data-action="charge-vote" data-session="${sid}">${session.basicSessionId ? "Tính thêm" : "Tính tiền"}</button>
+            <label class="vote-upload">
+              <span>${status === "booked" ? "Đổi ảnh sân" : "Đã đặt sân"}</span>
+              <input type="file" accept="image/*" data-action="book-vote" data-session="${sid}" />
+            </label>
+            ${status === "open" ? `<button type="button" class="vote-btn vote-btn-danger" data-action="cancel-vote" data-session="${sid}">Hủy</button>` : ""}
+          </div>`
+        : "";
+      return `<article class="vote-card${active ? "" : " is-muted"}" data-session="${sid}">
+        ${voteCardHead(session)}
+        <div class="vote-yes">${voteMemberChips(session, active)}</div>
+        ${voteBookingImage(session)}
         ${actions}
       </article>`;
     })
@@ -441,32 +364,15 @@ function renderUserVoteList(sessions) {
 
   container.innerHTML = list
     .map((session) => {
-      const status = String(session.voteStatus || "open").toLowerCase();
       const myStatus = String(session.myStatus || "pending").toLowerCase();
-      const canStillVote = status === "open" || status === "booked";
-      const respondBtn =
-        canStillVote && myStatus === "pending"
-          ? `<button type="button" class="vote-btn vote-btn-primary" data-action="user-respond" data-session="${escapeHtmlText(session.sessionId)}">Xác nhận tham gia</button>`
-          : `<span class="vote-mine">Bạn: ${escapeHtmlText(myStatus)}</span>`;
-      const imageBlock =
-        status === "booked" && session.bookingImageUrl
-          ? `<button type="button" class="vote-thumb-btn" data-action="preview-booking" data-session="${escapeHtmlText(session.sessionId)}">
-              <img src="${escapeHtmlText(session.bookingImageUrl)}" alt="Ảnh đặt sân" class="vote-thumb" />
-              <span>Xem ảnh đặt sân</span>
-            </button>`
-          : "";
-
+      const sid = escapeHtmlText(session.sessionId);
+      const pick = (value, label) =>
+        `<button type="button" class="vote-btn vote-pick${myStatus === value ? " is-on" : ""}" data-action="user-respond" data-status="${value}" data-session="${sid}">${label}</button>`;
       return `<article class="vote-card">
-        <div class="vote-card-head">
-          <div>
-            <strong>${escapeHtmlText(session.date)} ${escapeHtmlText(session.time || "")}</strong>
-            <p>${escapeHtmlText(session.location || "Chưa có địa điểm")}${session.note ? ` · ${escapeHtmlText(session.note)}` : ""}</p>
-          </div>
-          <span class="vote-badge ${voteStatusClass(status)}">${voteStatusLabel(status)}</span>
-        </div>
-        <div class="vote-yes">${renderYesMemberChips(session.yesMembers)}</div>
-        <div class="vote-actions">${respondBtn}</div>
-        ${imageBlock}
+        ${voteCardHead(session)}
+        <div class="vote-yes">${voteMemberChips(session, false)}</div>
+        ${voteBookingImage(session)}
+        <div class="vote-actions">${pick("yes", "Tham gia")}${pick("no", "Không")}</div>
       </article>`;
     })
     .join("");
@@ -561,36 +467,6 @@ function renderUserDebt(myDebt, creditBalance = 0) {
   }
 }
 
-function renderTodayMatches(rows = [], memberName = "") {
-  const tbody = document.getElementById("todayMatchesTableBody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-  if (!rows.length) {
-    tbody.innerHTML =
-      '<tr><td colspan="5" class="border border-slate-200 px-2 py-2 text-center text-slate-500">Hôm nay chưa có lịch trận được generate.</td></tr>';
-    return;
-  }
-  const memberNameCi = String(memberName || "").trim().toLowerCase();
-  rows.forEach((match) => {
-    const teamA = `${match.teamA?.[0]?.name || "-"} + ${match.teamA?.[1]?.name || "-"}`;
-    const teamB = `${match.teamB?.[0]?.name || "-"} + ${match.teamB?.[1]?.name || "-"}`;
-    const allPlayers = [...(match.teamA || []), ...(match.teamB || [])]
-      .map((p) => String(p?.name || "").trim().toLowerCase())
-      .filter(Boolean);
-    const isMyMatch = memberNameCi && allPlayers.includes(memberNameCi);
-    const tr = document.createElement("tr");
-    tr.className = isMyMatch ? "bg-amber-50" : "";
-    tr.innerHTML = `
-      <td class="border border-slate-200 px-2 py-1">Round ${match.round}${isMyMatch ? ' <span class="rounded bg-amber-200 px-1.5 py-0.5 text-xs font-medium text-amber-900">Trận của bạn</span>' : ""}</td>
-      <td class="border border-slate-200 px-2 py-1">Sân ${match.courtNo || 1}${match.matchTime ? ` - ${match.matchTime}` : ""}</td>
-      <td class="border border-slate-200 px-2 py-1">${teamA}</td>
-      <td class="border border-slate-200 px-2 py-1">${teamB}</td>
-      <td class="border border-slate-200 px-2 py-1">${match.status || "scheduled"}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
 function openVoteModal(vote) {
   if (!vote) return;
   state.activeVote = vote;
@@ -626,53 +502,8 @@ async function submitAttendance(status, sessionIdOverride = "") {
     await loadUserDashboard();
   } catch (error) {
     setMessage("attendanceModalMessage", error.message, true);
+    setMessage("userVoteMessage", error.message, true);
   }
-}
-
-function formatAttendanceStatus(status) {
-  const value = String(status || "").toLowerCase();
-  if (value === "yes") return "Có tham gia";
-  if (value === "no") return "Không tham gia";
-  return "Chưa phản hồi";
-}
-
-function renderAdminAttendanceTable(participants = [], pollQuestion = "") {
-  const tbody = document.getElementById("attendanceTableBody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-  if (!participants.length) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="6" class="px-2 py-2 text-center text-slate-500">Chưa có dữ liệu xác nhận.</td>`;
-    tbody.appendChild(tr);
-    return;
-  }
-  participants.forEach((item) => {
-    const tr = document.createElement("tr");
-    const typeLabel = item.participantType || "Cố định";
-    const level = item.level ?? "-";
-    const currentStatus = String(item.status || "pending").toLowerCase();
-    const allowPending = typeLabel === "GL";
-    const statusOptions = [
-      { value: "no", label: "Không tham gia" },
-      { value: "yes", label: "Có tham gia" },
-      ...(allowPending ? [{ value: "pending", label: "Chưa phản hồi" }] : [])
-    ]
-      .map((opt) => `<option value="${opt.value}" ${currentStatus === opt.value ? "selected" : ""}>${opt.label}</option>`)
-      .join("");
-    tr.innerHTML = `
-      <td>${item.memberName || "-"}</td>
-      <td class="attendance-col-extra">${typeLabel}</td>
-      <td>${level}</td>
-      <td>
-        <select data-member="${item.memberName || ""}" data-type="${typeLabel}" data-level="${level}" class="attendance-status-input">
-          ${statusOptions}
-        </select>
-      </td>
-      <td class="attendance-col-extra">${item.pollAnswer || (pollQuestion ? "-" : "Không có poll")}</td>
-      <td class="attendance-col-extra">${item.respondedAt || "-"}</td>
-    `;
-    tbody.appendChild(tr);
-  });
 }
 
 function renderMatchTables(rounds = []) {
@@ -744,38 +575,6 @@ async function loadMatchesForDate(date) {
   return data.matches || [];
 }
 
-function renderUserMatchDateOptions(upcomingSession, myHistory = []) {
-  const select = document.getElementById("userMatchDateSelect");
-  if (!select) return;
-  const dateSet = new Set();
-  if (upcomingSession?.date) dateSet.add(upcomingSession.date);
-  (myHistory || []).forEach((item) => {
-    if (item?.date) dateSet.add(item.date);
-  });
-  const dates = Array.from(dateSet).sort((a, b) => b.localeCompare(a));
-  if (!dates.length) {
-    dates.push(new Date().toISOString().slice(0, 10));
-  }
-  const previous = state.selectedUserMatchDate;
-  select.innerHTML = "";
-  dates.forEach((date) => {
-    const option = document.createElement("option");
-    option.value = date;
-    option.textContent = date;
-    select.appendChild(option);
-  });
-  state.selectedUserMatchDate = dates.includes(previous) ? previous : dates[0];
-  select.value = state.selectedUserMatchDate;
-}
-
-async function loadUserMatchesBySelectedDate(memberName = "") {
-  const select = document.getElementById("userMatchDateSelect");
-  const date = select?.value || state.selectedUserMatchDate || new Date().toISOString().slice(0, 10);
-  state.selectedUserMatchDate = date;
-  const matches = await loadMatchesForDate(date);
-  renderTodayMatches(matches, memberName);
-}
-
 function renderReportTables(report) {
   document.getElementById("reportMonthValue").textContent = report?.month || "-";
   document.getElementById("reportTotalCost").textContent = formatMoney(report?.totalMonthlyCost || 0);
@@ -816,265 +615,6 @@ function renderReportTables(report) {
     `;
     payerBody.appendChild(tr);
   });
-}
-
-function renderMyHistoryTable(rows = []) {
-  const tbody = document.getElementById("myHistoryTableBody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-  if (!rows.length) {
-    tbody.innerHTML =
-      '<tr><td colspan="5" class="border border-slate-200 px-2 py-2 text-center text-slate-500">Chưa có dữ liệu.</td></tr>';
-    return;
-  }
-  rows.forEach((item) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="border border-slate-200 px-2 py-1">${item.date || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1">${item.time || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1">${item.location || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1">${formatAttendanceStatus(item.status)}</td>
-      <td class="border border-slate-200 px-2 py-1 text-right">${formatMoney(item.totalCost || 0)}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-function renderMyPaymentsTable(rows = []) {
-  const tbody = document.getElementById("myPaymentsTableBody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-  if (!rows.length) {
-    tbody.innerHTML =
-      '<tr><td colspan="4" class="border border-slate-200 px-2 py-2 text-center text-slate-500">Chưa có dữ liệu.</td></tr>';
-    return;
-  }
-  rows.forEach((item) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="border border-slate-200 px-2 py-1">${item.date || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1 text-right">${formatMoney(item.amount || 0)}</td>
-      <td class="border border-slate-200 px-2 py-1">${item.note || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1">${item.createdAt || "-"}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-function renderAdminPaymentsTable(rows = []) {
-  const tbody = document.getElementById("adminPaymentsTableBody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-  if (!rows.length) {
-    tbody.innerHTML =
-      '<tr><td colspan="5" class="border border-slate-200 px-2 py-2 text-center text-slate-500">Chưa có dữ liệu.</td></tr>';
-    return;
-  }
-  rows.forEach((item) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="border border-slate-200 px-2 py-1">${item.date || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1">${item.memberName || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1 text-right">${formatMoney(item.amount || 0)}</td>
-      <td class="border border-slate-200 px-2 py-1">${item.note || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1">${item.createdAt || "-"}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-function getAdminPaymentsFilteredByInput() {
-  const all = state.adminPayments || [];
-  const memberName = String(document.getElementById("paymentMemberInput")?.value || "").trim().toLowerCase();
-  if (!memberName) return all;
-  return all.filter((p) => String(p.memberName || "").toLowerCase() === memberName);
-}
-
-function renderAdminPaymentsTableForCurrentInput() {
-  renderAdminPaymentsTable(getAdminPaymentsFilteredByInput());
-}
-
-function renderAdminExpensesTable(rows = []) {
-  const tbody = document.getElementById("adminExpensesTableBody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-  if (!rows.length) {
-    tbody.innerHTML =
-      '<tr><td colspan="5" class="border border-slate-200 px-2 py-2 text-center text-slate-500">Chưa có dữ liệu.</td></tr>';
-    return;
-  }
-
-  rows.forEach((item) => {
-    const participantsText = (item.participants || [])
-      .map((p) => p.memberName)
-      .filter(Boolean)
-      .join(", ");
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="border border-slate-200 px-2 py-1">${item.date || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1">${item.name || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1 text-right">${formatMoney(item.totalAmount || 0)}</td>
-      <td class="border border-slate-200 px-2 py-1">${participantsText || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1">${item.createdAt || "-"}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-function renderBirthdayEventOptions(events = [], role = "admin") {
-  const selectId = role === "admin" ? "birthdayAdminEventSelect" : "birthdayUserEventSelect";
-  const select = document.getElementById(selectId);
-  if (!select) return;
-  select.innerHTML = "";
-  if (!events.length) {
-    const option = document.createElement("option");
-    option.value = "";
-    option.textContent = "Chưa có event";
-    select.appendChild(option);
-    return;
-  }
-  events.forEach((event) => {
-    const option = document.createElement("option");
-    option.value = event.eventId;
-    option.textContent = `${event.date} - ${event.eventName}`;
-    select.appendChild(option);
-  });
-  const eventIds = events.map((item) => item.eventId);
-  state.selectedBirthdayEventId = eventIds.includes(state.selectedBirthdayEventId) ? state.selectedBirthdayEventId : events[0].eventId;
-  select.value = state.selectedBirthdayEventId;
-}
-
-function renderBirthdayAdminSummary(summary) {
-  const container = document.getElementById("birthdayAdminSummary");
-  if (!container) return;
-  container.innerHTML = "";
-  if (!summary) {
-    container.innerHTML = '<p class="text-sm text-slate-500">Chưa có dữ liệu tổng hợp.</p>';
-    return;
-  }
-  if (!summary.groupedByBrand?.length) {
-    container.innerHTML = '<p class="text-sm text-slate-500">Event này chưa có ai chọn đồ uống.</p>';
-    return;
-  }
-  summary.groupedByBrand.forEach((group) => {
-    const block = document.createElement("div");
-    block.className = "rounded-lg border border-slate-200";
-    const drinksRows = (group.drinks || [])
-      .map((drink) => `<tr><td class="border border-slate-200 px-2 py-1">${drink.drinkName}</td><td class="border border-slate-200 px-2 py-1 text-right">${drink.totalQuantity}</td></tr>`)
-      .join("");
-    const usersRows = (group.users || [])
-      .map((user) => `<tr><td class="border border-slate-200 px-2 py-1">${user.memberName}</td><td class="border border-slate-200 px-2 py-1">${user.drinkName}</td><td class="border border-slate-200 px-2 py-1 text-right">${user.quantity}</td></tr>`)
-      .join("");
-    block.innerHTML = `
-      <div class="bg-slate-100 px-3 py-2 text-sm font-medium">${group.brandName} - Tổng ly: ${group.totalQuantity}</div>
-      <div class="grid grid-cols-1 gap-3 p-3 lg:grid-cols-2">
-        <div class="overflow-x-auto">
-          <div class="mb-1 text-xs font-medium text-slate-600">Tổng theo món</div>
-          <table class="min-w-full border border-slate-200 text-sm"><thead class="bg-slate-50"><tr><th class="border border-slate-200 px-2 py-1 text-left">Món</th><th class="border border-slate-200 px-2 py-1 text-right">SL</th></tr></thead><tbody>${drinksRows || '<tr><td colspan="2" class="border border-slate-200 px-2 py-1 text-center text-slate-500">-</td></tr>'}</tbody></table>
-        </div>
-        <div class="overflow-x-auto">
-          <div class="mb-1 text-xs font-medium text-slate-600">Chi tiết user</div>
-          <table class="min-w-full border border-slate-200 text-sm"><thead class="bg-slate-50"><tr><th class="border border-slate-200 px-2 py-1 text-left">User</th><th class="border border-slate-200 px-2 py-1 text-left">Món</th><th class="border border-slate-200 px-2 py-1 text-right">SL</th></tr></thead><tbody>${usersRows || '<tr><td colspan="3" class="border border-slate-200 px-2 py-1 text-center text-slate-500">-</td></tr>'}</tbody></table>
-        </div>
-      </div>
-    `;
-    container.appendChild(block);
-  });
-}
-
-function renderBirthdayUserEventDetail(detail) {
-  const info = document.getElementById("birthdayUserEventInfo");
-  const tabs = document.getElementById("birthdayBrandTabs");
-  const grid = document.getElementById("birthdayDrinkGrid");
-  if (!info || !tabs || !grid) return;
-  tabs.innerHTML = "";
-  grid.innerHTML = "";
-  if (!detail) {
-    info.textContent = "Hiện chưa có birthday event.";
-    return;
-  }
-  info.textContent = `${detail.eventName} - ${detail.date}${detail.description ? ` | ${detail.description}` : ""}`;
-  const brands = detail.brands || [];
-  if (!brands.length) {
-    grid.innerHTML = '<p class="text-sm text-slate-500">Event chưa có brand/menu.</p>';
-    return;
-  }
-  state.selectedBirthdayBrand = brands.includes(state.selectedBirthdayBrand) ? state.selectedBirthdayBrand : brands[0];
-  brands.forEach((brand) => {
-    const btn = document.createElement("button");
-    const active = brand === state.selectedBirthdayBrand;
-    btn.type = "button";
-    btn.className = `rounded-full border px-3 py-1 text-sm whitespace-nowrap ${active ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300 bg-white text-slate-700"}`;
-    btn.dataset.brand = brand;
-    btn.textContent = brand;
-    tabs.appendChild(btn);
-  });
-  const drinks = (detail.drinks || []).filter((item) => item.brandName === state.selectedBirthdayBrand && item.isActive);
-  if (!drinks.length) {
-    grid.innerHTML = '<p class="text-sm text-slate-500">Brand này chưa có món.</p>';
-    return;
-  }
-  drinks.forEach((drink) => {
-    const isSelected = detail.selectedOrder?.drinkId === drink.drinkId;
-    const card = document.createElement("div");
-    card.className = "rounded-xl border border-slate-200 bg-white p-3";
-    card.innerHTML = `
-      <img src="${drink.imageUrl || "https://images.unsplash.com/photo-1577805947697-89e18249d767?auto=format&fit=crop&w=600&q=80"}" alt="${drink.drinkName}" class="h-36 w-full rounded-lg object-cover" />
-      <div class="mt-2 font-medium">${drink.drinkName}</div>
-      <div class="text-sm text-slate-500">${drink.price ? `${formatMoney(drink.price)} đ` : "Giá cập nhật sau"}</div>
-      <button data-drink-id="${drink.drinkId}" class="mt-3 w-full rounded-lg px-3 py-2 text-sm ${isSelected ? "bg-emerald-600 text-white" : "bg-indigo-600 text-white"}">${isSelected ? "Đã chọn" : "Chọn món này"}</button>
-    `;
-    grid.appendChild(card);
-  });
-}
-
-function parseBirthdayMenuInput(rawText, brands) {
-  const rows = String(rawText || "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const fallbackBrand = brands[0] || "";
-  return rows
-    .map((line, index) => {
-      const [brandNameRaw, drinkNameRaw, priceRaw, imageUrlRaw] = line.split("|");
-      const brandName = String(brandNameRaw || fallbackBrand).trim();
-      const drinkName = String(drinkNameRaw || "").trim();
-      const parsedPrice = String(priceRaw || "").trim();
-      return {
-        brandName,
-        drinkName,
-        price: parsedPrice ? Number(parsedPrice) : null,
-        imageUrl: String(imageUrlRaw || "").trim(),
-        sortOrder: index
-      };
-    })
-    .filter((item) => item.brandName && item.drinkName);
-}
-
-async function loadBirthdayAdminView() {
-  const eventId = document.getElementById("birthdayAdminEventSelect")?.value || "";
-  if (!eventId) {
-    renderBirthdayAdminSummary(null);
-    return;
-  }
-  state.selectedBirthdayEventId = eventId;
-  const data = await api(`/api/birthday-events/${encodeURIComponent(eventId)}/admin-view`);
-  state.birthdayAdminView = data;
-  renderBirthdayAdminSummary(data);
-}
-
-async function loadBirthdayUserEvent() {
-  const eventId = document.getElementById("birthdayUserEventSelect")?.value || "";
-  if (!eventId) {
-    state.birthdayEventDetail = null;
-    renderBirthdayUserEventDetail(null);
-    return;
-  }
-  state.selectedBirthdayEventId = eventId;
-  const data = await api(`/api/birthday-events/${encodeURIComponent(eventId)}`);
-  state.birthdayEventDetail = data.event || null;
-  renderBirthdayUserEventDetail(state.birthdayEventDetail);
 }
 
 async function mountTournamentPanel(role) {
@@ -1158,6 +698,7 @@ function activateAdminTab(tabId) {
   const contentDefs = {
     court: "courtTabContent",
     expenses: "expensesTabContent",
+    ledger: "ledgerTabContent",
     games: "gamesTabContent",
     tools: "toolsTabContent",
     credit: "creditTabContent",
@@ -1173,6 +714,7 @@ function activateAdminTab(tabId) {
   const btnDefs = {
     court: "adminTabCourtBtn",
     expenses: "adminTabExpensesBtn",
+    ledger: "adminTabLedgerBtn",
     games: "adminTabGamesBtn",
     tools: "adminTabToolsBtn",
     credit: "adminTabCreditBtn",
@@ -1189,9 +731,10 @@ function activateAdminTab(tabId) {
 
   if (tabId === "credit") loadCreditBoard().catch((error) => setMessage("creditMessage", error.message, true));
 
-  if (tabId === "expenses") {
-    renderAdminPaymentsTableForCurrentInput();
-    renderAdminExpensesTable(state.adminExpenses || []);
+  if (tabId === "expenses" || tabId === "ledger") {
+    window.BasicLedger.mountEntry(document.getElementById("adminEntryMount"));
+    window.BasicLedger.mountLedger(document.getElementById("adminLedgerMount"));
+    window.BasicLedger.load().catch((error) => setMessage("voteListMessage", error.message, true));
   }
 
   if (tabId === "notices") {
@@ -1206,100 +749,6 @@ function activateAdminTab(tabId) {
   }
 }
 
-async function loadExpenseParticipantsOptions(sessionId) {
-  const container = document.getElementById("expenseParticipantsContainer");
-  if (!container) return;
-  if (!sessionId) {
-    container.innerHTML = "";
-    return;
-  }
-
-  container.innerHTML = '<p class="text-sm text-slate-500">Đang tải participants...</p>';
-  try {
-    const data = await api(`/api/sessions/${encodeURIComponent(sessionId)}/participants`);
-    const sessionParticipants = data.participants || [];
-
-    const fixedOptions = (state.members || [])
-      .filter((m) => m.active && m.type === "Cố định")
-      .map((m) => ({
-        name: m.name,
-        label: "TV cố định"
-      }));
-
-    const glNames = sessionParticipants
-      .filter((p) => p.participantType === "GL")
-      .map((p) => p.memberName)
-      .filter(Boolean);
-
-    const byLower = new Map();
-    const toLower = (s) => String(s || "").trim().toLowerCase();
-    fixedOptions.forEach((opt) => byLower.set(toLower(opt.name), opt));
-    glNames.forEach((name) => {
-      const key = toLower(name);
-      if (!byLower.has(key)) byLower.set(key, { name, label: "GL" });
-    });
-
-    const options = Array.from(byLower.values());
-    const extra = Array.isArray(state.adminExpenseExtraGuests) ? state.adminExpenseExtraGuests : [];
-    extra.forEach((name) => {
-      const n = String(name || "").trim();
-      if (!n) return;
-      const key = toLower(n);
-      if (!byLower.has(key)) byLower.set(key, { name: n, label: "GL (manual)" });
-    });
-
-    const finalOptions = Array.from(byLower.values());
-
-    if (!finalOptions.length) {
-      container.innerHTML = '<p class="text-sm text-slate-500">Chưa có participants để chia chi phí.</p>';
-      return;
-    }
-
-    container.innerHTML = "";
-    finalOptions.forEach((opt) => {
-      const label = document.createElement("label");
-      label.className = "flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm";
-
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.name = "expenseParticipant";
-      input.value = opt.name;
-      input.checked = true; // default: chọn tất cả
-
-      const nameSpan = document.createElement("span");
-      nameSpan.textContent = opt.name;
-
-      const badge = document.createElement("span");
-      badge.className = "text-xs text-slate-500";
-      badge.textContent = `(${opt.label})`;
-
-      label.appendChild(input);
-      label.appendChild(nameSpan);
-      label.appendChild(badge);
-      container.appendChild(label);
-    });
-  } catch (error) {
-    container.innerHTML = `<p class="text-sm text-red-600">${error.message}</p>`;
-  }
-}
-
-async function loadAdminAttendanceTable() {
-  const sessionId = document.getElementById("attendanceSessionSelect")?.value;
-  if (!sessionId) {
-    renderAdminAttendanceTable([], "");
-    setMessage("attendanceMessage", "Chưa có session để xem.");
-    return;
-  }
-  try {
-    const data = await api(`/api/sessions/${encodeURIComponent(sessionId)}/participants`);
-    renderAdminAttendanceTable(data.participants || [], data.pollQuestion || "");
-    setMessage("attendanceMessage", `Đã tải danh sách xác nhận cho session ${sessionId}.`);
-  } catch (error) {
-    renderAdminAttendanceTable([], "");
-    setMessage("attendanceMessage", error.message, true);
-  }
-}
-
 async function loadLoginOptions() {
   const data = await api("/api/tournament/login-options").catch(() => api("/api/login-options"));
   state.loginOptions = data.members || [];
@@ -1310,23 +759,12 @@ async function loadAdminDashboard() {
   const data = await api("/api/bootstrap");
   state.auth = data.auth;
   state.members = data.members || [];
-  state.adminPayments = data.payments || [];
-  state.adminExpenses = data.expenses || [];
-  state.birthdayEvents = data.birthdayEvents || [];
   renderRoleHeader(data.auth);
   renderMemberLevels(state.members);
-  renderSettleFixedMembers(state.members);
   renderSessionSelect(data.sessions || []);
-
-  const expenseSessionId = document.getElementById("expenseSessionSelect")?.value || "";
-  if (expenseSessionId) {
-    await loadExpenseParticipantsOptions(expenseSessionId);
-  }
-
-  renderAdminExpensesTable(state.adminExpenses || []);
-  renderBirthdayEventOptions(state.birthdayEvents, "admin");
+  state.voteSessions = data.voteSessions || [];
+  renderAdminVoteList(state.voteSessions);
   activateAdminTab(state.activeAdminTab || "court");
-  await loadBirthdayAdminView().catch(() => renderBirthdayAdminSummary(null));
 
   const selectedSessionId = document.getElementById("matchSessionSelect")?.value || "";
   const selectedSession = state.sessions.find((item) => item.sessionId === selectedSessionId);
@@ -1336,222 +774,45 @@ async function loadAdminDashboard() {
   } else {
     renderMatchTables([]);
   }
-  await loadAdminAttendanceTable();
-  state.voteSessions = data.voteSessions || [];
-  renderAdminVoteList(state.voteSessions);
-  renderAdminPaymentsTableForCurrentInput();
-  document.getElementById("preDateInput").value = new Date().toISOString().slice(0, 10);
-  document.getElementById("paymentDateInput").value = new Date().toISOString().slice(0, 10);
+  const dateInput = document.getElementById("preDateInput");
+  if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
 }
 
 async function loadUserDashboard() {
   const data = await api("/api/bootstrap");
   state.auth = data.auth;
-  state.birthdayEvents = data.birthdayEvents || [];
   state.voteSessions = data.voteSessions || [];
   renderRoleHeader(data.auth);
   activateUserTab(state.activeUserTab || "home");
   renderUpcoming(data.upcomingSession);
-  renderUserVoteList(data.voteSessions || []);
-  renderUserMatchDateOptions(data.upcomingSession, data.myHistory || []);
-  await loadUserMatchesBySelectedDate(data.auth.memberName || "");
-  renderMyHistoryTable(data.myHistory || []);
-  renderMyPaymentsTable(data.myPayments || []);
-  renderBirthdayEventOptions(state.birthdayEvents, "user");
-  await loadBirthdayUserEvent().catch(() => renderBirthdayUserEventDetail(null));
+  renderUserVoteList(state.voteSessions);
   await loadUserBasicLedger(data.auth?.memberName || "");
   if (data.activeVote) {
     openVoteModal(data.activeVote);
   }
 }
 
-function formatPlayDateShort(iso) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
-  if (!match) return iso || "";
-  return `${Number(match[3])}/${Number(match[2])}`;
-}
-
-function basicMoney(value) {
-  return `${new Intl.NumberFormat("vi-VN").format(Math.round(Number(value) || 0))}đ`;
-}
-
-function renderUserBasicLedger(payload) {
-  const sessions = Array.isArray(payload?.sessions) ? payload.sessions : [];
-  const list = document.getElementById("userSessionList");
-  const unpaidValue = document.getElementById("userUnpaidValue");
-  const unpaidMeta = document.getElementById("userUnpaidMeta");
-  const totals = document.getElementById("userPeopleTotals");
-  const totalsBody = document.getElementById("userPeopleTotalsBody");
-  if (!list || !unpaidValue || !unpaidMeta || !totals || !totalsBody) return;
-
-  const shares = sessions.flatMap((session) => session.shares || []);
-  const due = shares.filter((share) => !share.paid);
-  const dueAmount = due.reduce((sum, share) => sum + share.shareAmount, 0);
-  unpaidValue.textContent = basicMoney(dueAmount);
-  unpaidMeta.textContent = sessions.length
-    ? due.length
-      ? `${due.length} lượt chưa thanh toán`
-      : "Đã thu đủ mọi lượt trong sổ."
-    : "Chưa có buổi nào.";
-
-  const groups = new Map();
-  shares.forEach((share) => {
-    const key = share.memberId ? `m:${share.memberId}` : `g:${String(share.memberName || "").toLowerCase()}`;
-    if (!groups.has(key)) {
-      groups.set(key, { memberId: share.memberId || "", memberName: share.memberName, due: 0, unpaidCount: 0 });
-    }
-    if (!share.paid) {
-      const group = groups.get(key);
-      group.due += share.shareAmount;
-      group.unpaidCount += 1;
-    }
-  });
-  const people = [...groups.values()].sort(
-    (a, b) => b.due - a.due || a.memberName.localeCompare(b.memberName, "vi", { sensitivity: "base" })
-  );
-  if (!people.length) {
-    totals.hidden = true;
-    totalsBody.innerHTML = "";
-  } else {
-    totals.hidden = false;
-    totalsBody.innerHTML = people
-      .map((person) => {
-        const action =
-          person.due <= 0
-            ? `<span class="badge is-paid">Đã thanh toán</span>`
-            : `<span class="badge is-due">${person.unpaidCount} buổi chưa trả</span>`;
-        return `<tr><td><b>${escapeHtmlText(person.memberName)}</b>${person.memberId ? "" : '<span class="tag">Giao lưu</span>'}</td><td>${basicMoney(person.due)}</td><td>${action}</td></tr>`;
-      })
-      .join("");
-  }
-
-  if (!sessions.length) {
-    list.innerHTML = `<p class="empty">Khi admin lưu một buổi, sổ sẽ hiện theo ngày, sân và từng người.</p>`;
-    return;
-  }
-  list.innerHTML = sessions
-    .map((session) => {
-      const rows = (session.shares || [])
-        .map((share) => {
-          const paid = Boolean(share.paid);
-          return `
-            <div class="share">
-              <div class="who">
-                <b>${escapeHtmlText(share.memberName)}${share.memberId ? "" : '<span class="tag">Giao lưu</span>'}</b>
-                <small>${escapeHtmlText(formatPlayDateShort(session.date))} · ${basicMoney(share.shareAmount)}</small>
-              </div>
-              <span class="badge ${paid ? "is-paid" : "is-due"}">${paid ? "Đã thanh toán" : "Chưa thanh toán"}</span>
-            </div>
-          `;
-        })
-        .join("");
-      return `
-        <article class="session bezel" data-session="${escapeHtmlText(session.id)}">
-          <div class="core">
-            <button type="button" class="session-toggle" aria-expanded="false">
-              <span class="session-summary">
-                <span class="eyebrow">Ngày ${escapeHtmlText(formatPlayDateShort(session.date))}</span>
-                <span class="session-title">${escapeHtmlText(session.court)}</span>
-                <span class="meta">
-                  <span>Tiền sân <b>${basicMoney(session.courtFee)}</b></span>
-                  <span>Tiền cầu <b>${basicMoney(session.shuttleFee)}</b></span>
-                  <span>Tổng <b>${basicMoney(session.totalFee)}</b></span>
-                </span>
-              </span>
-              <span class="session-chevron" aria-hidden="true"></span>
-            </button>
-            <div class="session-detail">
-              <div class="session-detail-inner">
-                <div class="shares">${rows}</div>
-              </div>
-            </div>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
-}
-
 async function loadUserBasicLedger(memberName = "") {
-  const root = document.getElementById("userBasic");
-  if (!root && !document.getElementById("myDebtCard")) return;
+  window.BasicLedger.mountLedger(document.getElementById("userLedgerMount"));
   try {
-    const data = await api("/api/basic");
-    const credit = await api("/api/credits").catch(() => ({ balance: 0 }));
-    if (root) renderUserBasicLedger(data);
+    const data = await window.BasicLedger.load();
     const name = memberName || state.auth?.memberName || data.memberName || "";
-    renderUserDebt(summarizeBasicDebt(data, name), Number(credit.balance || 0));
+    const mine = (data.members || []).find((item) => item.name.toLowerCase() === name.toLowerCase());
+    const credit = (data.credits || []).find((item) => item.memberId === mine?.memberId);
+    renderUserDebt(summarizeBasicDebt(data, name), Number(credit?.balance || 0));
   } catch (error) {
-    const list = document.getElementById("userSessionList");
-    if (list) list.innerHTML = `<p class="empty">${escapeHtmlText(error.message)}</p>`;
+    const el = document.getElementById("myDebtCard");
+    if (el) el.textContent = error.message;
   }
 }
 
 async function loadDashboard() {
   const data = await api("/api/bootstrap");
-  state.auth = data.auth;
-  if (data.auth.role === "admin") {
-    state.members = data.members || [];
-    state.adminPayments = data.payments || [];
-    state.adminExpenses = data.expenses || [];
-    state.birthdayEvents = data.birthdayEvents || [];
-    renderRoleHeader(data.auth);
-    renderMemberLevels(state.members);
-    renderSettleFixedMembers(state.members);
-    renderSessionSelect(data.sessions || []);
-
-    const expenseSessionId = document.getElementById("expenseSessionSelect")?.value || "";
-    if (expenseSessionId) {
-      await loadExpenseParticipantsOptions(expenseSessionId);
-    }
-
-    renderAdminExpensesTable(state.adminExpenses || []);
-    renderBirthdayEventOptions(state.birthdayEvents, "admin");
-    activateAdminTab(state.activeAdminTab || "court");
-    await loadBirthdayAdminView().catch(() => renderBirthdayAdminSummary(null));
-
-    const selectedSessionId = document.getElementById("matchSessionSelect")?.value || "";
-    const selectedSession = state.sessions.find((item) => item.sessionId === selectedSessionId);
-    if (selectedSession?.date) {
-      const matches = await loadMatchesForDate(selectedSession.date);
-      renderMatchTables(groupMatchesToRounds(matches));
-    } else {
-      renderMatchTables([]);
-    }
-    await loadAdminAttendanceTable();
-    state.voteSessions = data.voteSessions || [];
-    renderAdminVoteList(state.voteSessions);
-    renderAdminPaymentsTableForCurrentInput();
-    document.getElementById("preDateInput").value = new Date().toISOString().slice(0, 10);
-    document.getElementById("paymentDateInput").value = new Date().toISOString().slice(0, 10);
-  } else {
-    state.birthdayEvents = data.birthdayEvents || [];
-    state.voteSessions = data.voteSessions || [];
-    renderRoleHeader(data.auth);
-    renderUpcoming(data.upcomingSession);
-    renderUserVoteList(data.voteSessions || []);
-    renderUserMatchDateOptions(data.upcomingSession, data.myHistory || []);
-    await loadUserMatchesBySelectedDate(data.auth.memberName || "");
-    renderMyHistoryTable(data.myHistory || []);
-    renderMyPaymentsTable(data.myPayments || []);
-    renderBirthdayEventOptions(state.birthdayEvents, "user");
-    await loadBirthdayUserEvent().catch(() => renderBirthdayUserEventDetail(null));
-    await loadUserBasicLedger(data.auth.memberName || "");
-    if (data.activeVote) {
-      openVoteModal(data.activeVote);
-    }
-  }
+  if (data.auth.role === "admin") return loadAdminDashboard();
+  return loadUserDashboard();
 }
 
 function bindEvents() {
-  document.getElementById("userSessionList")?.addEventListener("click", (event) => {
-    const toggle = event.target.closest(".session-toggle");
-    if (!toggle) return;
-    const article = toggle.closest(".session");
-    const open = article.classList.toggle("is-open");
-    toggle.setAttribute("aria-expanded", open ? "true" : "false");
-  });
-
   document.querySelectorAll("#authModeSegment .login-segment-btn").forEach((btn) => {
     btn.addEventListener("click", () => setLoginAuthMode(btn.dataset.mode));
   });
@@ -1612,6 +873,7 @@ function bindEvents() {
 
   document.getElementById("adminTabCourtBtn")?.addEventListener("click", () => activateAdminTab("court"));
   document.getElementById("adminTabExpensesBtn")?.addEventListener("click", () => activateAdminTab("expenses"));
+  document.getElementById("adminTabLedgerBtn")?.addEventListener("click", () => activateAdminTab("ledger"));
   document.getElementById("adminTabGamesBtn")?.addEventListener("click", () => activateAdminTab("games"));
   document.getElementById("adminTabToolsBtn")?.addEventListener("click", () => activateAdminTab("tools"));
   document.getElementById("adminTabTournamentBtn")?.addEventListener("click", () => activateAdminTab("tournament"));
@@ -1716,50 +978,6 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
   }
 });
 
-  document.getElementById("refreshMembersBtn")?.addEventListener("click", loadAdminDashboard);
-  document.getElementById("birthdayEventForm")?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    try {
-      const eventName = document.getElementById("birthdayEventNameInput")?.value?.trim() || "";
-      const date = document.getElementById("birthdayEventDateInput")?.value || "";
-      const description = document.getElementById("birthdayEventDescriptionInput")?.value?.trim() || "";
-      const brands = String(document.getElementById("birthdayEventBrandsInput")?.value || "")
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
-      const drinks = parseBirthdayMenuInput(document.getElementById("birthdayEventMenuInput")?.value || "", brands);
-      if (!eventName || !date) throw new Error("Vui lòng nhập tên event và ngày.");
-      if (!brands.length) throw new Error("Vui lòng nhập ít nhất 1 brand.");
-      if (!drinks.length) throw new Error("Vui lòng nhập ít nhất 1 món trong menu.");
-      await api("/api/birthday-events", {
-        method: "POST",
-        body: JSON.stringify({ eventName, date, description, brands, drinks })
-      });
-      setMessage("birthdayEventMessage", "Đã tạo birthday event.");
-      document.getElementById("birthdayEventNameInput").value = "";
-      document.getElementById("birthdayEventDateInput").value = "";
-      document.getElementById("birthdayEventDescriptionInput").value = "";
-      document.getElementById("birthdayEventBrandsInput").value = "";
-      document.getElementById("birthdayEventMenuInput").value = "";
-      await loadAdminDashboard();
-    } catch (error) {
-      setMessage("birthdayEventMessage", error.message, true);
-    }
-  });
-  document.getElementById("birthdayAdminEventSelect")?.addEventListener("change", async () => {
-    try {
-      await loadBirthdayAdminView();
-    } catch (error) {
-      setMessage("birthdayEventMessage", error.message, true);
-    }
-  });
-  document.getElementById("loadBirthdayAdminViewBtn")?.addEventListener("click", async () => {
-    try {
-      await loadBirthdayAdminView();
-    } catch (error) {
-      setMessage("birthdayEventMessage", error.message, true);
-    }
-  });
   document.getElementById("migrateSheetsBtn")?.addEventListener("click", async () => {
     const ok = window.confirm(
       "Migrate từ Google Sheets sẽ ghi đè dữ liệu hiện có trong Postgres. Bạn có chắc muốn tiếp tục?"
@@ -1801,80 +1019,6 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
       setMessage("dataOpsMessage", error.message, true);
     }
   });
-  document.getElementById("loadAttendanceBtn")?.addEventListener("click", loadAdminAttendanceTable);
-  document.getElementById("attendanceSessionSelect")?.addEventListener("change", loadAdminAttendanceTable);
-  document.getElementById("attendanceTableBody")?.addEventListener("change", async (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLSelectElement) || !target.classList.contains("attendance-status-input")) return;
-    const sessionId = document.getElementById("attendanceSessionSelect")?.value;
-    if (!sessionId) {
-      setMessage("attendanceMessage", "Vui lòng chọn session trước khi cập nhật trạng thái.", true);
-      return;
-    }
-    const memberName = String(target.dataset.member || "").trim();
-    const type = String(target.dataset.type || "").trim();
-    const level = Number(target.dataset.level || 5);
-    if (!memberName) {
-      setMessage("attendanceMessage", "Thiếu tên thành viên cần cập nhật.", true);
-      return;
-    }
-    const status = String(target.value || "pending");
-    target.disabled = true;
-    try {
-      if (type === "GL") {
-        await api(`/api/sessions/${encodeURIComponent(sessionId)}/guests`, {
-          method: "POST",
-          body: JSON.stringify({
-            guestName: memberName,
-            level: Number.isFinite(level) ? level : 5,
-            status
-          })
-        });
-      } else {
-        await api(`/api/sessions/${encodeURIComponent(sessionId)}/respond`, {
-          method: "POST",
-          body: JSON.stringify({
-            memberName,
-            status
-          })
-        });
-      }
-      setMessage("attendanceMessage", `Đã cập nhật trạng thái cho ${memberName}.`);
-      await loadAdminAttendanceTable();
-    } catch (error) {
-      setMessage("attendanceMessage", error.message, true);
-      target.disabled = false;
-    }
-  });
-  document.getElementById("addAttendanceGuestForm")?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const sessionId = document.getElementById("attendanceSessionSelect")?.value;
-    if (!sessionId) {
-      setMessage("attendanceMessage", "Vui lòng chọn session trước khi thêm GL.", true);
-      return;
-    }
-    try {
-      await api(`/api/sessions/${encodeURIComponent(sessionId)}/guests`, {
-        method: "POST",
-        body: JSON.stringify({
-          guestName: document.getElementById("attendanceGuestNameInput")?.value?.trim() || "",
-          level: Number(document.getElementById("attendanceGuestLevelInput")?.value || 5),
-          status: document.getElementById("attendanceGuestStatusInput")?.value || "yes"
-        })
-      });
-      setMessage("attendanceMessage", "Đã thêm/cập nhật GL vào danh sách xác nhận.");
-      document.getElementById("attendanceGuestNameInput").value = "";
-      document.getElementById("attendanceGuestLevelInput").value = "5";
-      document.getElementById("attendanceGuestStatusInput").value = "yes";
-      await loadAdminAttendanceTable();
-    } catch (error) {
-      setMessage("attendanceMessage", error.message, true);
-    }
-  });
-  document.getElementById("addSettleGuestBtn")?.addEventListener("click", () => {
-    document.getElementById("settleGuestContainer")?.appendChild(createGuestRow());
-  });
-
   document.getElementById("openAddMemberBtn")?.addEventListener("click", () => openMemberModal(null));
   document.getElementById("memberModalCloseBtn")?.addEventListener("click", () => toggleModal("memberModal", false));
   document.getElementById("memberLevelTable").addEventListener("click", async (event) => {
@@ -1964,8 +1108,7 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
           date: document.getElementById("preDateInput").value,
           time: document.getElementById("preTimeInput").value,
           location: document.getElementById("preLocationInput").value.trim(),
-          note: document.getElementById("preNoteInput").value.trim(),
-          pollQuestion: document.getElementById("prePollQuestionInput").value.trim()
+          note: document.getElementById("preNoteInput").value.trim()
         })
       });
       const pushFailed = Boolean(data.push && ((!data.push.configured) || (!data.push.sent && data.push.failed)));
@@ -1973,42 +1116,6 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
       await loadAdminDashboard();
     } catch (error) {
       setMessage("preSessionMessage", error.message, true);
-    }
-  });
-
-  document.getElementById("settleSessionForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    try {
-      const fixedMembers = [];
-      document.querySelectorAll("#settleFixedMembersContainer label").forEach((label) => {
-        const name = label.getAttribute("data-name");
-        const checkbox = label.querySelector("input");
-        if (!name || !checkbox) return;
-        fixedMembers.push({ name, present: checkbox.checked });
-      });
-      const guests = [];
-      document.querySelectorAll("#settleGuestContainer > div").forEach((row) => {
-        const name = row.querySelector(".guest-name")?.value?.trim() || "";
-        const gender = row.querySelector(".guest-gender")?.value || "Nam";
-        if (name) guests.push({ name, gender });
-      });
-
-      const sessionId = document.getElementById("settleSessionSelect").value;
-      await api(`/api/sessions/${encodeURIComponent(sessionId)}/settle`, {
-        method: "POST",
-        body: JSON.stringify({
-          fixedCourtCost: Number(document.getElementById("fixedCourtCostInput").value || 0),
-          extraCourts: Number(document.getElementById("extraCourtsInput").value || 0),
-          shuttlecockCost: Number(document.getElementById("shuttlecockCostInput").value || 0),
-          fixedMembers,
-          guests
-        })
-      });
-      setMessage("settleSessionMessage", "Đã chốt buổi và tính phí thành công.");
-      document.getElementById("settleGuestContainer").innerHTML = "";
-      await loadAdminDashboard();
-    } catch (error) {
-      setMessage("settleSessionMessage", error.message, true);
     }
   });
 
@@ -2041,62 +1148,6 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
       renderMatchTables([]);
       setMessage("matchMessage", error.message, true);
     }
-  });
-
-  document.getElementById("expenseSessionSelect")?.addEventListener("change", async () => {
-    state.adminExpenseExtraGuests = [];
-    document.getElementById("expenseGuestNameInput") && (document.getElementById("expenseGuestNameInput").value = "");
-    const sessionId = document.getElementById("expenseSessionSelect").value;
-    await loadExpenseParticipantsOptions(sessionId);
-  });
-
-  document.getElementById("addExpenseGuestBtn")?.addEventListener("click", () => {
-    const nameInput = document.getElementById("expenseGuestNameInput");
-    const name = String(nameInput?.value || "").trim();
-    if (!name) {
-      setMessage("expenseMessage", "Vui lòng nhập tên GL.", true);
-      return;
-    }
-
-    const container = document.getElementById("expenseParticipantsContainer");
-    if (!container) return;
-
-    const key = String(name || "").trim().toLowerCase();
-    const existing = Array.from(container.querySelectorAll('input[name="expenseParticipant"]')).find(
-      (el) => String(el.value || "").trim().toLowerCase() === key
-    );
-    if (existing) {
-      existing.checked = true;
-      nameInput.value = "";
-      return;
-    }
-
-    state.adminExpenseExtraGuests = Array.isArray(state.adminExpenseExtraGuests) ? state.adminExpenseExtraGuests : [];
-    state.adminExpenseExtraGuests.push(name);
-
-    const label = document.createElement("label");
-    label.className = "flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm";
-
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.name = "expenseParticipant";
-    input.value = name;
-    input.checked = true;
-
-    const nameSpan = document.createElement("span");
-    nameSpan.textContent = name;
-
-    const badge = document.createElement("span");
-    badge.className = "text-xs text-slate-500";
-    badge.textContent = "(GL)";
-
-    label.appendChild(input);
-    label.appendChild(nameSpan);
-    label.appendChild(badge);
-    container.appendChild(label);
-
-    nameInput.value = "";
-    setMessage("expenseMessage", "", false);
   });
 
   document.getElementById("htmlConvertForm")?.addEventListener("submit", (event) => {
@@ -2157,67 +1208,6 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
     }
   });
 
-  document.getElementById("paymentForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    try {
-      await api("/api/payments", {
-        method: "POST",
-        body: JSON.stringify({
-          date: document.getElementById("paymentDateInput").value,
-          memberName: document.getElementById("paymentMemberInput").value.trim(),
-          amount: Number(document.getElementById("paymentAmountInput").value || 0),
-          note: document.getElementById("paymentNoteInput").value.trim()
-        })
-      });
-      setMessage("paymentMessage", "Đã lưu thanh toán.");
-      document.getElementById("paymentAmountInput").value = "";
-      document.getElementById("paymentNoteInput").value = "";
-      await loadAdminDashboard();
-    } catch (error) {
-      setMessage("paymentMessage", error.message, true);
-    }
-  });
-
-  document.getElementById("expenseForm")?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    try {
-      const sessionId = document.getElementById("expenseSessionSelect").value;
-      const name = document.getElementById("expenseNameInput").value.trim();
-      const totalAmount = Number(document.getElementById("expenseTotalAmountInput").value || 0);
-      const participants = Array.from(document.querySelectorAll('input[name="expenseParticipant"]:checked')).map(
-        (el) => el.value
-      );
-
-      if (!sessionId) throw new Error("Vui lòng chọn session.");
-      if (!name) throw new Error("Vui lòng nhập tên chi phí.");
-      if (!Number.isFinite(totalAmount) || totalAmount <= 0) throw new Error("Tổng chi phí phải > 0.");
-      if (!participants.length) throw new Error("Vui lòng chọn ít nhất 1 participant.");
-
-      await api("/api/expenses", {
-        method: "POST",
-        body: JSON.stringify({
-          sessionId,
-          name,
-          totalAmount,
-          participants,
-          splitMethod: "equal"
-        })
-      });
-
-      setMessage("expenseMessage", "Đã lưu chi phí phát sinh.");
-      document.getElementById("expenseNameInput").value = "";
-      document.getElementById("expenseTotalAmountInput").value = "";
-
-      await loadAdminDashboard();
-    } catch (error) {
-      setMessage("expenseMessage", error.message, true);
-    }
-  });
-
-  document.getElementById("paymentMemberInput")?.addEventListener("input", () => {
-    if (state.adminPayments?.length) renderAdminPaymentsTableForCurrentInput();
-  });
-
   document.getElementById("loadReportBtn").addEventListener("click", async () => {
     try {
       const month = document.getElementById("reportMonthInput").value;
@@ -2260,6 +1250,36 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
       } catch (error) {
         setMessage("voteListMessage", error.message, true);
       }
+      return;
+    }
+    if (action === "toggle-member" && sessionId) {
+      const status = button.dataset.status === "yes" ? "no" : "yes";
+      button.disabled = true;
+      try {
+        await api(`/api/sessions/${encodeURIComponent(sessionId)}/respond`, {
+          method: "POST",
+          body: JSON.stringify({ memberName: button.dataset.member, status })
+        });
+        const data = await api("/api/sessions/votes");
+        renderAdminVoteList(data.sessions || []);
+      } catch (error) {
+        button.disabled = false;
+        setMessage("voteListMessage", error.message, true);
+      }
+      return;
+    }
+    if (action === "charge-vote" && sessionId) {
+      const session = state.voteSessions.find((item) => item.sessionId === sessionId);
+      if (!session) return;
+      activateAdminTab("expenses");
+      await window.BasicLedger.load().catch(() => {});
+      window.BasicLedger.prefill({
+        date: session.date,
+        court: session.location,
+        memberIds: (session.members || []).filter((m) => m.status === "yes").map((m) => m.memberId),
+        voteSessionId: session.sessionId,
+        label: `${session.date} ${session.time || ""}`.trim()
+      });
     }
   });
 
@@ -2290,18 +1310,9 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
       return;
     }
     if (action === "user-respond" && sessionId) {
-      const session = state.voteSessions.find((item) => item.sessionId === sessionId);
-      if (!session) return;
-      state.upcomingSessionId = sessionId;
-      document.getElementById("attendanceModalInfo").textContent = [
-        `Buổi: ${session.date} ${session.time || ""}`,
-        session.location ? `Địa điểm: ${session.location}` : "",
-        session.note ? `Ghi chú: ${session.note}` : ""
-      ]
-        .filter(Boolean)
-        .join(" | ");
-      setMessage("attendanceModalMessage", "");
-      toggleModal("attendanceModal", true);
+      button.disabled = true;
+      await submitAttendance(button.dataset.status, sessionId);
+      button.disabled = false;
     }
   });
 
@@ -2316,61 +1327,6 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
   });
 
   document.getElementById("qrCloseBtn")?.addEventListener("click", () => toggleModal("qrModal", false));
-
-  document.getElementById("userMatchDateSelect")?.addEventListener("change", async () => {
-    if (state.auth?.role !== "user") return;
-    try {
-      await loadUserMatchesBySelectedDate(state.auth.memberName || "");
-    } catch (error) {
-      console.error(error);
-    }
-  });
-  document.getElementById("reloadUserMatchesBtn")?.addEventListener("click", async () => {
-    if (state.auth?.role !== "user") return;
-    try {
-      await loadUserMatchesBySelectedDate(state.auth.memberName || "");
-    } catch (error) {
-      console.error(error);
-    }
-  });
-  document.getElementById("birthdayUserEventSelect")?.addEventListener("change", async () => {
-    try {
-      await loadBirthdayUserEvent();
-    } catch (error) {
-      setMessage("birthdayUserMessage", error.message, true);
-    }
-  });
-  document.getElementById("reloadBirthdayEventBtn")?.addEventListener("click", async () => {
-    try {
-      await loadBirthdayUserEvent();
-    } catch (error) {
-      setMessage("birthdayUserMessage", error.message, true);
-    }
-  });
-  document.getElementById("birthdayBrandTabs")?.addEventListener("click", async (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    const brand = String(target.dataset.brand || "").trim();
-    if (!brand || !state.birthdayEventDetail) return;
-    state.selectedBirthdayBrand = brand;
-    renderBirthdayUserEventDetail(state.birthdayEventDetail);
-  });
-  document.getElementById("birthdayDrinkGrid")?.addEventListener("click", async (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    const drinkId = String(target.dataset.drinkId || "").trim();
-    if (!drinkId || !state.selectedBirthdayEventId) return;
-    try {
-      await api(`/api/birthday-events/${encodeURIComponent(state.selectedBirthdayEventId)}/select-drink`, {
-        method: "POST",
-        body: JSON.stringify({ drinkId, quantity: 1 })
-      });
-      setMessage("birthdayUserMessage", "Đã lưu món bạn chọn.");
-      await loadBirthdayUserEvent();
-    } catch (error) {
-      setMessage("birthdayUserMessage", error.message, true);
-    }
-  });
 
   document.getElementById("voteCloseBtn")?.addEventListener("click", () => toggleModal("voteModal", false));
   document.getElementById("voteSkipBtn")?.addEventListener("click", () => toggleModal("voteModal", false));
@@ -2399,6 +1355,12 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
 
 async function init() {
   bindEvents();
+  window.BasicLedger.onChange(async (change) => {
+    if (state.auth?.role !== "admin" || change.type !== "saved") return;
+    activateAdminTab("ledger");
+    const data = await api("/api/sessions/votes").catch(() => null);
+    if (data) renderAdminVoteList(data.sessions || []);
+  });
   toggleLoginMode();
   try {
     await loadLoginOptions();
