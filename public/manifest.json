@@ -4,8 +4,8 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#0f172a",
+  "background_color": "#edf3ef",
+  "theme_color": "#12804b",
   "lang": "vi",
   "icons": [
     { "src": "/favicon-32.png?v=3", "sizes": "32x32", "type": "image/png", "purpose": "any" },

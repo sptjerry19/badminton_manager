@@ -10,7 +10,9 @@ const state = {
   loginAuthMode: "login",
   activeVote: null,
   upcomingSessionId: "",
-  selectedUserMatchDate: "",
+  guestSessionId: "",
+  userBasicBalance: 0,
+  notices: [],
   pendingApiCalls: 0
 };
 
@@ -21,8 +23,60 @@ const VIETQR = {
   template: "compact2"
 };
 
+const LEVEL_LABELS = {
+  1: "Newbie",
+  2: "Yếu",
+  3: "Yếu+",
+  4: "TBY",
+  5: "TBY+",
+  6: "TB-",
+  7: "TB",
+  8: "TB+",
+  9: "TBK",
+  10: "Bán chuyên"
+};
+
+const WEEKDAYS = ["Chủ nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+const WEEKDAYS_SHORT = ["CN", "TH 2", "TH 3", "TH 4", "TH 5", "TH 6", "TH 7"];
+
+const { icon, avatar } = window.UI;
+const escapeHtmlText = window.UI.esc;
+const $ = (id) => document.getElementById(id);
+
 function formatMoney(value) {
   return new Intl.NumberFormat("vi-VN").format(Number(value || 0));
+}
+
+function money(value) {
+  return `${formatMoney(Math.round(Number(value || 0)))}đ`;
+}
+
+function levelLabel(level) {
+  const value = Math.round(Number(level));
+  return LEVEL_LABELS[value] ? `${value} · ${LEVEL_LABELS[value]}` : "-";
+}
+
+function parseIsoDate(iso) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function dateBits(iso) {
+  const date = parseIsoDate(iso);
+  if (!date) return { day: "--", month: "", weekday: "", weekdayShort: "", short: iso || "" };
+  return {
+    day: String(date.getDate()).padStart(2, "0"),
+    month: String(date.getMonth() + 1),
+    weekday: WEEKDAYS[date.getDay()],
+    weekdayShort: WEEKDAYS_SHORT[date.getDay()],
+    short: `${date.getDate()}/${date.getMonth() + 1}`
+  };
+}
+
+function givenName(name) {
+  const words = String(name || "").trim().split(/\s+/);
+  return words[words.length - 1] || "";
 }
 
 function buildVietQrUrl(memberName, amount) {
@@ -32,20 +86,32 @@ function buildVietQrUrl(memberName, amount) {
   return `https://img.vietqr.io/image/${VIETQR.bankBin}-${VIETQR.accountNo}-${VIETQR.template}.png?amount=${safeAmount}&addInfo=${addInfo}&accountName=${accountName}`;
 }
 
+// ---------- Overlay / toast / loading ----------
+
 function toggleModal(id, isOpen) {
-  const modal = document.getElementById(id);
+  const modal = $(id);
   if (!modal) return;
-  modal.classList.toggle("hidden", !isOpen);
-  modal.classList.toggle("flex", isOpen);
+  modal.hidden = !isOpen;
+}
+
+let toastTimer = null;
+
+function showToast(message, isError = false) {
+  const toast = $("toast");
+  if (!toast || !message) return;
+  $("toastText").textContent = message;
+  toast.classList.toggle("is-error", isError);
+  toast.hidden = false;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.hidden = true;
+  }, 2800);
 }
 
 let loadingHideTimer = null;
 
 function setLoading(isLoading) {
-  const modal = document.getElementById("loadingModal");
-  if (!modal) return;
-  modal.classList.toggle("hidden", !isLoading);
-  modal.classList.toggle("flex", isLoading);
+  toggleModal("loadingModal", isLoading);
 }
 
 function bumpLoading(delta = 1) {
@@ -86,13 +152,45 @@ async function api(path, options = {}) {
   }
 }
 
+function setMessage(id, message, isError = false) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = message || "";
+  el.hidden = !message;
+  el.classList.add("form-note");
+  el.classList.toggle("is-error", Boolean(isError));
+}
+
+// ---------- Theme ----------
+
+function isDark() {
+  return document.documentElement.classList.contains("dark");
+}
+
+function paintThemeButtons() {
+  document.querySelectorAll(".icon-btn[data-theme-toggle]").forEach((button) => {
+    button.innerHTML = icon(isDark() ? "sun" : "moon");
+  });
+}
+
+function toggleTheme() {
+  const dark = !isDark();
+  document.documentElement.classList.toggle("dark", dark);
+  try {
+    localStorage.setItem("theme", dark ? "dark" : "light");
+  } catch (_error) {}
+  paintThemeButtons();
+}
+
+// ---------- Đăng nhập ----------
+
 function showLoginMode() {
-  document.getElementById("loginSection").classList.remove("hidden");
-  document.getElementById("appSection").classList.add("hidden");
+  $("loginSection").hidden = false;
+  $("appSection").hidden = true;
   state.tournamentMountedFor = "";
   state.activeUserTab = "home";
   ["userTournamentMount", "adminTournamentMount"].forEach((id) => {
-    const el = document.getElementById(id);
+    const el = $(id);
     if (el) {
       el.innerHTML = "";
       el.dataset.ready = "0";
@@ -101,24 +199,8 @@ function showLoginMode() {
 }
 
 function showAppMode() {
-  document.getElementById("loginSection").classList.add("hidden");
-  document.getElementById("appSection").classList.remove("hidden");
-}
-
-function setMessage(id, message, isError = false) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = message || "";
-  el.className = `text-sm ${isError ? "text-red-600" : "text-emerald-600"}`;
-}
-
-function escapeHtmlText(text) {
-  return String(text || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+  $("loginSection").hidden = true;
+  $("appSection").hidden = false;
 }
 
 function setLoginAuthMode(mode) {
@@ -126,16 +208,12 @@ function setLoginAuthMode(mode) {
   document.querySelectorAll("#authModeSegment .login-segment-btn").forEach((btn) => {
     btn.classList.toggle("is-on", btn.dataset.mode === mode);
   });
-  const loginFields = document.getElementById("loginFields");
-  const registerFields = document.getElementById("registerFields");
-  const adminFields = document.getElementById("adminFields");
-  const memberSelect = document.getElementById("memberSelectInput");
-  const phoneInput = document.getElementById("phoneInput");
-  const registerPhone = document.getElementById("registerPhone");
-  const submitLabel = document.getElementById("authSubmitLabel");
-  if (loginFields) loginFields.hidden = mode !== "login";
-  if (registerFields) registerFields.hidden = mode !== "register";
-  if (adminFields) adminFields.hidden = mode !== "admin";
+  const memberSelect = $("memberSelectInput");
+  const phoneInput = $("phoneInput");
+  const registerPhone = $("registerPhone");
+  $("loginFields").hidden = mode !== "login";
+  $("registerFields").hidden = mode !== "register";
+  $("adminFields").hidden = mode !== "admin";
   if (memberSelect) memberSelect.required = mode === "login";
   if (phoneInput) phoneInput.required = mode === "login";
   if (registerPhone) {
@@ -145,18 +223,20 @@ function setLoginAuthMode(mode) {
       registerPhone.value = "";
     }
   }
-  if (submitLabel) {
-    submitLabel.textContent =
-      mode === "register" ? "Đăng ký" : mode === "admin" ? "Vào admin" : "Đăng nhập";
-  }
-}
-
-function toggleLoginMode() {
-  setLoginAuthMode(state.loginAuthMode || "login");
+  $("authSubmitLabel").textContent =
+    mode === "register" ? "Đăng ký thành viên" : mode === "admin" ? "Vào trang quản trị" : "Đăng nhập";
+  $("loginTitle").textContent =
+    mode === "register" ? "Tạo tài khoản" : mode === "admin" ? "Quản trị nhóm" : "Trở lại sân cầu";
+  $("loginLead").textContent =
+    mode === "admin"
+      ? "Nhập mật khẩu quản trị để tiếp tục."
+      : mode === "register"
+        ? "Điền họ tên và số điện thoại để tham gia nhóm."
+        : "Chọn tài khoản và xác nhận số điện thoại.";
 }
 
 function renderLoginOptions() {
-  const select = document.getElementById("memberSelectInput");
+  const select = $("memberSelectInput");
   if (!select) return;
   select.innerHTML = "";
   state.loginOptions.forEach((member) => {
@@ -168,49 +248,76 @@ function renderLoginOptions() {
 }
 
 function renderRoleHeader(auth) {
-  const roleTitle = document.getElementById("roleTitle");
-  const loginIdentity = document.getElementById("loginIdentity");
   const isAdmin = auth.role === "admin";
-  roleTitle.textContent = isAdmin ? "Admin dashboard" : "User dashboard";
-  loginIdentity.textContent = isAdmin ? "Bạn đang đăng nhập bằng quyền admin." : `Xin chào ${auth.memberName}.`;
-  document.getElementById("adminSection").classList.toggle("hidden", !isAdmin);
-  document.getElementById("userSection").classList.toggle("hidden", isAdmin);
+  $("adminSection").hidden = !isAdmin;
+  $("userSection").hidden = isAdmin;
+  $("accountName").textContent = isAdmin ? "Quản trị viên" : auth.memberName || "Thành viên";
+  $("loginIdentity").textContent = isAdmin ? "Bạn đang đăng nhập bằng quyền admin." : `Xin chào ${auth.memberName}.`;
+  if (!isAdmin) {
+    const userAvatar = $("userAvatar");
+    userAvatar.textContent = window.UI.initial(auth.memberName);
+    userAvatar.className = `avatar avatar-md avatar-tone-${window.UI.tone(auth.memberName)}`;
+    paintUserHeader();
+  }
+}
+
+function paintUserHeader() {
+  const tab = state.activeUserTab;
+  const title = $("userHeaderTitle");
+  const eyebrow = $("userHeaderEyebrow");
+  if (tab === "home") {
+    const now = new Date();
+    eyebrow.textContent = `${WEEKDAYS[now.getDay()]}, ${now.getDate()} tháng ${now.getMonth() + 1}`.toUpperCase();
+    title.textContent = `Xin chào, ${givenName(state.auth?.memberName) || "bạn"}`;
+    return;
+  }
+  eyebrow.textContent = "NHÓM CẦU LÔNG";
+  title.textContent = { ranking: "Bảng xếp hạng", tournament: "Giải đấu", notices: "Thông báo" }[tab] || "";
+}
+
+// ---------- Thành viên (admin) ----------
+
+function memberRowHtml(member) {
+  const level = Math.round(Number(member.level));
+  const levelText = LEVEL_LABELS[level] ? `Lv ${level} ${LEVEL_LABELS[level]}` : "";
+  const meta = [member.gender, levelText, member.type].filter(Boolean).join(" · ");
+  const id = escapeHtmlText(member.memberId);
+  return `<div data-member-row="${escapeHtmlText(String(member.name || "").toLowerCase())}">
+      ${avatar(member.name)}
+      <span title="${escapeHtmlText(member.phoneNumber || "")}"><b>${escapeHtmlText(member.name)}</b><small>${escapeHtmlText(meta)}</small>${member.phoneNumber ? `<small>${escapeHtmlText(member.phoneNumber)}</small>` : ""}</span>
+      <span class="badge ${member.active ? "badge-green" : "badge-neutral"}">${member.active ? "Active" : "Nghỉ"}</span>
+      <button type="button" class="icon-btn edit-member-btn" data-member-id="${id}" aria-label="Sửa">${icon("edit", 15)}</button>
+      <button type="button" class="icon-btn danger delete-member-btn" data-member-id="${id}" aria-label="Xóa">${icon("trash", 15)}</button>
+    </div>`;
 }
 
 function renderMemberLevels(members) {
-  const tbody = document.getElementById("memberLevelTable");
-  tbody.innerHTML = "";
-  members.forEach((member) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="border border-slate-200 px-2 py-1">${member.name}</td>
-      <td class="border border-slate-200 px-2 py-1">${member.type || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1">${member.gender || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1">${member.birthday || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1">${member.phoneNumber || "-"}</td>
-      <td class="border border-slate-200 px-2 py-1">${member.level ?? "-"}</td>
-      <td class="border border-slate-200 px-2 py-1">${member.active ? "TRUE" : "FALSE"}</td>
-      <td class="border border-slate-200 px-2 py-1">
-        <div class="flex flex-wrap items-center gap-1">
-          <button data-member-id="${member.memberId}" class="edit-member-btn rounded bg-blue-600 px-2 py-1 text-white">Sửa</button>
-          <button data-member-id="${member.memberId}" class="delete-member-btn rounded bg-rose-600 px-2 py-1 text-white">Xóa</button>
-        </div>
-      </td>
-    `;
-    tbody.appendChild(tr);
+  const box = $("memberLevelTable");
+  const active = members.filter((member) => member.active).length;
+  $("memberCountLabel").textContent = `${active} thành viên hoạt động · ${members.length} tổng`;
+  box.innerHTML = members.length
+    ? members.map(memberRowHtml).join("")
+    : `<p class="hint-line">Chưa có thành viên.</p>`;
+  filterMemberRows();
+}
+
+function filterMemberRows() {
+  const term = String($("memberSearchInput")?.value || "").trim().toLowerCase();
+  document.querySelectorAll("#memberLevelTable [data-member-row]").forEach((row) => {
+    row.hidden = Boolean(term) && !row.dataset.memberRow.includes(term);
   });
 }
 
 function resetMemberModal() {
-  document.getElementById("memberModalTitle").textContent = "Thêm member";
-  document.getElementById("memberModalIdInput").value = "";
-  document.getElementById("memberNameInput").value = "";
-  document.getElementById("memberTypeInput").value = "Cố định";
-  document.getElementById("memberGenderInput").value = "";
-  document.getElementById("memberBirthdayInput").value = "";
-  document.getElementById("memberPhoneInput").value = "";
-  document.getElementById("memberLevelInput").value = "5";
-  document.getElementById("memberActiveInput").checked = true;
+  $("memberModalTitle").textContent = "Thêm member";
+  $("memberModalIdInput").value = "";
+  $("memberNameInput").value = "";
+  $("memberTypeInput").value = "Cố định";
+  $("memberGenderInput").value = "";
+  $("memberBirthdayInput").value = "";
+  $("memberPhoneInput").value = "";
+  $("memberLevelInput").value = "5";
+  $("memberActiveInput").checked = true;
   setMessage("memberModalMessage", "");
 }
 
@@ -218,15 +325,15 @@ function openMemberModal(member = null) {
   if (!member) {
     resetMemberModal();
   } else {
-    document.getElementById("memberModalTitle").textContent = `Sửa member: ${member.name}`;
-    document.getElementById("memberModalIdInput").value = member.memberId || "";
-    document.getElementById("memberNameInput").value = member.name || "";
-    document.getElementById("memberTypeInput").value = member.type || "GL";
-    document.getElementById("memberGenderInput").value = member.gender || "";
-    document.getElementById("memberBirthdayInput").value = member.birthday || "";
-    document.getElementById("memberPhoneInput").value = member.phoneNumber || "";
-    document.getElementById("memberLevelInput").value = String(member.level ?? 5);
-    document.getElementById("memberActiveInput").checked = Boolean(member.active);
+    $("memberModalTitle").textContent = `Sửa member: ${member.name}`;
+    $("memberModalIdInput").value = member.memberId || "";
+    $("memberNameInput").value = member.name || "";
+    $("memberTypeInput").value = member.type || "GL";
+    $("memberGenderInput").value = member.gender || "";
+    $("memberBirthdayInput").value = member.birthday || "";
+    $("memberPhoneInput").value = member.phoneNumber || "";
+    $("memberLevelInput").value = String(member.level ?? 5);
+    $("memberActiveInput").checked = Boolean(member.active);
     setMessage("memberModalMessage", "");
   }
   toggleModal("memberModal", true);
@@ -234,14 +341,43 @@ function openMemberModal(member = null) {
 
 function renderSessionSelect(sessions) {
   state.sessions = sessions;
-  const matchSelect = document.getElementById("matchSessionSelect");
+  const matchSelect = $("matchSessionSelect");
   if (!matchSelect) return;
-  matchSelect.innerHTML = sessions
-    .map(
-      (session) =>
-        `<option value="${escapeHtmlText(session.sessionId)}">${escapeHtmlText(`${session.date} ${session.time} · ${session.location || session.sessionId}`)}</option>`
-    )
-    .join("");
+  matchSelect.innerHTML = sessions.length
+    ? sessions
+        .map((session) => {
+          const bits = dateBits(session.date);
+          const label = `${bits.weekday} ${bits.short} ${session.time || ""} · ${session.location || session.sessionId}`;
+          return `<option value="${escapeHtmlText(session.sessionId)}">${escapeHtmlText(label)}</option>`;
+        })
+        .join("")
+    : `<option value="">Chưa có buổi chơi</option>`;
+}
+
+// ---------- Vote ----------
+
+function isGuest(member) {
+  return Boolean(member?.guest) || String(member?.memberId || "").startsWith("g_");
+}
+
+function voteStatusBadge(status) {
+  const value = String(status || "open").toLowerCase();
+  if (value === "booked") return `<span class="badge badge-green">${icon("check", 13)} Đã đặt sân</span>`;
+  if (value === "cancelled") return `<span class="badge badge-neutral">Đã hủy</span>`;
+  return `<span class="badge badge-yellow">Đang mở vote</span>`;
+}
+
+function voteCounts(session) {
+  const members = Array.isArray(session.members) ? session.members : [];
+  const yes = members.filter((member) => member.status === "yes");
+  const guestsYes = yes.filter(isGuest).length;
+  return {
+    members,
+    yes,
+    guestsYes,
+    membersYes: yes.length - guestsYes,
+    stats: session.stats || { yes: 0, no: 0, pending: 0 }
+  };
 }
 
 // Popup nhắc phản hồi khi user còn "pending" ở buổi sắp tới.
@@ -252,13 +388,13 @@ function renderUpcoming(session) {
     return;
   }
   state.upcomingSessionId = session.sessionId;
-  document.getElementById("attendanceModalInfo").textContent = [
-    `Buổi: ${session.date} ${session.time}`,
-    session.location ? `Địa điểm: ${session.location}` : "",
-    session.note ? `Ghi chú: ${session.note}` : ""
-  ]
-    .filter(Boolean)
-    .join(" | ");
+  const bits = dateBits(session.date);
+  $("attendanceModalInfo").innerHTML = [
+    `<p>${icon("calendar", 17)} ${escapeHtmlText(`${bits.weekday}, ${bits.short}`)} · ${escapeHtmlText(session.time || "")}</p>`,
+    session.location ? `<p>${icon("map", 17)} ${escapeHtmlText(session.location)}</p>` : "",
+    session.note ? `<p>${icon("sparkle", 17)} ${escapeHtmlText(session.note)}</p>` : ""
+  ].join("");
+  setMessage("attendanceModalMessage", "");
 
   const voteStatus = String(session.voteStatus || "open").toLowerCase();
   const myStatus = String(session.myStatus || "pending").toLowerCase();
@@ -266,85 +402,74 @@ function renderUpcoming(session) {
   toggleModal("attendanceModal", canStillVote && myStatus === "pending");
 }
 
-function voteStatusLabel(status) {
-  const value = String(status || "open").toLowerCase();
-  if (value === "booked") return "Đã đặt";
-  if (value === "cancelled") return "Đã hủy";
-  return "Đang vote";
-}
-
-function voteStatusClass(status) {
-  const value = String(status || "open").toLowerCase();
-  if (value === "booked") return "is-booked";
-  if (value === "cancelled") return "is-cancelled";
-  return "is-open";
-}
-
-function voteCardHead(session) {
-  const status = String(session.voteStatus || "open").toLowerCase();
-  const stats = session.stats || { yes: 0, no: 0, pending: 0 };
-  const charged = session.basicSessionId ? `<span class="vote-badge is-charged">Đã tính tiền</span>` : "";
-  return `<div class="vote-card-head">
-      <div>
-        <strong>${escapeHtmlText(session.date)} ${escapeHtmlText(session.time || "")}</strong>
-        <p>${escapeHtmlText(session.location || "Chưa có địa điểm")}${session.note ? ` · ${escapeHtmlText(session.note)}` : ""}</p>
-      </div>
-      <div class="vote-badges">${charged}<span class="vote-badge ${voteStatusClass(status)}">${voteStatusLabel(status)}</span></div>
-    </div>
-    <p class="vote-stats"><b>${stats.yes || 0}</b> tham gia · ${stats.no || 0} không · ${stats.pending || 0} chưa trả lời</p>`;
-}
-
-function voteBookingImage(session) {
-  const status = String(session.voteStatus || "open").toLowerCase();
-  if (status !== "booked" || !session.bookingImageUrl) return "";
-  return `<button type="button" class="vote-thumb-btn" data-action="preview-booking" data-session="${escapeHtmlText(session.sessionId)}">
-      <img src="${escapeHtmlText(session.bookingImageUrl)}" alt="Ảnh đặt sân" class="vote-thumb" />
-    </button>`;
-}
-
-function voteMemberChips(session, editable) {
-  const members = Array.isArray(session.members) ? session.members : [];
-  if (!members.length) return `<span class="vote-empty">Chưa có ai trong danh sách.</span>`;
-  const order = { yes: 0, pending: 1, no: 2 };
-  return [...members]
-    .sort((a, b) => order[a.status] - order[b.status] || a.name.localeCompare(b.name, "vi"))
-    .map((member) => {
-      const label = escapeHtmlText(member.name);
-      const cls = `vote-chip is-${member.status}`;
-      if (!editable) return `<span class="${cls}">${label}</span>`;
-      return `<button type="button" class="${cls}" data-action="toggle-member" data-session="${escapeHtmlText(session.sessionId)}" data-member="${label}" data-status="${member.status}">${label}</button>`;
-    })
-    .join("");
+function adminMemberChip(session, member, editable) {
+  const guest = isGuest(member);
+  const cls = `member-chip is-${member.status}${guest ? " guest" : ""}`;
+  const inner = `${avatar(member.name, "sm")}${escapeHtmlText(member.name)}${
+    guest ? ` <span class="badge badge-guest">GL</span>` : ""
+  }${member.status === "yes" ? icon("check", 14) : ""}`;
+  if (!editable) return `<span class="${cls}">${inner}</span>`;
+  const title = member.status === "yes" ? "Bấm để chuyển sang Không" : "Bấm để chuyển sang Tham gia";
+  return `<button type="button" class="${cls}" title="${title}" data-action="${guest ? "toggle-guest" : "toggle-member"}" data-session="${escapeHtmlText(session.sessionId)}" data-member="${escapeHtmlText(member.name)}" data-level="${escapeHtmlText(member.level ?? "")}" data-status="${member.status}">${inner}</button>`;
 }
 
 function renderAdminVoteList(sessions) {
-  const container = document.getElementById("voteSessionList");
+  const container = $("voteSessionList");
   if (!container) return;
   state.voteSessions = Array.isArray(sessions) ? sessions : [];
   if (!state.voteSessions.length) {
-    container.innerHTML = `<p class="text-sm text-slate-500">Chưa có buổi vote nào.</p>`;
+    container.innerHTML = `<div class="empty-card">Chưa có buổi vote nào. Bấm "Tạo vote mới" để bắt đầu.</div>`;
     return;
   }
 
+  const order = { yes: 0, pending: 1, no: 2 };
   container.innerHTML = state.voteSessions
     .map((session) => {
       const status = String(session.voteStatus || "open").toLowerCase();
       const sid = escapeHtmlText(session.sessionId);
       const active = status !== "cancelled";
+      const bits = dateBits(session.date);
+      const counts = voteCounts(session);
+      const chips = [...counts.members]
+        .sort((a, b) => order[a.status] - order[b.status] || a.name.localeCompare(b.name, "vi"))
+        .map((member) => adminMemberChip(session, member, active))
+        .join("");
+      const thumb =
+        session.bookingImageUrl && status === "booked"
+          ? `<button type="button" class="session-thumb" data-action="preview-booking" data-session="${sid}" aria-label="Xem ảnh đặt sân"><img src="${escapeHtmlText(session.bookingImageUrl)}" alt="" /></button>`
+          : "";
+      const charged = session.basicSessionId ? `<span class="badge badge-blue">Đã tính tiền</span>` : "";
       const actions = active
-        ? `<div class="vote-actions">
-            <button type="button" class="vote-btn vote-btn-primary" data-action="charge-vote" data-session="${sid}">${session.basicSessionId ? "Tính thêm" : "Tính tiền"}</button>
-            <label class="vote-upload">
-              <span>${status === "booked" ? "Đổi ảnh sân" : "Đã đặt sân"}</span>
+        ? `<div class="admin-actions">
+            <label class="btn btn-ghost upload-btn">
+              ${icon("camera")}<span>${status === "booked" ? "Đổi ảnh sân" : "Đã đặt sân"}</span>
               <input type="file" accept="image/*" data-action="book-vote" data-session="${sid}" />
             </label>
-            ${status === "open" ? `<button type="button" class="vote-btn vote-btn-danger" data-action="cancel-vote" data-session="${sid}">Hủy</button>` : ""}
+            ${status === "open" ? `<button type="button" class="btn btn-danger" data-action="cancel-vote" data-session="${sid}">${icon("close")}<span>Hủy vote</span></button>` : ""}
+            <button type="button" class="btn btn-primary" data-action="charge-vote" data-session="${sid}">${icon("arrow")}<span>${session.basicSessionId ? "Tính thêm" : "Tính tiền"}</span></button>
           </div>`
         : "";
-      return `<article class="vote-card${active ? "" : " is-muted"}" data-session="${sid}">
-        ${voteCardHead(session)}
-        <div class="vote-yes">${voteMemberChips(session, active)}</div>
-        ${voteBookingImage(session)}
+      return `<article class="admin-session${active ? "" : " is-muted"}" data-session="${sid}">
+        <div class="admin-session-head">
+          <div class="date-box"><b>${bits.day}</b><span>THÁNG ${bits.month}</span></div>
+          <div>
+            <div class="inline-badges">${voteStatusBadge(status)}${charged}</div>
+            <h3>${escapeHtmlText(bits.weekday)} · ${escapeHtmlText(session.time || "Chưa có giờ")}</h3>
+            <p>${icon("map", 16)} ${escapeHtmlText(session.location || "Chưa có địa điểm")}</p>
+            ${session.note ? `<p>${icon("sparkle", 16)} ${escapeHtmlText(session.note)}</p>` : ""}
+          </div>
+          ${thumb}
+        </div>
+        <div class="member-count">
+          <span><b>${counts.stats.yes || 0}</b> tham gia</span>
+          <span>${counts.membersYes} thành viên</span>
+          <span>${counts.guestsYes} giao lưu</span>
+          <span>${counts.stats.no || 0} không · ${counts.stats.pending || 0} chưa trả lời</span>
+        </div>
+        <div class="member-chips">
+          ${chips || `<span class="hint-line">Chưa có ai trong danh sách.</span>`}
+          ${active ? `<button type="button" class="add-chip" data-action="add-guest" data-session="${sid}">${icon("plus", 16)} Thêm giao lưu</button>` : ""}
+        </div>
         ${actions}
       </article>`;
     })
@@ -352,36 +477,72 @@ function renderAdminVoteList(sessions) {
 }
 
 function renderUserVoteList(sessions) {
-  const container = document.getElementById("userVoteList");
+  const container = $("userVoteList");
   if (!container) return;
   const list = (Array.isArray(sessions) ? sessions : []).filter(
     (session) => String(session.voteStatus || "open").toLowerCase() !== "cancelled"
   );
   if (!list.length) {
-    container.innerHTML = `<p class="text-sm text-slate-500">Chưa có buổi vote nào.</p>`;
+    container.innerHTML = `<div class="empty-card">Chưa có buổi vote nào. Admin tạo lịch là bạn sẽ thấy ở đây.</div>`;
     return;
   }
 
   container.innerHTML = list
     .map((session) => {
+      const status = String(session.voteStatus || "open").toLowerCase();
       const myStatus = String(session.myStatus || "pending").toLowerCase();
       const sid = escapeHtmlText(session.sessionId);
-      const pick = (value, label) =>
-        `<button type="button" class="vote-btn vote-pick${myStatus === value ? " is-on" : ""}" data-action="user-respond" data-status="${value}" data-session="${sid}">${label}</button>`;
-      return `<article class="vote-card">
-        ${voteCardHead(session)}
-        <div class="vote-yes">${voteMemberChips(session, false)}</div>
-        ${voteBookingImage(session)}
-        <div class="vote-actions">${pick("yes", "Tham gia")}${pick("no", "Không")}</div>
+      const bits = dateBits(session.date);
+      const counts = voteCounts(session);
+      const shown = counts.yes.slice(0, 6);
+      const more = counts.yes.length - shown.length;
+      const photo = session.bookingImageUrl
+        ? `<button type="button" class="session-photo" data-action="preview-booking" data-session="${sid}">
+            <img src="${escapeHtmlText(session.bookingImageUrl)}" alt="Ảnh đặt sân" />
+            <span>${icon("camera", 16)} Xem ảnh đặt sân</span>
+          </button>`
+        : "";
+      return `<article class="session-card" data-session="${sid}">
+        ${photo}
+        <div class="session-body">
+          <div class="session-head">
+            <div class="date-tile-lg"><strong>${bits.weekdayShort}</strong><b>${bits.day}</b><small>THÁNG ${bits.month}</small></div>
+            <div class="session-info">
+              <div class="session-info-top">
+                <h3>${escapeHtmlText(session.time || "Chưa có giờ")}</h3>
+                ${voteStatusBadge(status)}
+              </div>
+              <p>${icon("map", 16)} ${escapeHtmlText(session.location || "Chưa có địa điểm")}</p>
+              ${session.note ? `<p class="note">${escapeHtmlText(session.note)}</p>` : ""}
+            </div>
+          </div>
+          <div class="attendance">
+            <div class="avatar-stack">
+              ${shown.map((member) => avatar(member.name, "sm")).join("")}
+              ${more > 0 ? `<span class="more-avatar">+${more}</span>` : ""}
+            </div>
+            <div>
+              <b>${counts.yes.length} tham gia</b>
+              <small>${counts.membersYes} thành viên + ${counts.guestsYes} giao lưu</small>
+            </div>
+          </div>
+          <div class="vote-actions">
+            <button type="button" class="btn ${myStatus === "yes" ? "btn-primary" : "btn-secondary"}" data-action="user-respond" data-status="yes" data-session="${sid}">${icon("check")}<span>Có tham gia</span></button>
+            <button type="button" class="btn btn-ghost${myStatus === "no" ? " is-picked-no" : ""}" data-action="user-respond" data-status="no" data-session="${sid}">${icon("close")}<span>Không</span></button>
+          </div>
+        </div>
       </article>`;
     })
     .join("");
 }
 
-function openBookingImage(url) {
-  const image = document.getElementById("bookingImagePreview");
-  if (!image || !url) return;
-  image.src = url;
+function openBookingImage(session) {
+  const image = $("bookingImagePreview");
+  if (!image || !session?.bookingImageUrl) return;
+  const bits = dateBits(session.date);
+  image.src = session.bookingImageUrl;
+  $("bookingImageTitle").textContent = session.location || "Ảnh đặt sân";
+  $("bookingImageMeta").textContent = `Đã đặt ${session.time || ""}, ${bits.weekday} ${bits.short}`;
   toggleModal("bookingImageModal", true);
 }
 
@@ -406,10 +567,15 @@ function readImageAsDataUrl(file) {
   });
 }
 
+async function refreshAdminVotes() {
+  const data = await api("/api/sessions/votes");
+  renderAdminVoteList(data.sessions || []);
+}
+
 async function cancelVoteSession(sessionId) {
   if (!window.confirm("Hủy vote sân này? User sẽ không cần phản hồi nữa.")) return;
   const data = await api(`/api/sessions/${encodeURIComponent(sessionId)}/cancel`, { method: "POST" });
-  setMessage("voteListMessage", data.message || "Đã hủy vote.");
+  showToast(data.message || "Đã hủy vote.");
   await loadAdminDashboard();
 }
 
@@ -419,69 +585,171 @@ async function bookVoteSession(sessionId, file) {
     method: "POST",
     body: JSON.stringify({ imageDataUrl })
   });
-  setMessage("voteListMessage", data.message || "Đã đánh dấu đặt sân.");
+  showToast(data.message || "Đã đánh dấu đặt sân.");
   await loadAdminDashboard();
 }
+
+// ---------- Giao lưu trong vote ----------
+
+function knownGuests() {
+  const map = new Map();
+  state.voteSessions.forEach((session) => {
+    (session.members || []).filter(isGuest).forEach((member) => {
+      const key = member.name.toLowerCase();
+      if (!map.has(key)) map.set(key, { name: member.name, level: member.level, date: session.date });
+    });
+  });
+  return map;
+}
+
+function fillLevelSelect(select, value = 5) {
+  select.innerHTML = Object.keys(LEVEL_LABELS)
+    .map((level) => `<option value="${level}">${escapeHtmlText(levelLabel(level))}</option>`)
+    .join("");
+  select.value = String(value);
+}
+
+function openGuestModal(sessionId) {
+  const session = state.voteSessions.find((item) => item.sessionId === sessionId);
+  if (!session) return;
+  state.guestSessionId = sessionId;
+  const bits = dateBits(session.date);
+  $("guestModalSession").textContent = `${bits.weekday} ${bits.short} · ${session.time || ""} · ${session.location || ""}`;
+  $("guestNameInput").value = "";
+  fillLevelSelect($("guestLevelInput"), 5);
+  $("guestStatusInput").value = "yes";
+  $("guestHint").hidden = true;
+  setMessage("guestMessage", "");
+  $("guestNameSuggestions").innerHTML = [...knownGuests().values()]
+    .map((guest) => `<option value="${escapeHtmlText(guest.name)}"></option>`)
+    .join("");
+  toggleModal("guestModal", true);
+  setTimeout(() => $("guestNameInput").focus(), 50);
+}
+
+function paintGuestHint() {
+  const name = $("guestNameInput").value.trim().toLowerCase();
+  const found = name ? knownGuests().get(name) : null;
+  $("guestHint").hidden = !found;
+  if (!found) return;
+  $("guestHintTitle").textContent = `Tìm thấy ${found.name} trong khách cũ`;
+  const level = found.level ? `Level ${levelLabel(found.level)}` : "Chưa rõ level";
+  $("guestHintMeta").textContent = `${level} · lần gần nhất ${dateBits(found.date).short}`;
+  if (found.level) $("guestLevelInput").value = String(Math.round(found.level));
+}
+
+async function submitGuest(event) {
+  event.preventDefault();
+  const guestName = $("guestNameInput").value.trim().replace(/\s+/g, " ");
+  if (!guestName) {
+    setMessage("guestMessage", "Nhập tên khách.", true);
+    return;
+  }
+  const session = state.voteSessions.find((item) => item.sessionId === state.guestSessionId);
+  const clash = (session?.members || []).find(
+    (member) => !isGuest(member) && member.name.toLowerCase() === guestName.toLowerCase()
+  );
+  if (clash) {
+    setMessage("guestMessage", `${clash.name} là thành viên trong nhóm — bấm vào tên trong danh sách để đổi trạng thái.`, true);
+    return;
+  }
+  try {
+    await api(`/api/sessions/${encodeURIComponent(state.guestSessionId)}/guests`, {
+      method: "POST",
+      body: JSON.stringify({
+        guestName,
+        level: Number($("guestLevelInput").value || 5),
+        status: $("guestStatusInput").value
+      })
+    });
+    toggleModal("guestModal", false);
+    showToast(`Đã thêm ${guestName} (Giao lưu)`);
+    await refreshAdminVotes();
+  } catch (error) {
+    setMessage("guestMessage", error.message, true);
+  }
+}
+
+// ---------- Công nợ cá nhân ----------
 
 function summarizeBasicDebt(payload, memberName) {
   const sessions = Array.isArray(payload?.sessions) ? payload.sessions : [];
   const nameCi = String(memberName || "").trim().toLowerCase();
-  const mine = sessions.flatMap((session) => session.shares || []).filter((share) => {
-    return String(share.memberName || "").trim().toLowerCase() === nameCi;
+  let lastDate = "";
+  const mine = [];
+  sessions.forEach((session) => {
+    (session.shares || []).forEach((share) => {
+      if (String(share.memberName || "").trim().toLowerCase() !== nameCi) return;
+      mine.push(share);
+      if (!lastDate || String(session.date) > lastDate) lastDate = String(session.date || "");
+    });
   });
   const totalDue = mine.reduce((sum, share) => sum + Number(share.shareAmount || 0), 0);
   const totalPaid = mine
     .filter((share) => share.paid)
     .reduce((sum, share) => sum + Number(share.shareAmount || 0), 0);
-  const balance = mine
-    .filter((share) => !share.paid)
-    .reduce((sum, share) => sum + Number(share.shareAmount || 0), 0);
-  return { totalDue, totalPaid, balance, count: mine.length };
+  return { totalDue, totalPaid, count: mine.length, lastDate };
 }
 
 function renderUserDebt(myDebt, creditBalance = 0) {
-  const el = document.getElementById("myDebtCard");
-  const actionEl = document.getElementById("myDebtQrActions");
-  if (!el || !actionEl) return;
+  const card = $("myDebtCard");
+  const actionEl = $("myDebtQrActions");
+  if (!card || !actionEl) return;
+  const badge = card.querySelector("[data-debt-badge]");
+  const amount = card.querySelector("[data-debt-amount]");
+  const meta = card.querySelector("[data-debt-meta]");
   const totalDue = Number(myDebt?.totalDue || 0);
-  const paidOnBook = Number(myDebt?.totalPaid || 0);
   const credit = Math.max(0, Number(creditBalance || 0));
-  const totalPaid = paidOnBook + credit;
+  const totalPaid = Number(myDebt?.totalPaid || 0) + credit;
   const remaining = totalDue - totalPaid;
+  state.userBasicBalance = Math.max(0, remaining);
+
   if ((!myDebt || !myDebt.count) && !credit) {
-    el.textContent = "Chưa có công nợ trên sổ sân.";
+    badge.className = "badge badge-green";
+    badge.textContent = "Không có nợ";
+    amount.textContent = "0đ";
+    meta.textContent = "Chưa có công nợ trên sổ sân.";
     actionEl.innerHTML = "";
-    state.userBasicBalance = 0;
     return;
   }
-  state.userBasicBalance = Math.max(0, remaining);
-  el.innerHTML = `
-    <div>Tổng tiền cần thanh toán: <strong>${formatMoney(totalDue)}</strong></div>
-    <div>Đã thanh toán: <strong>${formatMoney(totalPaid)}</strong></div>
-    <div>Số tiền cần thanh toán: <strong class="${remaining > 0 ? "text-red-600" : "text-emerald-600"}">${formatMoney(remaining)}</strong></div>
-  `;
+
+  const updated = myDebt?.lastDate ? `Cập nhật sau buổi chơi ${dateBits(myDebt.lastDate).short}` : "Cập nhật từ sổ tiền sân";
+  meta.textContent = `${updated} · Tổng ${money(totalDue)}, đã trả ${money(totalPaid)}`;
   if (remaining > 0) {
-    actionEl.innerHTML = `<button id="openQrBtn" class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">Thanh toán bằng QR</button>`;
+    badge.className = "badge badge-red";
+    badge.textContent = "Cần thanh toán";
+    amount.textContent = `Đang nợ ${money(remaining)}`;
+    actionEl.innerHTML = `<button id="openQrBtn" type="button" class="btn">${icon("qr")}<span>Thanh toán bằng QR</span></button>`;
+  } else if (remaining < 0) {
+    badge.className = "badge badge-green";
+    badge.textContent = "Dư tiền";
+    amount.textContent = `Dư ${money(-remaining)}`;
+    actionEl.innerHTML = `<p class="balance-ok">Số dư sẽ tự trừ vào các buổi tiếp theo.</p>`;
   } else {
-    actionEl.innerHTML = `<p class="text-sm text-slate-500">Bạn không có công nợ cần thanh toán.</p>`;
+    badge.className = "badge badge-green";
+    badge.textContent = "Đã thanh toán";
+    amount.textContent = "Không còn nợ";
+    actionEl.innerHTML = `<p class="balance-ok">Bạn không có công nợ cần thanh toán.</p>`;
   }
 }
 
 function openVoteModal(vote) {
   if (!vote) return;
   state.activeVote = vote;
-  document.getElementById("voteSessionText").textContent = `Phiên: ${vote.date} ${vote.time || ""} ${vote.location ? `- ${vote.location}` : ""}`;
-  document.getElementById("voteQuestionText").textContent = vote.question || "Bạn vui lòng bỏ phiếu.";
-  document.getElementById("voteAnswerInput").value = vote.myAnswer || "";
+  $("voteSessionText").textContent = `Phiên: ${vote.date} ${vote.time || ""} ${vote.location ? `- ${vote.location}` : ""}`;
+  $("voteQuestionText").textContent = vote.question || "Bạn vui lòng bỏ phiếu.";
+  $("voteAnswerInput").value = vote.myAnswer || "";
   setMessage("voteMessage", "");
   toggleModal("voteModal", true);
 }
 
 function openQrModal(memberName, balance) {
   const qrUrl = buildVietQrUrl(memberName, balance);
-  document.getElementById("qrDebtInfo").textContent = `${memberName} - Số tiền cần thanh toán: ${formatMoney(balance)} VNĐ`;
-  document.getElementById("qrImage").src = qrUrl;
-  document.getElementById("qrOpenTabLink").href = qrUrl;
+  $("qrReceiver").textContent = VIETQR.accountName;
+  $("qrAmount").textContent = money(balance);
+  $("qrDebtInfo").textContent = `Thu cong no cau long - ${memberName}`;
+  $("qrImage").src = qrUrl;
+  $("qrOpenTabLink").href = qrUrl;
   toggleModal("qrModal", true);
 }
 
@@ -497,8 +765,9 @@ async function submitAttendance(status, sessionIdOverride = "") {
       method: "POST",
       body: JSON.stringify({ status })
     });
-    setMessage("attendanceModalMessage", "Đã gửi phản hồi.");
-    setTimeout(() => toggleModal("attendanceModal", false), 500);
+    toggleModal("attendanceModal", false);
+    showToast(status === "yes" ? "Đã ghi nhận: bạn tham gia" : "Đã ghi nhận: bạn không tham gia");
+    setMessage("userVoteMessage", "");
     await loadUserDashboard();
   } catch (error) {
     setMessage("attendanceModalMessage", error.message, true);
@@ -506,47 +775,47 @@ async function submitAttendance(status, sessionIdOverride = "") {
   }
 }
 
+// ---------- Xếp trận ----------
+
+function teamLevel(team) {
+  return (team || []).reduce((sum, player) => sum + (Number(player?.level) || 0), 0);
+}
+
+function teamBox(team, own, other) {
+  const names = (team || []).map((player) => escapeHtmlText(player?.name || "-")).join(" · ") || "-";
+  const relation = own === other ? "Cân bằng" : own > other ? "Đội mạnh hơn" : "Đội yếu hơn";
+  return `<div class="team-box"><b>${names}</b><small>Tổng level ${own || "-"} · ${relation}</small></div>`;
+}
+
 function renderMatchTables(rounds = []) {
-  const container = document.getElementById("matchResultTables");
+  const container = $("matchResultTables");
   if (!container) return;
-  container.innerHTML = "";
   if (!rounds.length) {
-    container.innerHTML =
-      '<div class="rounded-lg border border-slate-200 p-3 text-sm text-slate-500">Chưa có dữ liệu trận.</div>';
+    container.innerHTML = `<div class="empty-card" style="margin-top:12px">Chưa có dữ liệu trận. Chọn buổi và bấm Generate.</div>`;
     return;
   }
-  rounds.forEach((roundItem) => {
-    const wrapper = document.createElement("div");
-    wrapper.className = "overflow-x-auto rounded-lg border border-slate-200";
-    const rows = (roundItem.matches || [])
-      .map((match, index) => {
-        const teamA = `${match.teamA?.[0]?.name || "-"} (${match.teamA?.[0]?.level || "-"}) + ${match.teamA?.[1]?.name || "-"} (${match.teamA?.[1]?.level || "-"})`;
-        const teamB = `${match.teamB?.[0]?.name || "-"} (${match.teamB?.[0]?.level || "-"}) + ${match.teamB?.[1]?.name || "-"} (${match.teamB?.[1]?.level || "-"})`;
-        return `<tr>
-          <td class="border border-slate-200 px-2 py-1 text-center">${index + 1}</td>
-          <td class="border border-slate-200 px-2 py-1">${teamA}</td>
-          <td class="border border-slate-200 px-2 py-1">${teamB}</td>
-          <td class="border border-slate-200 px-2 py-1 text-right">${match.levelDiff ?? "-"}</td>
-        </tr>`;
-      })
-      .join("");
-    wrapper.innerHTML = `
-      <div class="bg-slate-100 px-3 py-2 text-sm font-medium">Round ${roundItem.round}</div>
-      <table class="min-w-full text-sm">
-        <thead class="bg-slate-50">
-          <tr>
-            <th class="border border-slate-200 px-2 py-1 text-center">#</th>
-            <th class="border border-slate-200 px-2 py-1 text-left">Team A</th>
-            <th class="border border-slate-200 px-2 py-1 text-left">Team B</th>
-            <th class="border border-slate-200 px-2 py-1 text-right">Chênh lệch</th>
-          </tr>
-        </thead>
-        <tbody>${rows || '<tr><td colspan="4" class="border border-slate-200 px-2 py-2 text-center text-slate-500">Không đủ người để xếp trận.</td></tr>'}</tbody>
-      </table>
-      <div class="px-3 py-2 text-xs text-slate-500">Ngồi chờ: ${(roundItem.waiting || []).join(", ") || "-"}</div>
-    `;
-    container.appendChild(wrapper);
-  });
+  container.innerHTML = rounds
+    .map((roundItem) => {
+      const matches = roundItem.matches || [];
+      const waiting = roundItem.waiting || [];
+      const cards = matches
+        .map((match, index) => {
+          const a = teamLevel(match.teamA);
+          const b = teamLevel(match.teamB);
+          return `<article class="match-card">
+            <div class="match-top">
+              <span><b>Sân ${index + 1}</b> · Trận ${String(index + 1).padStart(2, "0")}</span>
+              <span class="badge badge-neutral">Chênh ${match.levelDiff ?? Math.abs(a - b)}</span>
+            </div>
+            <div class="team-row">${teamBox(match.teamA, a, b)}<span class="vs">VS</span>${teamBox(match.teamB, b, a)}</div>
+          </article>`;
+        })
+        .join("");
+      return `<div class="round-head"><span>VÒNG ${roundItem.round}</span><small>${matches.length} trận${waiting.length ? ` · ${waiting.length} người nghỉ` : ""}</small></div>
+        ${cards ? `<div class="court-grid">${cards}</div>` : `<div class="empty-card">Không đủ người để xếp trận.</div>`}
+        ${waiting.length ? `<div class="waiting">${icon("clock")}<span><b>Ngồi chờ vòng này</b><small>${escapeHtmlText(waiting.join(", "))}</small></span></div>` : ""}`;
+    })
+    .join("");
 }
 
 function groupMatchesToRounds(matches = []) {
@@ -575,51 +844,52 @@ async function loadMatchesForDate(date) {
   return data.matches || [];
 }
 
+// ---------- Báo cáo ----------
+
 function renderReportTables(report) {
-  document.getElementById("reportMonthValue").textContent = report?.month || "-";
-  document.getElementById("reportTotalCost").textContent = formatMoney(report?.totalMonthlyCost || 0);
-  document.getElementById("reportTotalSessions").textContent = String(report?.totalSessions || 0);
+  $("reportMonthValue").textContent = report?.month || "-";
+  $("reportTotalCost").textContent = money(report?.totalMonthlyCost || 0);
+  $("reportTotalSessions").textContent = String(report?.totalSessions || 0);
 
-  const attendanceBody = document.getElementById("reportAttendanceBody");
-  const debtBody = document.getElementById("reportTopDebtorsBody");
-  const payerBody = document.getElementById("reportTopPayersBody");
-  attendanceBody.innerHTML = "";
-  debtBody.innerHTML = "";
-  payerBody.innerHTML = "";
-
-  (report?.attendanceByMember || []).forEach((item) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="border border-slate-200 px-2 py-1">${item.memberName}</td>
-      <td class="border border-slate-200 px-2 py-1 text-right">${item.attendedSessions}</td>
-      <td class="border border-slate-200 px-2 py-1 text-right">${item.totalSessions}</td>
-      <td class="border border-slate-200 px-2 py-1 text-right">${Math.round(Number(item.attendanceRate || 0) * 100)}%</td>
-    `;
-    attendanceBody.appendChild(tr);
-  });
-
-  (report?.topDebtors || []).forEach((item) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="border border-slate-200 px-2 py-1">${item.memberName}</td>
-      <td class="border border-slate-200 px-2 py-1 text-right text-red-600">${formatMoney(item.balance)}</td>
-    `;
-    debtBody.appendChild(tr);
-  });
-
-  (report?.topPayers || []).forEach((item) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="border border-slate-200 px-2 py-1">${item.memberName}</td>
-      <td class="border border-slate-200 px-2 py-1 text-right text-emerald-600">${formatMoney(item.amount)}</td>
-    `;
-    payerBody.appendChild(tr);
-  });
+  const empty = (cols) => `<tr><td colspan="${cols}" class="hint-line">Không có dữ liệu.</td></tr>`;
+  const attendance = report?.attendanceByMember || [];
+  $("reportAttendanceBody").innerHTML = attendance.length
+    ? attendance
+        .map(
+          (item) => `<tr>
+            <td>${escapeHtmlText(item.memberName)}</td>
+            <td class="num">${item.attendedSessions}</td>
+            <td class="num">${item.totalSessions}</td>
+            <td class="num">${Math.round(Number(item.attendanceRate || 0) * 100)}%</td>
+          </tr>`
+        )
+        .join("")
+    : empty(4);
+  const debtors = report?.topDebtors || [];
+  $("reportTopDebtorsBody").innerHTML = debtors.length
+    ? debtors
+        .map(
+          (item) =>
+            `<tr><td>${escapeHtmlText(item.memberName)}</td><td class="num negative">${money(item.balance)}</td></tr>`
+        )
+        .join("")
+    : empty(2);
+  const payers = report?.topPayers || [];
+  $("reportTopPayersBody").innerHTML = payers.length
+    ? payers
+        .map(
+          (item) =>
+            `<tr><td>${escapeHtmlText(item.memberName)}</td><td class="num positive">${money(item.amount)}</td></tr>`
+        )
+        .join("")
+    : empty(2);
 }
+
+// ---------- Giải đấu ----------
 
 async function mountTournamentPanel(role) {
   const mountId = role === "admin" ? "adminTournamentMount" : "userTournamentMount";
-  const mount = document.getElementById(mountId);
+  const mount = $(mountId);
   if (!mount || !window.TournamentPanel) return;
   const key = `${role}:${state.auth?.memberName || role}`;
   if (state.tournamentMountedFor === key && mount.dataset.ready === "1") {
@@ -632,9 +902,16 @@ async function mountTournamentPanel(role) {
   state.tournamentMountedFor = key;
 }
 
-function formatNoticeTime(iso) {
+// ---------- Thông báo ----------
+
+function relativeTime(iso) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
+  const diff = (Date.now() - date.getTime()) / 1000;
+  if (diff < 60) return "Vừa xong";
+  if (diff < 3600) return `${Math.floor(diff / 60)} phút trước`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} giờ trước`;
+  if (diff < 172800) return "Hôm qua";
   return new Intl.DateTimeFormat("vi-VN", {
     day: "2-digit",
     month: "2-digit",
@@ -644,50 +921,100 @@ function formatNoticeTime(iso) {
   }).format(date);
 }
 
-function renderNoticeList(containerId, notices) {
-  const box = document.getElementById(containerId);
+function noticeSeenKey() {
+  return `noticeSeenAt:${state.auth?.memberName || "admin"}`;
+}
+
+function readNoticeSeen() {
+  try {
+    return localStorage.getItem(noticeSeenKey()) || "";
+  } catch (_error) {
+    return "";
+  }
+}
+
+function markNoticesSeen() {
+  const newest = state.notices[0]?.createdAt;
+  if (!newest) return;
+  try {
+    localStorage.setItem(noticeSeenKey(), newest);
+  } catch (_error) {}
+  const dot = $("userNoticeDot");
+  if (dot) dot.hidden = true;
+}
+
+function countUnread(notices, seenAt) {
+  if (!seenAt) return notices.length;
+  return notices.filter((item) => String(item.createdAt || "") > seenAt).length;
+}
+
+function renderNoticeList(containerId, notices, seenAt = null) {
+  const box = $(containerId);
   if (!box) return;
   const list = Array.isArray(notices) ? notices : [];
   if (!list.length) {
-    box.innerHTML = `<p class="text-sm text-slate-500">Chưa có thông báo nào.</p>`;
+    box.innerHTML = `<div class="empty-card">Chưa có thông báo nào.</div>`;
     return;
   }
   box.innerHTML = list
-    .map(
-      (item) => `<article class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-        <p class="whitespace-pre-wrap text-sm text-slate-800">${escapeHtmlText(item.content || "")}</p>
-        <p class="mt-2 text-xs text-slate-500">${escapeHtmlText(formatNoticeTime(item.createdAt))}</p>
-      </article>`
-    )
+    .map((item) => {
+      const unread = seenAt !== null && (!seenAt || String(item.createdAt || "") > seenAt);
+      return `<article class="${unread ? "unread" : ""}">
+        <span class="notification-icon">${icon("bell")}</span>
+        <div>
+          <p>${escapeHtmlText(item.content || "")}</p>
+          <small>${escapeHtmlText(relativeTime(item.createdAt))}</small>
+        </div>
+        ${unread ? "<i></i>" : ""}
+      </article>`;
+    })
     .join("");
 }
 
-async function loadNotices(containerId) {
-  const data = await api("/api/notices");
-  renderNoticeList(containerId, data.notices || []);
+async function loadNotices(containerId, options = {}) {
+  const data = await api("/api/notices", { loading: options.loading });
+  state.notices = data.notices || [];
+  if (containerId === "userNoticeList") {
+    const seenAt = readNoticeSeen();
+    const unread = countUnread(state.notices, seenAt);
+    $("userNoticeDot").hidden = !unread;
+    $("userNoticeSummary").textContent = unread ? `Bạn có ${unread} thông báo mới` : "Không có thông báo mới";
+    $("userNoticeSummaryMeta").textContent = state.notices[0]
+      ? `Cập nhật gần nhất ${relativeTime(state.notices[0].createdAt).toLowerCase()}`
+      : "Admin gửi thông báo tại đây";
+    renderNoticeList(containerId, state.notices, seenAt);
+    if (state.activeUserTab === "notices") markNoticesSeen();
+    return;
+  }
+  renderNoticeList(containerId, state.notices);
 }
+
+// ---------- Tabs ----------
 
 function activateUserTab(tabId) {
   state.activeUserTab = tabId;
-  const home = document.getElementById("userHomeTabContent");
-  const tournament = document.getElementById("userTournamentTabContent");
-  const notices = document.getElementById("userNoticeTabContent");
-  home?.classList.toggle("hidden", tabId !== "home");
-  tournament?.classList.toggle("hidden", tabId !== "tournament");
-  notices?.classList.toggle("hidden", tabId !== "notices");
-  document.getElementById("userTabHomeBtn")?.classList.toggle("is-active", tabId === "home");
-  document.getElementById("userTabTournamentBtn")?.classList.toggle("is-active", tabId === "tournament");
-  document.getElementById("userTabNoticeBtn")?.classList.toggle("is-active", tabId === "notices");
+  const defs = {
+    home: ["userHomeTabContent", "userTabHomeBtn"],
+    ranking: ["userRankingTabContent", "userTabRankingBtn"],
+    tournament: ["userTournamentTabContent", "userTabTournamentBtn"],
+    notices: ["userNoticeTabContent", "userTabNoticeBtn"]
+  };
+  Object.entries(defs).forEach(([key, [contentId, btnId]]) => {
+    $(contentId).hidden = key !== tabId;
+    $(btnId).classList.toggle("active", key === tabId);
+  });
+  paintUserHeader();
+  window.scrollTo({ top: 0 });
   if (tabId === "tournament") {
     mountTournamentPanel("user").catch((error) => {
-      const mount = document.getElementById("userTournamentMount");
-      if (mount) mount.innerHTML = `<p class="text-sm text-rose-600">${error.message}</p>`;
+      const mount = $("userTournamentMount");
+      if (mount) mount.innerHTML = `<p class="form-note is-error">${escapeHtmlText(error.message)}</p>`;
     });
   }
   if (tabId === "notices") {
     loadNotices("userNoticeList").catch((error) => {
-      const box = document.getElementById("userNoticeList");
-      if (box) box.innerHTML = `<p class="text-sm text-rose-600">${escapeHtmlText(error.message)}</p>`;
+      const box = $("userNoticeList");
+      if (box) box.innerHTML = `<p class="form-note is-error">${escapeHtmlText(error.message)}</p>`;
     });
   }
 }
@@ -699,42 +1026,27 @@ function activateAdminTab(tabId) {
     court: "courtTabContent",
     expenses: "expensesTabContent",
     ledger: "ledgerTabContent",
-    games: "gamesTabContent",
-    tools: "toolsTabContent",
     credit: "creditTabContent",
+    ranking: "rankingTabContent",
     tournament: "tournamentTabContent",
-    notices: "noticeTabContent"
+    notices: "noticeTabContent",
+    tools: "toolsTabContent"
   };
   Object.entries(contentDefs).forEach(([key, contentId]) => {
-    const el = document.getElementById(contentId);
-    if (!el) return;
-    el.classList.toggle("hidden", key !== tabId);
+    const el = $(contentId);
+    if (el) el.hidden = key !== tabId;
   });
-
-  const btnDefs = {
-    court: "adminTabCourtBtn",
-    expenses: "adminTabExpensesBtn",
-    ledger: "adminTabLedgerBtn",
-    games: "adminTabGamesBtn",
-    tools: "adminTabToolsBtn",
-    credit: "adminTabCreditBtn",
-    tournament: "adminTabTournamentBtn",
-    notices: "adminTabNoticeBtn"
-  };
-  Object.entries(btnDefs).forEach(([key, btnId]) => {
-    const btn = document.getElementById(btnId);
-    if (!btn) return;
-    const active = key === tabId;
-
-    btn.classList.toggle("is-active", active);
+  document.querySelectorAll("[data-admin-tab]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.adminTab === tabId);
   });
+  document.querySelector(`.admin-tabs [data-admin-tab="${tabId}"]`)?.scrollIntoView({ block: "nearest", inline: "center" });
 
   if (tabId === "credit") loadCreditBoard().catch((error) => setMessage("creditMessage", error.message, true));
 
   if (tabId === "expenses" || tabId === "ledger") {
-    window.BasicLedger.mountEntry(document.getElementById("adminEntryMount"));
-    window.BasicLedger.mountLedger(document.getElementById("adminLedgerMount"));
-    window.BasicLedger.load().catch((error) => setMessage("voteListMessage", error.message, true));
+    window.BasicLedger.mountEntry($("adminEntryMount"));
+    window.BasicLedger.mountLedger($("adminLedgerMount"));
+    window.BasicLedger.load().catch((error) => showToast(error.message, true));
   }
 
   if (tabId === "notices") {
@@ -743,11 +1055,13 @@ function activateAdminTab(tabId) {
 
   if (tabId === "tournament") {
     mountTournamentPanel("admin").catch((error) => {
-      const mount = document.getElementById("adminTournamentMount");
-      if (mount) mount.innerHTML = `<p class="text-sm text-rose-600">${error.message}</p>`;
+      const mount = $("adminTournamentMount");
+      if (mount) mount.innerHTML = `<p class="form-note is-error">${escapeHtmlText(error.message)}</p>`;
     });
   }
 }
+
+// ---------- Tải dữ liệu ----------
 
 async function loadLoginOptions() {
   const data = await api("/api/tournament/login-options").catch(() => api("/api/login-options"));
@@ -766,7 +1080,7 @@ async function loadAdminDashboard() {
   renderAdminVoteList(state.voteSessions);
   activateAdminTab(state.activeAdminTab || "court");
 
-  const selectedSessionId = document.getElementById("matchSessionSelect")?.value || "";
+  const selectedSessionId = $("matchSessionSelect")?.value || "";
   const selectedSession = state.sessions.find((item) => item.sessionId === selectedSessionId);
   if (selectedSession?.date) {
     const matches = await loadMatchesForDate(selectedSession.date);
@@ -774,7 +1088,7 @@ async function loadAdminDashboard() {
   } else {
     renderMatchTables([]);
   }
-  const dateInput = document.getElementById("preDateInput");
+  const dateInput = $("preDateInput");
   if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
 }
 
@@ -787,13 +1101,14 @@ async function loadUserDashboard() {
   renderUpcoming(data.upcomingSession);
   renderUserVoteList(state.voteSessions);
   await loadUserBasicLedger(data.auth?.memberName || "");
+  if (state.activeUserTab !== "notices") loadNotices("userNoticeList", { loading: false }).catch(() => {});
   if (data.activeVote) {
     openVoteModal(data.activeVote);
   }
 }
 
 async function loadUserBasicLedger(memberName = "") {
-  window.BasicLedger.mountLedger(document.getElementById("userLedgerMount"));
+  window.BasicLedger.mountLedger($("userLedgerMount"));
   try {
     const data = await window.BasicLedger.load();
     const name = memberName || state.auth?.memberName || data.memberName || "";
@@ -801,8 +1116,8 @@ async function loadUserBasicLedger(memberName = "") {
     const credit = (data.credits || []).find((item) => item.memberId === mine?.memberId);
     renderUserDebt(summarizeBasicDebt(data, name), Number(credit?.balance || 0));
   } catch (error) {
-    const el = document.getElementById("myDebtCard");
-    if (el) el.textContent = error.message;
+    const meta = document.querySelector("#myDebtCard [data-debt-meta]");
+    if (meta) meta.textContent = error.message;
   }
 }
 
@@ -812,101 +1127,10 @@ async function loadDashboard() {
   return loadUserDashboard();
 }
 
-function bindEvents() {
-  document.querySelectorAll("#authModeSegment .login-segment-btn").forEach((btn) => {
-    btn.addEventListener("click", () => setLoginAuthMode(btn.dataset.mode));
-  });
-  setLoginAuthMode("login");
-
-  document.getElementById("loginForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const errorEl = document.getElementById("loginError");
-    errorEl.classList.add("hidden");
-    try {
-      const mode = state.loginAuthMode || "login";
-      const isUserFlow = mode === "login" || mode === "register";
-      const permissionPromise =
-        isUserFlow && window.preparePushPermission ? window.preparePushPermission() : Promise.resolve();
-
-      if (mode === "admin") {
-        await api("/api/tournament/login", {
-          method: "POST",
-          body: JSON.stringify({
-            mode: "admin",
-            password: document.getElementById("passwordInput").value
-          })
-        });
-      } else if (mode === "register") {
-        await api("/api/tournament/register", {
-          method: "POST",
-          body: JSON.stringify({
-            name: document.getElementById("registerName").value.trim(),
-            phoneNumber: document.getElementById("registerPhone").value.trim()
-          })
-        });
-      } else {
-        await api("/api/tournament/login", {
-          method: "POST",
-          body: JSON.stringify({
-            mode: "user",
-            memberName: document.getElementById("memberSelectInput").value,
-            phoneNumber: document.getElementById("phoneInput").value.trim()
-          })
-        });
-      }
-
-      await permissionPromise.catch(() => {});
-      showAppMode();
-      await loadDashboard();
-      if (isUserFlow) window.registerPush?.({ prompt: false }).catch(() => {});
-      if (mode === "register") await loadLoginOptions().catch(() => {});
-    } catch (error) {
-      errorEl.textContent = error.message;
-      errorEl.classList.remove("hidden");
-    }
-  });
-
-  document.getElementById("logoutBtn").addEventListener("click", async () => {
-    await api("/api/logout", { method: "POST" });
-    showLoginMode();
-  });
-
-  document.getElementById("adminTabCourtBtn")?.addEventListener("click", () => activateAdminTab("court"));
-  document.getElementById("adminTabExpensesBtn")?.addEventListener("click", () => activateAdminTab("expenses"));
-  document.getElementById("adminTabLedgerBtn")?.addEventListener("click", () => activateAdminTab("ledger"));
-  document.getElementById("adminTabGamesBtn")?.addEventListener("click", () => activateAdminTab("games"));
-  document.getElementById("adminTabToolsBtn")?.addEventListener("click", () => activateAdminTab("tools"));
-  document.getElementById("adminTabTournamentBtn")?.addEventListener("click", () => activateAdminTab("tournament"));
-  document.getElementById("adminTabNoticeBtn")?.addEventListener("click", () => activateAdminTab("notices"));
-  document.getElementById("userTabHomeBtn")?.addEventListener("click", () => activateUserTab("home"));
-  document.getElementById("userTabTournamentBtn")?.addEventListener("click", () => activateUserTab("tournament"));
-  document.getElementById("userTabNoticeBtn")?.addEventListener("click", () => activateUserTab("notices"));
-
-  document.getElementById("noticeForm")?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const content = document.getElementById("noticeContentInput")?.value.trim() || "";
-    if (!content) {
-      setMessage("noticeMessage", "Nội dung không được để trống.", true);
-      return;
-    }
-    try {
-      const data = await api("/api/notices", {
-        method: "POST",
-        body: JSON.stringify({ content })
-      });
-      document.getElementById("noticeContentInput").value = "";
-      setMessage("noticeMessage", data.message || "Đã gửi thông báo.");
-      await loadNotices("adminNoticeList");
-    } catch (error) {
-      setMessage("noticeMessage", error.message, true);
-    }
-  });
-
-  document.getElementById("refreshMembersBtn")?.addEventListener("click", loadAdminDashboard);
-}
+// ---------- Tiền thừa ----------
 
 function fillCreditMembers() {
-  const select = document.getElementById("creditMemberSelect");
+  const select = $("creditMemberSelect");
   if (!select) return;
   const current = select.value;
   const members = (state.members || []).filter((member) => member.active !== false);
@@ -921,28 +1145,22 @@ function fillCreditMembers() {
 function renderCreditBoard(payload) {
   const balances = payload?.balances || [];
   const entries = payload?.entries || [];
-  const balanceBody = document.getElementById("creditBalanceBody");
-  const entryBody = document.getElementById("creditEntryBody");
-  if (balanceBody) {
-    balanceBody.innerHTML = balances.length
-      ? balances
-          .map(
-            (item) =>
-              `<tr><td>${escapeHtmlText(item.memberName)}</td><td class="text-right">${formatMoney(item.balance)}</td></tr>`
-          )
-          .join("")
-      : `<tr><td colspan="2" class="text-slate-500">Chưa có tiền thừa.</td></tr>`;
-  }
-  if (entryBody) {
-    entryBody.innerHTML = entries.length
-      ? entries
-          .map((item) => {
-            const sign = item.amount > 0 ? "+" : "";
-            return `<tr><td>${escapeHtmlText(item.memberName)}</td><td class="text-right">${sign}${formatMoney(item.amount)}</td><td>${escapeHtmlText(item.note || "-")}</td></tr>`;
-          })
-          .join("")
-      : `<tr><td colspan="3" class="text-slate-500">Chưa có ghi nhận.</td></tr>`;
-  }
+  $("creditBalanceBody").innerHTML = balances.length
+    ? balances
+        .map(
+          (item) =>
+            `<div><span style="display:flex;align-items:center;gap:9px">${avatar(item.memberName, "sm")}<b>${escapeHtmlText(item.memberName)}</b></span><b class="positive">${money(item.balance)}</b></div>`
+        )
+        .join("")
+    : `<div class="empty">Chưa có tiền thừa.</div>`;
+  $("creditEntryBody").innerHTML = entries.length
+    ? entries
+        .map((item) => {
+          const sign = item.amount > 0 ? "+" : "";
+          return `<div><span><b>${escapeHtmlText(item.memberName)}</b><small>${escapeHtmlText(item.note || "Không ghi chú")}</small></span><b class="${item.amount > 0 ? "positive" : "negative"}">${sign}${money(item.amount)}</b></div>`;
+        })
+        .join("")
+    : `<div class="empty">Chưa có ghi nhận.</div>`;
 }
 
 async function loadCreditBoard() {
@@ -951,34 +1169,168 @@ async function loadCreditBoard() {
   renderCreditBoard(data);
 }
 
-document.getElementById("adminTabCreditBtn")?.addEventListener("click", () => activateAdminTab("credit"));
-document.getElementById("creditForm")?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const amount = Number(String(document.getElementById("creditAmountInput")?.value || "").replace(/[^\d]/g, ""));
-  if (!amount) {
-    setMessage("creditMessage", "Nhập số tiền lớn hơn 0.", true);
-    return;
-  }
-  try {
-    const data = await api("/api/credits", {
-      method: "POST",
-      body: JSON.stringify({
-        memberId: document.getElementById("creditMemberSelect")?.value,
-        amount,
-        direction: document.getElementById("creditDirectionInput")?.value || "add",
-        note: document.getElementById("creditNoteInput")?.value || ""
-      })
-    });
-    document.getElementById("creditAmountInput").value = "";
-    document.getElementById("creditNoteInput").value = "";
-    renderCreditBoard(data);
-    setMessage("creditMessage", data.message || "Đã lưu.");
-  } catch (error) {
-    setMessage("creditMessage", error.message, true);
-  }
-});
+// ---------- Sự kiện ----------
 
-  document.getElementById("migrateSheetsBtn")?.addEventListener("click", async () => {
+function closestOverlay(node) {
+  return node.closest(".overlay");
+}
+
+function bindChrome() {
+  document.querySelectorAll("[data-theme-toggle]").forEach((button) => button.addEventListener("click", toggleTheme));
+  document.querySelectorAll("[data-open-account]").forEach((button) =>
+    button.addEventListener("click", () => toggleModal("accountModal", true))
+  );
+  document.querySelectorAll("[data-close-modal]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const overlay = closestOverlay(button);
+      if (overlay) overlay.hidden = true;
+    })
+  );
+  // Bấm ra vùng tối để đóng sheet (trừ loading).
+  document.querySelectorAll(".overlay").forEach((overlay) => {
+    if (overlay.id === "loadingModal") return;
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) overlay.hidden = true;
+    });
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    document.querySelectorAll(".overlay:not([hidden])").forEach((overlay) => {
+      if (overlay.id !== "loadingModal") overlay.hidden = true;
+    });
+  });
+  document.querySelectorAll("[data-go-user-tab]").forEach((button) =>
+    button.addEventListener("click", () => activateUserTab(button.dataset.goUserTab))
+  );
+}
+
+function bindAuth() {
+  document.querySelectorAll("#authModeSegment .login-segment-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setLoginAuthMode(btn.dataset.mode));
+  });
+  setLoginAuthMode("login");
+
+  $("loginForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const errorEl = $("loginError");
+    errorEl.hidden = true;
+    try {
+      const mode = state.loginAuthMode || "login";
+      const isUserFlow = mode === "login" || mode === "register";
+      const permissionPromise =
+        isUserFlow && window.preparePushPermission ? window.preparePushPermission() : Promise.resolve();
+
+      if (mode === "admin") {
+        await api("/api/tournament/login", {
+          method: "POST",
+          body: JSON.stringify({
+            mode: "admin",
+            password: $("passwordInput").value
+          })
+        });
+      } else if (mode === "register") {
+        await api("/api/tournament/register", {
+          method: "POST",
+          body: JSON.stringify({
+            name: $("registerName").value.trim(),
+            phoneNumber: $("registerPhone").value.trim()
+          })
+        });
+      } else {
+        await api("/api/tournament/login", {
+          method: "POST",
+          body: JSON.stringify({
+            mode: "user",
+            memberName: $("memberSelectInput").value,
+            phoneNumber: $("phoneInput").value.trim()
+          })
+        });
+      }
+
+      await permissionPromise.catch(() => {});
+      showAppMode();
+      await loadDashboard();
+      if (isUserFlow) window.registerPush?.({ prompt: false }).catch(() => {});
+      if (mode === "register") await loadLoginOptions().catch(() => {});
+    } catch (error) {
+      errorEl.textContent = error.message;
+      errorEl.hidden = false;
+    }
+  });
+
+  $("logoutBtn").addEventListener("click", async () => {
+    await api("/api/logout", { method: "POST" });
+    toggleModal("accountModal", false);
+    showLoginMode();
+  });
+}
+
+function bindTabs() {
+  document.querySelectorAll("[data-admin-tab]").forEach((button) =>
+    button.addEventListener("click", () => activateAdminTab(button.dataset.adminTab))
+  );
+  $("userTabHomeBtn").addEventListener("click", () => activateUserTab("home"));
+  $("userTabRankingBtn").addEventListener("click", () => activateUserTab("ranking"));
+  $("userTabTournamentBtn").addEventListener("click", () => activateUserTab("tournament"));
+  $("userTabNoticeBtn").addEventListener("click", () => activateUserTab("notices"));
+}
+
+function bindNotices() {
+  $("noticeForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const content = $("noticeContentInput").value.trim();
+    if (!content) {
+      setMessage("noticeMessage", "Nội dung không được để trống.", true);
+      return;
+    }
+    try {
+      const data = await api("/api/notices", {
+        method: "POST",
+        body: JSON.stringify({ content })
+      });
+      $("noticeContentInput").value = "";
+      setMessage("noticeMessage", data.message || "Đã gửi thông báo.");
+      await loadNotices("adminNoticeList");
+    } catch (error) {
+      setMessage("noticeMessage", error.message, true);
+    }
+  });
+}
+
+function bindCredits() {
+  $("creditAmountInput").addEventListener("input", (event) => {
+    const digits = String(event.target.value || "").replace(/[^\d]/g, "");
+    event.target.value = digits ? formatMoney(Number(digits)) : "";
+  });
+  $("creditForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const amount = Number(String($("creditAmountInput").value || "").replace(/[^\d]/g, ""));
+    if (!amount) {
+      setMessage("creditMessage", "Nhập số tiền lớn hơn 0.", true);
+      return;
+    }
+    try {
+      const data = await api("/api/credits", {
+        method: "POST",
+        body: JSON.stringify({
+          memberId: $("creditMemberSelect").value,
+          amount,
+          direction: $("creditDirectionInput").value || "add",
+          note: $("creditNoteInput").value || ""
+        })
+      });
+      $("creditAmountInput").value = "";
+      $("creditNoteInput").value = "";
+      renderCreditBoard(data);
+      setMessage("creditMessage", data.message || "Đã lưu.");
+    } catch (error) {
+      setMessage("creditMessage", error.message, true);
+    }
+  });
+}
+
+function bindTools() {
+  $("migrateSheetsBtn").addEventListener("click", async () => {
     const ok = window.confirm(
       "Migrate từ Google Sheets sẽ ghi đè dữ liệu hiện có trong Postgres. Bạn có chắc muốn tiếp tục?"
     );
@@ -995,7 +1347,7 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
       setMessage("dataOpsMessage", error.message, true);
     }
   });
-  document.getElementById("testPushBtn")?.addEventListener("click", async () => {
+  $("testPushBtn").addEventListener("click", async () => {
     try {
       const data = await api("/api/push/test", { method: "POST" });
       const session = data.session?.date ? ` Lịch gần nhất: ${data.session.date}.` : "";
@@ -1007,7 +1359,7 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
       setMessage("dataOpsMessage", error.message, true);
     }
   });
-  document.getElementById("syncSheetsBtn")?.addEventListener("click", async () => {
+  $("syncSheetsBtn").addEventListener("click", async () => {
     try {
       const data = await api("/api/admin/sync-sheets", { method: "POST" });
       const rows = data.rows || {};
@@ -1019,144 +1371,31 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
       setMessage("dataOpsMessage", error.message, true);
     }
   });
-  document.getElementById("openAddMemberBtn")?.addEventListener("click", () => openMemberModal(null));
-  document.getElementById("memberModalCloseBtn")?.addEventListener("click", () => toggleModal("memberModal", false));
-  document.getElementById("memberLevelTable").addEventListener("click", async (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    const memberId = String(target.dataset.memberId || "");
-    if (!memberId) return;
 
-    if (target.classList.contains("edit-member-btn")) {
-      const member = state.members.find((item) => item.memberId === memberId);
-      if (!member) {
-        setMessage("memberManageMessage", "Không tìm thấy thông tin member để chỉnh sửa.", true);
-        return;
-      }
-      openMemberModal(member);
-      return;
-    }
-
-    if (!target.classList.contains("delete-member-btn")) return;
-    const member = state.members.find((item) => item.memberId === memberId);
-    const memberName = member?.name || memberId;
-    if (!window.confirm(`Xóa thành viên "${memberName}"? Thao tác này không hoàn tác.`)) return;
+  $("loadReportBtn").addEventListener("click", async () => {
     try {
-      await api(`/api/members/${encodeURIComponent(memberId)}`, { method: "DELETE" });
-      setMessage("memberManageMessage", `Đã xóa member ${memberName}.`);
-      await loadAdminDashboard();
+      const month = $("reportMonthInput").value;
+      const data = await api(`/api/reports/monthly?month=${encodeURIComponent(month)}`);
+      renderReportTables(data);
+      setMessage("reportMessage", "Đã tải báo cáo tháng.");
     } catch (error) {
-      setMessage("memberManageMessage", error.message, true);
-    }
-  });
-  document.getElementById("memberForm")?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const memberId = document.getElementById("memberModalIdInput").value.trim();
-    const payload = {
-      name: document.getElementById("memberNameInput").value.trim(),
-      type: document.getElementById("memberTypeInput").value,
-      gender: document.getElementById("memberGenderInput").value,
-      birthday: document.getElementById("memberBirthdayInput").value,
-      phoneNumber: document.getElementById("memberPhoneInput").value.trim(),
-      level: Number(document.getElementById("memberLevelInput").value || 5),
-      active: document.getElementById("memberActiveInput").checked
-    };
-    try {
-      if (!payload.name) {
-        setMessage("memberModalMessage", "Tên member không được để trống.", true);
-        return;
-      }
-      if (memberId) {
-        await api(`/api/members/${encodeURIComponent(memberId)}`, {
-          method: "PATCH",
-          body: JSON.stringify(payload)
-        });
-        setMessage("memberManageMessage", `Đã cập nhật member ${payload.name}.`);
-      } else {
-        await api("/api/members", {
-          method: "POST",
-          body: JSON.stringify(payload)
-        });
-        setMessage("memberManageMessage", `Đã thêm member ${payload.name}.`);
-      }
-      toggleModal("memberModal", false);
-      await loadAdminDashboard();
-    } catch (error) {
-      setMessage("memberModalMessage", error.message, true);
+      setMessage("reportMessage", error.message, true);
     }
   });
 
-  document.getElementById("resendSessionPushBtn")?.addEventListener("click", async () => {
-    const button = document.getElementById("resendSessionPushBtn");
-    button.disabled = true;
-    try {
-      const data = await api("/api/sessions/notify", { method: "POST" });
-      const pushFailed = Boolean(data.push && ((!data.push.configured) || (!data.push.sent && data.push.failed)));
-      setMessage("preSessionMessage", data.message, pushFailed);
-    } catch (error) {
-      setMessage("preSessionMessage", error.message, true);
-    } finally {
-      button.disabled = false;
-    }
+  $("downloadCsvBtn").addEventListener("click", () => {
+    const month = $("reportMonthInput").value;
+    if (!month) return;
+    window.open(`/api/reports/monthly?month=${encodeURIComponent(month)}&format=csv`, "_blank");
   });
-  document.getElementById("preSessionForm").addEventListener("submit", async (event) => {
+
+  $("htmlConvertForm").addEventListener("submit", (event) => {
     event.preventDefault();
     try {
-      const data = await api("/api/sessions", {
-        method: "POST",
-        body: JSON.stringify({
-          date: document.getElementById("preDateInput").value,
-          time: document.getElementById("preTimeInput").value,
-          location: document.getElementById("preLocationInput").value.trim(),
-          note: document.getElementById("preNoteInput").value.trim()
-        })
-      });
-      const pushFailed = Boolean(data.push && ((!data.push.configured) || (!data.push.sent && data.push.failed)));
-      setMessage("preSessionMessage", data.message || "Đã tạo buổi vote thành công.", pushFailed);
-      await loadAdminDashboard();
-    } catch (error) {
-      setMessage("preSessionMessage", error.message, true);
-    }
-  });
-
-  document.getElementById("generateMatchesBtn").addEventListener("click", async () => {
-    const sessionId = document.getElementById("matchSessionSelect").value;
-    const roundCount = Number(document.getElementById("roundCountInput").value || 2);
-    try {
-      const data = await api(`/api/sessions/${encodeURIComponent(sessionId)}/matches`, {
-        method: "POST",
-        body: JSON.stringify({ roundCount })
-      });
-      renderMatchTables(data.rounds || []);
-      setMessage("matchMessage", `Đã generate xếp trận cho ngày ${data.matchDate}.`);
-    } catch (error) {
-      renderMatchTables([]);
-      setMessage("matchMessage", error.message, true);
-    }
-  });
-  document.getElementById("matchSessionSelect")?.addEventListener("change", async () => {
-    try {
-      const sessionId = document.getElementById("matchSessionSelect").value;
-      const selectedSession = state.sessions.find((item) => item.sessionId === sessionId);
-      if (!selectedSession?.date) {
-        renderMatchTables([]);
-        return;
-      }
-      const matches = await loadMatchesForDate(selectedSession.date);
-      renderMatchTables(groupMatchesToRounds(matches));
-    } catch (error) {
-      renderMatchTables([]);
-      setMessage("matchMessage", error.message, true);
-    }
-  });
-
-  document.getElementById("htmlConvertForm")?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    try {
-      const htmlInput = document.getElementById("htmlConvertInput")?.value || "";
-      const buttonTextCTA1 = document.getElementById("htmlConvertTextInputCTA1")?.value?.trim() || "";
-      const buttonTextCTA2 = document.getElementById("htmlConvertTextInputCTA2")?.value?.trim() || "";
-      const variantId = document.getElementById("htmlConvertVariantIdInput")?.value?.trim() || "";
+      const htmlInput = $("htmlConvertInput")?.value || "";
+      const buttonTextCTA1 = $("htmlConvertTextInputCTA1")?.value?.trim() || "";
+      const buttonTextCTA2 = $("htmlConvertTextInputCTA2")?.value?.trim() || "";
+      const variantId = $("htmlConvertVariantIdInput")?.value?.trim() || "";
 
       if (!htmlInput.trim()) throw new Error("Vui lòng nhập HTML input.");
       if (!buttonTextCTA1) throw new Error("Vui lòng nhập text button CTA 1.");
@@ -1178,11 +1417,7 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
       let replacedCount = 0;
       let transformedHtml = htmlInput.replace(ctaWithCommentPattern, (_match, comment) => {
         replacedCount += 1;
-        if (replacedCount === 1) {
-          return `${comment}\n${buttonBlockCTA1}`;
-        } else {
-          return `${comment}\n${buttonBlockCTA2}`;
-        }
+        return `${comment}\n${replacedCount === 1 ? buttonBlockCTA1 : buttonBlockCTA2}`;
       });
 
       // Fallback: nếu không có comment CTA thì thay toàn bộ <a class="cta">...</a>
@@ -1190,13 +1425,12 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
         const ctaAnchorPattern = /<a\b[^>]*class=["'][^"']*\bcta\b[^"']*["'][^>]*>[\s\S]*?<\/a>/gi;
         transformedHtml = transformedHtml.replace(ctaAnchorPattern, () => {
           replacedCount += 1;
-          return buttonBlock;
+          return replacedCount === 1 ? buttonBlockCTA1 : buttonBlockCTA2;
         });
       }
 
       const output = `${transformedHtml.trim()}\n\n${scriptBlock}`;
-      const outEl = document.getElementById("htmlConvertOutput");
-      if (outEl) outEl.value = output;
+      $("htmlConvertOutput").value = output;
       setMessage(
         "htmlConvertMessage",
         replacedCount > 0
@@ -1207,44 +1441,137 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
       setMessage("htmlConvertMessage", error.message || "Convert thất bại.", true);
     }
   });
+}
 
-  document.getElementById("loadReportBtn").addEventListener("click", async () => {
-    try {
-      const month = document.getElementById("reportMonthInput").value;
-      const data = await api(`/api/reports/monthly?month=${encodeURIComponent(month)}`);
-      renderReportTables(data);
-      setMessage("reportMessage", "Đã tải báo cáo tháng.");
-    } catch (error) {
-      setMessage("reportMessage", error.message, true);
-    }
-  });
-
-  document.getElementById("downloadCsvBtn").addEventListener("click", () => {
-    const month = document.getElementById("reportMonthInput").value;
-    if (!month) return;
-    window.open(`/api/reports/monthly?month=${encodeURIComponent(month)}&format=csv`, "_blank");
-  });
-
-  document.getElementById("attendanceCloseBtn")?.addEventListener("click", () => toggleModal("attendanceModal", false));
-  document.getElementById("attendanceYesBtn")?.addEventListener("click", () => submitAttendance("yes"));
-  document.getElementById("attendanceNoBtn")?.addEventListener("click", () => submitAttendance("no"));
-  document.getElementById("bookingImageCloseBtn")?.addEventListener("click", () => {
-    toggleModal("bookingImageModal", false);
-    const image = document.getElementById("bookingImagePreview");
-    if (image) image.removeAttribute("src");
-  });
-
-  document.getElementById("voteSessionList")?.addEventListener("click", async (event) => {
-    const button = event.target.closest("[data-action]");
+function bindMembers() {
+  $("refreshMembersBtn").addEventListener("click", loadAdminDashboard);
+  $("memberSearchInput").addEventListener("input", filterMemberRows);
+  $("openAddMemberBtn").addEventListener("click", () => openMemberModal(null));
+  $("memberModalCloseBtn").addEventListener("click", () => toggleModal("memberModal", false));
+  $("memberLevelTable").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-member-id]");
     if (!button) return;
-    const action = button.dataset.action;
-    const sessionId = String(button.dataset.session || "").trim();
-    if (action === "preview-booking" && sessionId) {
-      const session = state.voteSessions.find((item) => item.sessionId === sessionId);
-      if (session?.bookingImageUrl) openBookingImage(session.bookingImageUrl);
+    const memberId = String(button.dataset.memberId || "");
+    const member = state.members.find((item) => item.memberId === memberId);
+
+    if (button.classList.contains("edit-member-btn")) {
+      if (!member) {
+        setMessage("memberManageMessage", "Không tìm thấy thông tin member để chỉnh sửa.", true);
+        return;
+      }
+      openMemberModal(member);
       return;
     }
-    if (action === "cancel-vote" && sessionId) {
+
+    if (!button.classList.contains("delete-member-btn")) return;
+    const memberName = member?.name || memberId;
+    if (!window.confirm(`Xóa thành viên "${memberName}"? Thao tác này không hoàn tác.`)) return;
+    try {
+      await api(`/api/members/${encodeURIComponent(memberId)}`, { method: "DELETE" });
+      showToast(`Đã xóa member ${memberName}.`);
+      await loadAdminDashboard();
+    } catch (error) {
+      setMessage("memberManageMessage", error.message, true);
+    }
+  });
+  $("memberForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const memberId = $("memberModalIdInput").value.trim();
+    const payload = {
+      name: $("memberNameInput").value.trim(),
+      type: $("memberTypeInput").value,
+      gender: $("memberGenderInput").value,
+      birthday: $("memberBirthdayInput").value,
+      phoneNumber: $("memberPhoneInput").value.trim(),
+      level: Number($("memberLevelInput").value || 5),
+      active: $("memberActiveInput").checked
+    };
+    try {
+      if (!payload.name) {
+        setMessage("memberModalMessage", "Tên member không được để trống.", true);
+        return;
+      }
+      if (memberId) {
+        await api(`/api/members/${encodeURIComponent(memberId)}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload)
+        });
+        showToast(`Đã cập nhật member ${payload.name}.`);
+      } else {
+        await api("/api/members", {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        showToast(`Đã thêm member ${payload.name}.`);
+      }
+      toggleModal("memberModal", false);
+      await loadAdminDashboard();
+    } catch (error) {
+      setMessage("memberModalMessage", error.message, true);
+    }
+  });
+}
+
+function bindVotes() {
+  $("openCreateVoteBtn").addEventListener("click", () => {
+    const dateInput = $("preDateInput");
+    if (!dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+    toggleModal("createVoteModal", true);
+  });
+
+  $("resendSessionPushBtn").addEventListener("click", async () => {
+    const button = $("resendSessionPushBtn");
+    button.disabled = true;
+    try {
+      const data = await api("/api/sessions/notify", { method: "POST" });
+      const pushFailed = Boolean(data.push && (!data.push.configured || (!data.push.sent && data.push.failed)));
+      setMessage("preSessionMessage", data.message, pushFailed);
+    } catch (error) {
+      setMessage("preSessionMessage", error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $("preSessionForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const data = await api("/api/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          date: $("preDateInput").value,
+          time: $("preTimeInput").value,
+          location: $("preLocationInput").value.trim(),
+          note: $("preNoteInput").value.trim()
+        })
+      });
+      const pushFailed = Boolean(data.push && (!data.push.configured || (!data.push.sent && data.push.failed)));
+      toggleModal("createVoteModal", false);
+      setMessage("preSessionMessage", data.message || "Đã tạo buổi vote thành công.", pushFailed);
+      showToast("Đã tạo buổi vote");
+      await loadAdminDashboard();
+    } catch (error) {
+      setMessage("preSessionMessage", error.message, true);
+      toggleModal("createVoteModal", false);
+    }
+  });
+
+  $("guestNameInput").addEventListener("input", paintGuestHint);
+  $("guestForm").addEventListener("submit", submitGuest);
+
+  $("voteSessionList").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-action]");
+    if (!button || button.tagName === "INPUT") return;
+    const action = button.dataset.action;
+    const sessionId = String(button.dataset.session || "").trim();
+    if (!sessionId) return;
+    const session = state.voteSessions.find((item) => item.sessionId === sessionId);
+
+    if (action === "preview-booking") {
+      openBookingImage(session);
+      return;
+    }
+    if (action === "cancel-vote") {
       try {
         await cancelVoteSession(sessionId);
       } catch (error) {
@@ -1252,38 +1579,52 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
       }
       return;
     }
-    if (action === "toggle-member" && sessionId) {
+    if (action === "add-guest") {
+      openGuestModal(sessionId);
+      return;
+    }
+    if (action === "toggle-member" || action === "toggle-guest") {
       const status = button.dataset.status === "yes" ? "no" : "yes";
       button.disabled = true;
       try {
-        await api(`/api/sessions/${encodeURIComponent(sessionId)}/respond`, {
-          method: "POST",
-          body: JSON.stringify({ memberName: button.dataset.member, status })
-        });
-        const data = await api("/api/sessions/votes");
-        renderAdminVoteList(data.sessions || []);
+        if (action === "toggle-member") {
+          await api(`/api/sessions/${encodeURIComponent(sessionId)}/respond`, {
+            method: "POST",
+            body: JSON.stringify({ memberName: button.dataset.member, status })
+          });
+        } else {
+          await api(`/api/sessions/${encodeURIComponent(sessionId)}/guests`, {
+            method: "POST",
+            body: JSON.stringify({
+              guestName: button.dataset.member,
+              level: Number(button.dataset.level) || 5,
+              status
+            })
+          });
+        }
+        await refreshAdminVotes();
       } catch (error) {
         button.disabled = false;
         setMessage("voteListMessage", error.message, true);
       }
       return;
     }
-    if (action === "charge-vote" && sessionId) {
-      const session = state.voteSessions.find((item) => item.sessionId === sessionId);
-      if (!session) return;
+    if (action === "charge-vote" && session) {
+      const yes = (session.members || []).filter((member) => member.status === "yes");
       activateAdminTab("expenses");
       await window.BasicLedger.load().catch(() => {});
       window.BasicLedger.prefill({
         date: session.date,
         court: session.location,
-        memberIds: (session.members || []).filter((m) => m.status === "yes").map((m) => m.memberId),
+        memberIds: yes.filter((member) => !isGuest(member)).map((member) => member.memberId),
+        guestNames: yes.filter(isGuest).map((member) => member.name),
         voteSessionId: session.sessionId,
-        label: `${session.date} ${session.time || ""}`.trim()
+        label: `${dateBits(session.date).short} ${session.time || ""}`.trim()
       });
     }
   });
 
-  document.getElementById("voteSessionList")?.addEventListener("change", async (event) => {
+  $("voteSessionList").addEventListener("change", async (event) => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement) || input.type !== "file") return;
     if (input.dataset.action !== "book-vote") return;
@@ -1292,21 +1633,19 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
     input.value = "";
     if (!sessionId || !file) return;
     try {
-      setMessage("voteListMessage", "Đang upload ảnh đặt sân...");
       await bookVoteSession(sessionId, file);
     } catch (error) {
       setMessage("voteListMessage", error.message, true);
     }
   });
 
-  document.getElementById("userVoteList")?.addEventListener("click", async (event) => {
+  $("userVoteList").addEventListener("click", async (event) => {
     const button = event.target.closest("[data-action]");
     if (!button) return;
     const action = button.dataset.action;
     const sessionId = String(button.dataset.session || "").trim();
     if (action === "preview-booking" && sessionId) {
-      const session = state.voteSessions.find((item) => item.sessionId === sessionId);
-      if (session?.bookingImageUrl) openBookingImage(session.bookingImageUrl);
+      openBookingImage(state.voteSessions.find((item) => item.sessionId === sessionId));
       return;
     }
     if (action === "user-respond" && sessionId) {
@@ -1315,27 +1654,78 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
       button.disabled = false;
     }
   });
+}
 
-  document.getElementById("myDebtQrActions")?.addEventListener("click", async (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    if (target.id !== "openQrBtn") return;
-    const amount = Number(state.userBasicBalance || 0);
-    if (amount > 0) {
-      openQrModal(state.auth?.memberName || "", amount);
+function bindMatches() {
+  document.querySelectorAll(".stepper [data-step]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const input = $("roundCountInput");
+      const next = Math.min(10, Math.max(1, Number(input.value || 2) + Number(button.dataset.step)));
+      input.value = String(next);
+    })
+  );
+
+  $("generateMatchesBtn").addEventListener("click", async () => {
+    const sessionId = $("matchSessionSelect").value;
+    const roundCount = Number($("roundCountInput").value || 2);
+    if (!sessionId) {
+      setMessage("matchMessage", "Chưa có buổi chơi để xếp trận.", true);
+      return;
+    }
+    try {
+      const data = await api(`/api/sessions/${encodeURIComponent(sessionId)}/matches`, {
+        method: "POST",
+        body: JSON.stringify({ roundCount })
+      });
+      renderMatchTables(data.rounds || []);
+      setMessage("matchMessage", `Đã generate xếp trận cho ngày ${data.matchDate}.`);
+    } catch (error) {
+      renderMatchTables([]);
+      setMessage("matchMessage", error.message, true);
     }
   });
 
-  document.getElementById("qrCloseBtn")?.addEventListener("click", () => toggleModal("qrModal", false));
+  $("matchSessionSelect").addEventListener("change", async () => {
+    try {
+      const sessionId = $("matchSessionSelect").value;
+      const selectedSession = state.sessions.find((item) => item.sessionId === sessionId);
+      if (!selectedSession?.date) {
+        renderMatchTables([]);
+        return;
+      }
+      const matches = await loadMatchesForDate(selectedSession.date);
+      renderMatchTables(groupMatchesToRounds(matches));
+    } catch (error) {
+      renderMatchTables([]);
+      setMessage("matchMessage", error.message, true);
+    }
+  });
+}
 
-  document.getElementById("voteCloseBtn")?.addEventListener("click", () => toggleModal("voteModal", false));
-  document.getElementById("voteSkipBtn")?.addEventListener("click", () => toggleModal("voteModal", false));
-  document.getElementById("voteSubmitBtn")?.addEventListener("click", async () => {
+function bindUserModals() {
+  $("attendanceCloseBtn").addEventListener("click", () => toggleModal("attendanceModal", false));
+  $("attendanceYesBtn").addEventListener("click", () => submitAttendance("yes"));
+  $("attendanceNoBtn").addEventListener("click", () => submitAttendance("no"));
+  $("bookingImageCloseBtn").addEventListener("click", () => {
+    toggleModal("bookingImageModal", false);
+    $("bookingImagePreview").removeAttribute("src");
+  });
+
+  $("myDebtQrActions").addEventListener("click", (event) => {
+    if (!event.target.closest("#openQrBtn")) return;
+    const amount = Number(state.userBasicBalance || 0);
+    if (amount > 0) openQrModal(state.auth?.memberName || "", amount);
+  });
+
+  $("qrCloseBtn").addEventListener("click", () => toggleModal("qrModal", false));
+  $("voteCloseBtn").addEventListener("click", () => toggleModal("voteModal", false));
+  $("voteSkipBtn").addEventListener("click", () => toggleModal("voteModal", false));
+  $("voteSubmitBtn").addEventListener("click", async () => {
     if (!state.activeVote?.sessionId) {
       setMessage("voteMessage", "Không có vote đang mở.", true);
       return;
     }
-    const answer = document.getElementById("voteAnswerInput").value.trim();
+    const answer = $("voteAnswerInput").value.trim();
     if (!answer) {
       setMessage("voteMessage", "Bạn cần nhập câu trả lời trước khi gửi.", true);
       return;
@@ -1345,23 +1735,40 @@ document.getElementById("creditForm")?.addEventListener("submit", async (event) 
         method: "POST",
         body: JSON.stringify({ answer })
       });
-      setMessage("voteMessage", "Đã ghi nhận vote.");
-      setTimeout(() => toggleModal("voteModal", false), 500);
+      toggleModal("voteModal", false);
+      showToast("Đã ghi nhận vote.");
       await loadUserDashboard();
     } catch (error) {
       setMessage("voteMessage", error.message, true);
     }
   });
+}
+
+function bindEvents() {
+  bindChrome();
+  bindAuth();
+  bindTabs();
+  bindNotices();
+  bindCredits();
+  bindTools();
+  bindMembers();
+  bindVotes();
+  bindMatches();
+  bindUserModals();
+}
 
 async function init() {
+  window.UI.hydrate(document);
+  paintThemeButtons();
   bindEvents();
   window.BasicLedger.onChange(async (change) => {
-    if (state.auth?.role !== "admin" || change.type !== "saved") return;
+    if (state.auth?.role !== "admin") return;
+    if (change.message) showToast(change.message);
+    if (change.type !== "saved") return;
     activateAdminTab("ledger");
     const data = await api("/api/sessions/votes").catch(() => null);
     if (data) renderAdminVoteList(data.sessions || []);
   });
-  toggleLoginMode();
   try {
     await loadLoginOptions();
     await loadDashboard();

@@ -1,26 +1,78 @@
+/* Design tokens theo bản demo Figma (xanh sân cầu + vàng quả cầu). */
 :root {
-  --bg: #f4f4f2;
+  --green-950: #063921;
+  --green-900: #07512e;
+  --green-800: #0b693d;
+  --green-700: #12804b;
+  --green-600: #1d9b5b;
+  --green-100: #dcf5e7;
+  --green-50: #effaf4;
+  --green-ink: #12804b;
+  --yellow: #f4c74b;
+  --yellow-soft: #fff5cb;
+  --yellow-ink: #8b6300;
+  --orange: #ed8a36;
+  --red: #da3f4f;
+  --red-soft: #fff0f1;
+  --blue: #3478d4;
+  --blue-soft: #eef5ff;
+  --guest: #7c42b9;
+  --guest-soft: #f4eaff;
+  --guest-line: #cfaaf5;
+
+  --ink: #16221c;
+  --muted: #68756d;
+  --line: #e1e8e3;
   --surface: #ffffff;
-  --ink: #111111;
-  --muted: #5c5c5c;
-  --line: #e4e4e1;
-  --line-strong: #111111;
-  --paper: var(--bg);
-  --green: #111111;
-  --green-deep: #2a2a2a;
-  --clay: #9f1d1d;
-  --primary: #111111;
-  --primary-hover: #2a2a2a;
-  --primary-soft: #f4f4f2;
-  --danger: #9f1d1d;
-  --danger-soft: #f8ecec;
-  --success: #111111;
-  --focus: rgba(17, 17, 17, 0.16);
-  --border: var(--line);
-  --radius: 4px;
-  --shadow: none;
+  --surface-2: #f5f8f6;
+  --page: #edf3ef;
+  --shadow: 0 8px 30px #09331e14;
+  --shadow-sm: 0 3px 12px #09331e12;
+
+  --font-body: "Be Vietnam Pro", system-ui, sans-serif;
+  --font-display: var(--font-body);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --font-display: "Oswald", sans-serif;
-  --font-body: "Plus Jakarta Sans", sans-serif;
+
+  /* Alias cho các file CSS cũ (tournament.css, tournament-embed.css). */
+  --bg: var(--page);
+  --paper: var(--page);
+  --green: var(--green-700);
+  --green-deep: var(--green-800);
+  --clay: var(--red);
+  --primary: var(--green-700);
+  --primary-hover: var(--green-800);
+  --primary-soft: var(--green-50);
+  --danger: var(--red);
+  --danger-soft: var(--red-soft);
+  --success: var(--green-600);
+  --focus: #1d9b5b33;
+  --border: var(--line);
+  --line-strong: var(--ink);
+  --radius: 12px;
+
   color-scheme: light;
+}
+
+html.dark {
+  --green-ink: #5fd39a;
+  --green-50: #193524;
+  --green-100: #244b34;
+  --yellow-soft: #3d351a;
+  --yellow-ink: #f4d26c;
+  --red-soft: #3b2024;
+  --blue-soft: #162d48;
+  --guest: #d6afff;
+  --guest-soft: #362445;
+  --guest-line: #6b4a8c;
+
+  --ink: #eff8f2;
+  --muted: #a9b8ae;
+  --line: #2b3d32;
+  --surface: #13271b;
+  --surface-2: #1a3022;
+  --page: #09160f;
+  --shadow: 0 8px 30px #00000038;
+  --shadow-sm: 0 3px 12px #0003;
+
+  color-scheme: dark;
 }

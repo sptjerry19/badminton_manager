@@ -1,8 +1,9 @@
-// Sổ tiền sân dùng chung cho admin (nhập tiền + sổ nợ) và thành viên (xem sổ).
+// Sổ tiền sân dùng chung cho admin (nhập tiền + sổ nợ) và thành viên (xem sổ của mình).
 // Công nợ mỗi người = tổng phần chia (sân + cầu + phát sinh) − phần đã trả − tiền nạp trước.
 (function () {
   const ledger = {
     role: "",
+    memberName: "",
     members: [],
     sessions: [],
     credits: new Map(),
@@ -11,10 +12,15 @@
     voteSessionId: "",
     voteLabel: "",
     highlightId: "",
+    openSessionId: "",
+    personFilter: "due",
+    ledgerMode: "",
     entryRoot: null,
     ledgerRoot: null,
     onChange: null
   };
+
+  const { icon, avatar, hydrate } = window.UI;
 
   function esc(value) {
     return String(value ?? "")
@@ -33,10 +39,14 @@
     return digits ? Number(digits) : 0;
   }
 
-  function shortDate(iso) {
+  function dateParts(iso) {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
-    if (!match) return iso || "";
-    return `${Number(match[3])}/${Number(match[2])}`;
+    if (!match) return { day: "--", month: "", short: iso || "" };
+    return {
+      day: match[3],
+      month: String(Number(match[2])),
+      short: `${Number(match[3])}/${Number(match[2])}`
+    };
   }
 
   function localToday() {
@@ -74,50 +84,74 @@
 
   const q = (root, selector) => root?.querySelector(selector) || null;
 
+  const guestTag = '<span class="badge badge-guest">GL</span>';
+
   // ---------- Nhập tiền ----------
 
   function entryMarkup() {
     return `
-      <form class="bezel" data-ledger-form>
-        <div class="core stack">
-          <div class="screen-head">
-            <h2>Nhập tiền buổi chơi</h2>
-            <p>Tổng = tiền sân + tiền cầu + phát sinh, chia đều cho người được chọn.</p>
+      <form class="money-layout" data-ledger-form>
+        <section>
+          <div class="page-heading">
+            <div>
+              <span class="eyebrow">CHỐT CHI PHÍ BUỔI</span>
+              <h2>Nhập tiền sân</h2>
+              <p>Tổng = tiền sân + tiền cầu + phát sinh, chia đều cho người được chọn.</p>
+              <div class="vote-link" data-vote-link hidden>
+                <span class="badge badge-green" data-vote-label></span>
+                <button type="button" class="text-btn" data-vote-unlink>Bỏ liên kết</button>
+              </div>
+            </div>
           </div>
-          <div class="vote-link" data-vote-link hidden>
-            <span data-vote-label></span>
-            <button type="button" class="ghost" data-vote-unlink>Bỏ liên kết</button>
+          <div class="form-card">
+            <div class="form-grid">
+              <label class="field"><span>Ngày đánh</span><input name="date" type="date" required /></label>
+              <label class="field"><span>Tên sân</span><input name="court" type="text" placeholder="VD: Sân Lê Văn Thiêm" autocomplete="off" required /></label>
+              <label class="field"><span>Tiền sân</span><input name="courtFee" data-money inputmode="numeric" autocomplete="off" placeholder="0đ" /></label>
+              <label class="field"><span>Tiền cầu</span><input name="shuttleFee" data-money inputmode="numeric" autocomplete="off" placeholder="0đ" /></label>
+              <label class="field"><span>Phát sinh</span><input name="extraFee" data-money inputmode="numeric" autocomplete="off" placeholder="0đ" /></label>
+              <label class="field"><span>Nội dung phát sinh</span><input name="extraNote" type="text" maxlength="200" placeholder="Nước, thuê thêm giờ..." autocomplete="off" /></label>
+            </div>
           </div>
-          <div class="money-row">
-            <label class="field"><span>Ngày đánh</span><input name="date" type="date" required /></label>
-            <label class="field"><span>Sân</span><input name="court" type="text" placeholder="Lê Văn Thiêm" autocomplete="off" required /></label>
+          <div class="section-title">
+            <h2>Người tham gia</h2>
+            <span class="text-btn" data-selected-count>0 người đã chọn</span>
           </div>
-          <div class="money-row money-row-3">
-            <label class="field"><span>Tiền sân</span><input name="courtFee" data-money inputmode="numeric" autocomplete="off" placeholder="0" /></label>
-            <label class="field"><span>Tiền cầu</span><input name="shuttleFee" data-money inputmode="numeric" autocomplete="off" placeholder="0" /></label>
-            <label class="field"><span>Phát sinh</span><input name="extraFee" data-money inputmode="numeric" autocomplete="off" placeholder="0" /></label>
-          </div>
-          <label class="field" data-extra-note hidden>
-            <span>Nội dung phát sinh</span>
-            <input name="extraNote" type="text" maxlength="200" placeholder="Nước, thuê thêm giờ..." autocomplete="off" />
-          </label>
-          <div class="total-island" aria-live="polite"><span>Tổng tiền</span><strong data-total>0đ</strong></div>
-          <div class="stack">
-            <label class="field">
-              <span>Người tham gia</span>
-              <input data-filter type="search" placeholder="Tìm trong danh sách thành viên" autocomplete="off" />
+          <div class="participant-card">
+            <label class="search-box">
+              ${icon("search")}
+              <input data-filter type="search" placeholder="Tìm thành viên..." autocomplete="off" />
             </label>
-            <div class="chips" data-members></div>
+            <div class="member-chips" data-members></div>
             <div class="guest-add">
               <input data-guest-input type="text" maxlength="60" placeholder="Tên người giao lưu" autocomplete="off" />
-              <button type="button" class="ghost" data-guest-add>Thêm</button>
+              <button type="button" class="btn btn-secondary btn-sm" data-guest-add>${icon("plus", 16)}Thêm giao lưu</button>
             </div>
-            <div class="chips" data-guests></div>
+            <div class="member-chips" data-guests style="margin-top:10px"></div>
           </div>
-          <ul class="preview" data-preview hidden></ul>
-          <button class="pill" type="submit">Lưu buổi</button>
-          <p class="note" data-form-note hidden></p>
-        </div>
+        </section>
+        <aside class="bill-preview">
+          <span class="eyebrow">XEM TRƯỚC</span>
+          <h3>Chia tiền buổi chơi</h3>
+          <div class="bill-total" aria-live="polite">
+            <small>TỔNG CHI</small>
+            <strong data-total>0đ</strong>
+          </div>
+          <div class="bill-lines">
+            <p><span>Tiền sân</span><b data-line="courtFee">0đ</b></p>
+            <p><span>Tiền cầu</span><b data-line="shuttleFee">0đ</b></p>
+            <p><span>Phát sinh</span><b data-line="extraFee">0đ</b></p>
+          </div>
+          <div class="split-result">
+            <span>${icon("users")}<b data-count>0 người</b></span>
+            <span>mỗi người trả</span>
+            <strong data-each>0đ</strong>
+          </div>
+          <ul class="split-list" data-preview hidden></ul>
+          <button class="btn btn-primary full-btn" type="submit">${icon("check")}Lưu buổi &amp; tạo công nợ</button>
+          <p class="form-note" data-form-note hidden></p>
+          <p class="safe-note">Có thể đánh dấu thanh toán hoặc xóa buổi ở Sổ nợ.</p>
+        </aside>
       </form>
     `;
   }
@@ -147,9 +181,17 @@
   function paintTotal() {
     const root = ledger.entryRoot;
     if (!root) return;
+    const parts = fees();
     q(root, "[data-total]").textContent = money(totalFee());
-    q(root, "[data-extra-note]").hidden = fees().extraFee <= 0;
+    Object.entries(parts).forEach(([key, value]) => {
+      q(root, `[data-line="${key}"]`).textContent = money(value);
+    });
     paintPreview();
+  }
+
+  function memberChip(member) {
+    const on = ledger.selected.has(member.memberId);
+    return `<button type="button" class="member-chip${on ? " selected" : ""}" data-member="${esc(member.memberId)}">${avatar(member.name, "sm")}${esc(member.name)}${on ? icon("check", 14) : ""}</button>`;
   }
 
   function paintMembers() {
@@ -158,13 +200,8 @@
     const filter = q(root, "[data-filter]").value.trim().toLowerCase();
     const visible = ledger.members.filter((member) => member.name.toLowerCase().includes(filter));
     q(root, "[data-members]").innerHTML = visible.length
-      ? visible
-          .map(
-            (member) =>
-              `<button type="button" class="chip${ledger.selected.has(member.memberId) ? " is-on" : ""}" data-member="${esc(member.memberId)}">${esc(member.name)}</button>`
-          )
-          .join("")
-      : `<p class="empty">Không có thành viên khớp.</p>`;
+      ? visible.map(memberChip).join("")
+      : `<p class="hint-line">Không có thành viên khớp.</p>`;
     paintPreview();
   }
 
@@ -174,27 +211,31 @@
     q(root, "[data-guests]").innerHTML = ledger.guests
       .map(
         (name) =>
-          `<button type="button" class="chip is-guest" data-guest="${esc(name)}">${esc(name)} <span class="tag">Giao lưu</span></button>`
+          `<button type="button" class="member-chip guest selected" data-guest="${esc(name)}" title="Bấm để bỏ">${avatar(name, "sm")}${esc(name)} ${guestTag}${icon("close", 14)}</button>`
       )
       .join("");
   }
 
   function paintPreview() {
-    const node = q(ledger.entryRoot, "[data-preview]");
+    const root = ledger.entryRoot;
+    const node = q(root, "[data-preview]");
     if (!node) return;
     const people = participants();
     const total = totalFee();
+    const shares = equalShares(total, people.length);
+    q(root, "[data-count]").textContent = `${people.length} người`;
+    q(root, "[data-selected-count]").textContent = `${people.length} người đã chọn`;
+    q(root, "[data-each]").textContent = people.length && total > 0 ? money(Math.max(...shares)) : "0đ";
     if (!people.length || total <= 0) {
       node.hidden = true;
       node.innerHTML = "";
       return;
     }
-    const shares = equalShares(total, people.length);
     node.hidden = false;
     node.innerHTML = people
       .map(
         (person, index) =>
-          `<li><span>${esc(person.name)}${person.guest ? '<span class="tag">Giao lưu</span>' : ""}</span><b>${money(shares[index])}</b></li>`
+          `<li><span>${esc(person.name)} ${person.guest ? guestTag : ""}</span><b>${money(shares[index])}</b></li>`
       )
       .join("");
   }
@@ -203,7 +244,7 @@
     const root = ledger.entryRoot;
     if (!root) return;
     q(root, "[data-vote-link]").hidden = !ledger.voteSessionId;
-    q(root, "[data-vote-label]").textContent = ledger.voteSessionId ? `Tính tiền cho vote ${ledger.voteLabel}` : "";
+    q(root, "[data-vote-label]").textContent = ledger.voteSessionId ? `Liên kết vote ${ledger.voteLabel}` : "";
   }
 
   function resetEntry() {
@@ -221,23 +262,28 @@
     paintTotal();
   }
 
+  // Trả về true nếu đã thêm (hoặc đã chọn sẵn thành viên trùng tên).
+  function addGuestName(rawName) {
+    const name = String(rawName || "").trim().replace(/\s+/g, " ");
+    if (!name) return false;
+    const existing = ledger.members.find((member) => member.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      ledger.selected.add(existing.memberId);
+      return `${existing.name} đã có trong danh sách thành viên, nên đã chọn sẵn.`;
+    }
+    if (!ledger.guests.some((guest) => guest.toLowerCase() === name.toLowerCase())) ledger.guests.push(name);
+    return "";
+  }
+
   function addGuest() {
     const root = ledger.entryRoot;
     const input = q(root, "[data-guest-input]");
     const note = q(root, "[data-form-note]");
-    const name = input.value.trim().replace(/\s+/g, " ");
-    if (!name) return;
+    if (!input.value.trim()) return;
+    const message = addGuestName(input.value);
     input.value = "";
-    const existing = ledger.members.find((member) => member.name.toLowerCase() === name.toLowerCase());
-    if (existing) {
-      ledger.selected.add(existing.memberId);
-      setNote(note, `${existing.name} đã có trong danh sách thành viên, nên đã chọn sẵn.`);
-      paintMembers();
-      return;
-    }
-    if (ledger.guests.some((guest) => guest.toLowerCase() === name.toLowerCase())) return;
-    ledger.guests.push(name);
-    setNote(note, "");
+    setNote(note, message || "");
+    paintMembers();
     paintGuests();
     paintPreview();
   }
@@ -305,10 +351,11 @@
           }
         });
         ledger.highlightId = data.session?.id || "";
+        ledger.openSessionId = ledger.highlightId;
         resetEntry();
         setNote(note, data.message || "Đã lưu buổi.", Boolean(data.push && !data.push.sent && data.push.failed));
         await load();
-        ledger.onChange?.({ type: "saved", session: data.session });
+        ledger.onChange?.({ type: "saved", session: data.session, message: data.message || "Đã lưu buổi và tạo công nợ" });
       } catch (error) {
         setNote(note, error.message, true);
       } finally {
@@ -319,30 +366,74 @@
 
   // ---------- Sổ nợ ----------
 
-  function ledgerMarkup() {
+  function adminLedgerMarkup() {
     return `
-      <div class="summary bezel">
-        <div class="core summary-core">
-          <p class="eyebrow">Còn phải thu</p>
-          <strong data-unpaid>0đ</strong>
-          <p data-unpaid-meta>Chưa có buổi nào.</p>
-        </div>
-      </div>
-      <p class="note" data-viewer-note hidden>Bạn đang xem sổ. Chỉ admin nhập buổi và đánh dấu thanh toán.</p>
-      <section class="totals bezel" data-totals hidden>
-        <div class="core">
-          <p class="eyebrow">Tổng kết</p>
-          <h2>Công nợ từng người</h2>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Thành viên</th><th>Còn nợ</th><th></th></tr></thead>
-              <tbody data-totals-body></tbody>
-            </table>
+      <div class="debt-layout">
+        <div class="page-heading">
+          <div>
+            <span class="eyebrow">DÒNG TIỀN NHÓM</span>
+            <h2>Sổ nợ</h2>
+            <p>Theo dõi công nợ theo người và từng buổi chơi.</p>
           </div>
         </div>
-      </section>
-      <div class="ledger" data-sessions></div>
+        <div class="kpi-grid">
+          <div class="kpi danger">
+            <span>${icon("users")}</span>
+            <small>NGƯỜI CÒN NỢ</small>
+            <strong data-kpi-debtors>0</strong>
+            <em data-kpi-debtors-meta></em>
+          </div>
+          <div class="kpi danger">
+            <span>${icon("wallet")}</span>
+            <small>TỔNG CÒN NỢ</small>
+            <strong data-unpaid>0đ</strong>
+            <em data-unpaid-meta>Chưa có buổi nào.</em>
+          </div>
+          <div class="kpi success">
+            <span>${icon("check")}</span>
+            <small>ĐÃ THU THÁNG NÀY</small>
+            <strong data-kpi-paid>0đ</strong>
+            <em data-kpi-paid-meta></em>
+          </div>
+          <div class="kpi warning">
+            <span>${icon("clock")}</span>
+            <small>TIỀN DƯ</small>
+            <strong data-kpi-credit>0đ</strong>
+            <em data-kpi-credit-meta></em>
+          </div>
+        </div>
+        <p class="form-note is-error" data-ledger-error hidden></p>
+        <div class="debt-columns">
+          <section class="debt-table">
+            <div class="card-head">
+              <div>
+                <h3>Công nợ theo người</h3>
+                <p>Cập nhật ngay khi đánh dấu thanh toán</p>
+              </div>
+              <div class="filter-chips small" data-person-filter>
+                <button type="button" data-filter-value="due">Còn nợ</button>
+                <button type="button" data-filter-value="all">Tất cả</button>
+              </div>
+            </div>
+            <div class="debt-table-head"><span>THÀNH VIÊN</span><span>SỐ DƯ</span><span>TRẠNG THÁI</span><span></span></div>
+            <div data-totals-body></div>
+          </section>
+          <section class="session-debts">
+            <div class="card-head">
+              <div>
+                <h3>Theo buổi chơi</h3>
+                <p data-session-meta></p>
+              </div>
+            </div>
+            <div data-sessions></div>
+          </section>
+        </div>
+      </div>
     `;
+  }
+
+  function personalLedgerMarkup() {
+    return `<div class="ledger-list" data-personal></div><p class="form-note is-error" data-ledger-error hidden></p>`;
   }
 
   function personKey(share) {
@@ -377,111 +468,204 @@
 
   function shareStatusHtml(share) {
     const label = share.paid ? "Đã thanh toán" : "Chưa thanh toán";
-    const tone = share.paid ? "is-paid" : "is-due";
+    const tone = share.paid ? "badge-green" : "badge-red";
     if (ledger.role !== "admin") return `<span class="badge ${tone}">${label}</span>`;
-    return `<button type="button" class="status ${tone}" data-share="${esc(share.id)}" data-paid="${share.paid ? "true" : "false"}">${label}</button>`;
+    return `<button type="button" class="badge ${tone}" data-share="${esc(share.id)}" data-paid="${share.paid ? "true" : "false"}" title="Bấm để đổi trạng thái">${label}</button>`;
   }
 
-  function paintSummary(people) {
+  function paintKpis(people) {
     const root = ledger.ledgerRoot;
     const owed = people.reduce((sum, person) => sum + Math.max(0, person.balance), 0);
     const debtors = people.filter((person) => person.balance > 0).length;
+    q(root, "[data-kpi-debtors]").textContent = String(debtors);
+    q(root, "[data-kpi-debtors-meta]").textContent = `trên ${people.length} người trong sổ`;
     q(root, "[data-unpaid]").textContent = money(owed);
     q(root, "[data-unpaid-meta]").textContent = !ledger.sessions.length
       ? "Chưa có buổi nào."
       : debtors
         ? `${debtors} người còn nợ`
         : "Đã thu đủ.";
+
+    const monthKey = localToday().slice(0, 7);
+    let paidMonth = 0;
+    let paidCount = 0;
+    ledger.sessions
+      .filter((session) => String(session.date || "").startsWith(monthKey))
+      .forEach((session) => {
+        (session.shares || []).forEach((share) => {
+          if (!share.paid) return;
+          paidMonth += Number(share.shareAmount) || 0;
+          paidCount += 1;
+        });
+      });
+    q(root, "[data-kpi-paid]").textContent = money(paidMonth);
+    q(root, "[data-kpi-paid-meta]").textContent = `${paidCount} phần đã trả trong tháng`;
+
+    const credits = [...ledger.credits.values()].filter((value) => value > 0);
+    q(root, "[data-kpi-credit]").textContent = money(credits.reduce((sum, value) => sum + value, 0));
+    q(root, "[data-kpi-credit-meta]").textContent = `của ${credits.length} thành viên`;
   }
 
   function paintTotals(people) {
     const root = ledger.ledgerRoot;
-    const box = q(root, "[data-totals]");
     const body = q(root, "[data-totals-body]");
-    box.hidden = !people.length;
-    body.innerHTML = people
+    root.querySelectorAll("[data-filter-value]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.filterValue === ledger.personFilter);
+    });
+    const list = ledger.personFilter === "due" ? people.filter((person) => person.unpaidCount > 0) : people;
+    if (!list.length) {
+      body.innerHTML = `<div class="empty-card" style="border:0;border-radius:0">${
+        people.length ? "Không còn ai nợ. Tuyệt vời!" : "Chưa có buổi nào trong sổ."
+      }</div>`;
+      return;
+    }
+    body.innerHTML = list
       .map((person) => {
-        const breakdown = person.credit
-          ? `<small class="muted">Chưa trả ${money(person.unpaid)} − nạp trước ${money(person.credit)}</small>`
-          : "";
+        const detail = person.credit
+          ? `Chưa trả ${money(person.unpaid)} − nạp trước ${money(person.credit)}`
+          : person.unpaidCount
+            ? `${person.unpaidCount} buổi chưa thanh toán`
+            : "Đã thanh toán hết";
         const amount = person.balance < 0 ? `Dư ${money(-person.balance)}` : money(person.balance);
-        let action = `<span class="badge is-paid">Đã thanh toán</span>`;
-        if (person.unpaidCount) {
-          action =
-            ledger.role === "admin"
-              ? `<button type="button" class="status is-due" data-settle-id="${esc(person.memberId)}" data-settle-name="${esc(person.memberName)}">Đã hoàn thành</button>`
-              : `<span class="badge is-due">${person.unpaidCount} buổi chưa trả</span>`;
-        }
+        const tone = person.balance > 0 ? "negative" : "positive";
+        const badge =
+          person.balance > 0
+            ? '<span class="badge badge-red">Còn nợ</span>'
+            : person.balance < 0
+              ? '<span class="badge badge-blue">Dư tiền</span>'
+              : '<span class="badge badge-green">Đã thu đủ</span>';
+        const action =
+          person.unpaidCount && ledger.role === "admin"
+            ? `<button type="button" class="btn btn-secondary btn-sm" data-settle-id="${esc(person.memberId)}" data-settle-name="${esc(person.memberName)}">${icon("check", 16)}<span>Đã hoàn thành</span></button>`
+            : "<span></span>";
         return `
-          <tr>
-            <td><b>${esc(person.memberName)}</b>${person.memberId ? "" : '<span class="tag">Giao lưu</span>'}</td>
-            <td><div class="who">${amount}${breakdown}</div></td>
-            <td>${action}</td>
-          </tr>
+          <div class="debt-row">
+            <div>${avatar(person.memberName)}<span><b>${esc(person.memberName)} ${person.memberId ? "" : guestTag}</b><small>${esc(detail)}</small></span></div>
+            <strong class="${tone}">${amount}</strong>
+            ${badge}
+            ${action}
+          </div>
         `;
       })
       .join("");
+  }
+
+  function sessionCard(session) {
+    const shares = session.shares || [];
+    const parts = dateParts(session.date);
+    const unpaid = shares.filter((share) => !share.paid).length;
+    const isOpen = session.id === ledger.openSessionId;
+    const badge = unpaid
+      ? `<span class="badge badge-red">Còn ${unpaid} nợ</span>`
+      : '<span class="badge badge-green">Đã thu đủ</span>';
+    const extra = session.extraFee
+      ? `<span>Phát sinh <b>${money(session.extraFee)}</b>${session.extraNote ? ` (${esc(session.extraNote)})` : ""}</span>`
+      : "";
+    const rows = shares
+      .map(
+        (share) => `
+          <p>
+            <span>${avatar(share.memberName, "sm")}${esc(share.memberName)} ${share.memberId ? "" : guestTag}</span>
+            <b>${money(share.shareAmount)}</b>
+            ${shareStatusHtml(share)}
+          </p>
+        `
+      )
+      .join("");
+    const tools =
+      ledger.role === "admin"
+        ? `<div class="session-tools"><button type="button" class="btn btn-danger btn-sm" data-delete="${esc(session.id)}">${icon("trash", 16)}<span>Xóa buổi</span></button></div>`
+        : "";
+    return `
+      <article class="${isOpen ? "open" : ""}${session.id === ledger.highlightId ? " is-fresh" : ""}" data-session="${esc(session.id)}">
+        <button type="button" class="session-toggle" aria-expanded="${isOpen ? "true" : "false"}">
+          <span class="date-box"><b>${esc(parts.day)}</b><small>THG ${esc(parts.month)}</small></span>
+          <span><b>${esc(session.court)}</b><small>${shares.length} người · Sân ${money(session.courtFee)} · Cầu ${money(session.shuttleFee)}</small></span>
+          <strong>${money(session.totalFee)}</strong>
+          ${badge}
+          ${icon("chevron", 18)}
+        </button>
+        <div class="session-splits">
+          <div class="session-fees">
+            <span>Tiền sân <b>${money(session.courtFee)}</b></span>
+            <span>Tiền cầu <b>${money(session.shuttleFee)}</b></span>
+            ${extra}
+          </div>
+          ${rows}
+          ${tools}
+        </div>
+      </article>
+    `;
   }
 
   function paintSessions() {
     const root = ledger.ledgerRoot;
     const list = q(root, "[data-sessions]");
+    const monthKey = localToday().slice(0, 7);
+    const inMonth = ledger.sessions.filter((session) => String(session.date || "").startsWith(monthKey)).length;
+    q(root, "[data-session-meta]").textContent = `${ledger.sessions.length} buổi · ${inMonth} buổi trong tháng này`;
     if (!ledger.sessions.length) {
-      list.innerHTML = `<p class="empty">Khi admin lưu một buổi, sổ sẽ hiện theo ngày, sân và từng người.</p>`;
+      list.innerHTML = `<div class="empty-card" style="border:0;border-radius:0">Khi admin lưu một buổi, sổ sẽ hiện theo ngày, sân và từng người.</div>`;
       return;
     }
-    list.innerHTML = ledger.sessions
-      .map((session) => {
-        const shares = session.shares || [];
-        const extra = session.extraFee
-          ? `<span>Phát sinh <b>${money(session.extraFee)}</b>${session.extraNote ? ` (${esc(session.extraNote)})` : ""}</span>`
-          : "";
-        const rows = shares
-          .map(
-            (share) => `
-              <div class="share" data-share-row="${esc(share.id)}">
-                <div class="who">
-                  <b>${esc(share.memberName)}${share.memberId ? "" : '<span class="tag">Giao lưu</span>'}</b>
-                  <small>${esc(shortDate(session.date))} · ${money(share.shareAmount)}</small>
-                </div>
-                ${shareStatusHtml(share)}
-              </div>
-            `
-          )
-          .join("");
-        const tools =
-          ledger.role === "admin"
-            ? `<div class="session-tools"><button type="button" class="danger" data-delete="${esc(session.id)}">Xóa buổi</button></div>`
-            : "";
+    list.innerHTML = ledger.sessions.map(sessionCard).join("");
+  }
+
+  function myShares() {
+    const nameCi = String(ledger.memberName || "").trim().toLowerCase();
+    const rows = [];
+    ledger.sessions.forEach((session) => {
+      (session.shares || []).forEach((share) => {
+        if (String(share.memberName || "").trim().toLowerCase() === nameCi) rows.push({ session, share });
+      });
+    });
+    return rows;
+  }
+
+  function paintPersonal() {
+    const root = ledger.ledgerRoot;
+    const node = q(root, "[data-personal]");
+    const rows = myShares();
+    if (!rows.length) {
+      node.outerHTML = `<div class="empty-card" data-personal>Chưa có buổi nào trong sổ của bạn.</div>`;
+      return;
+    }
+    node.outerHTML = `<div class="ledger-list" data-personal>${rows
+      .map(({ session, share }) => {
+        const parts = dateParts(session.date);
+        const extra = session.extraFee ? ` · PS ${money(session.extraFee)}` : "";
         return `
-          <article class="session bezel${session.id === ledger.highlightId ? " is-fresh" : ""}" data-session="${esc(session.id)}">
-            <div class="core">
-              <button type="button" class="session-toggle" aria-expanded="false">
-                <span class="session-summary">
-                  <span class="eyebrow">Ngày ${esc(shortDate(session.date))}</span>
-                  <span class="session-title">${esc(session.court)}</span>
-                  <span class="meta">
-                    <span>Tiền sân <b>${money(session.courtFee)}</b></span>
-                    <span>Tiền cầu <b>${money(session.shuttleFee)}</b></span>
-                    ${extra}
-                    <span>Tổng <b>${money(session.totalFee)}</b></span>
-                  </span>
-                </span>
-                <span class="session-chevron" aria-hidden="true"></span>
-              </button>
-              <div class="session-detail"><div class="session-detail-inner"><div class="shares">${rows}</div>${tools}</div></div>
+          <div class="ledger-item">
+            <div class="date-tile"><b>${esc(parts.day)}</b><span>TH ${esc(parts.month)}</span></div>
+            <div class="ledger-main">
+              <b>${esc(session.court)}</b>
+              <small>Sân ${money(session.courtFee)} · Cầu ${money(session.shuttleFee)}${extra} · ${(session.shares || []).length} người</small>
             </div>
-          </article>
+            <div class="ledger-price">
+              <b>${money(share.shareAmount)}</b>
+              ${shareStatusHtml(share)}
+            </div>
+          </div>
         `;
       })
-      .join("");
+      .join("")}</div>`;
   }
 
   function paintLedger() {
-    if (!ledger.ledgerRoot) return;
+    const root = ledger.ledgerRoot;
+    if (!root) return;
+    const mode = ledger.role === "admin" ? "admin" : ledger.role ? "personal" : "";
+    if (!mode) return;
+    if (ledger.ledgerMode !== mode) {
+      root.innerHTML = mode === "admin" ? adminLedgerMarkup() : personalLedgerMarkup();
+      ledger.ledgerMode = mode;
+    }
+    if (mode === "personal") {
+      paintPersonal();
+      return;
+    }
     const people = personGroups();
-    q(ledger.ledgerRoot, "[data-viewer-note]").hidden = ledger.role === "admin";
-    paintSummary(people);
+    paintKpis(people);
     paintTotals(people);
     paintSessions();
   }
@@ -492,23 +676,35 @@
     ledger.ledgerRoot.querySelectorAll(selector).forEach((item) => {
       item.dataset.armed = "false";
       item.classList.remove("is-armed");
-      item.textContent = idleLabel;
+      const label = item.querySelector("span");
+      if (label) label.textContent = idleLabel;
     });
     button.dataset.armed = "true";
     button.classList.add("is-armed");
-    button.textContent = armedLabel;
+    const label = button.querySelector("span");
+    if (label) label.textContent = armedLabel;
     return false;
   }
 
   function bindLedger(root) {
     root.addEventListener("click", async (event) => {
-      const meta = q(root, "[data-unpaid-meta]");
+      const errorNode = q(root, "[data-ledger-error]");
       const toggle = event.target.closest(".session-toggle");
       if (toggle) {
-        const open = toggle.closest(".session").classList.toggle("is-open");
+        const article = toggle.closest("article");
+        const open = article.classList.toggle("open");
         toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        ledger.openSessionId = open ? article.dataset.session : "";
         return;
       }
+
+      const filter = event.target.closest("[data-filter-value]");
+      if (filter) {
+        ledger.personFilter = filter.dataset.filterValue;
+        paintTotals(personGroups());
+        return;
+      }
+
       if (ledger.role !== "admin") return;
 
       const status = event.target.closest("[data-share]");
@@ -527,14 +723,14 @@
           ledger.onChange?.({ type: "paid" });
         } catch (error) {
           status.disabled = false;
-          meta.textContent = error.message;
+          setNote(errorNode, error.message, true);
         }
         return;
       }
 
       const settle = event.target.closest("[data-settle-name]");
       if (settle) {
-        if (!armOnce(settle, "[data-settle-name]", "Đã hoàn thành", "Xác nhận")) return;
+        if (!armOnce(settle, "[data-settle-name]", "Đã hoàn thành", "Bấm lần nữa để xác nhận")) return;
         settle.disabled = true;
         try {
           await api("/api/basic/people/paid", {
@@ -542,25 +738,25 @@
             body: { memberId: settle.dataset.settleId || "", memberName: settle.dataset.settleName || "" }
           });
           await load();
-          ledger.onChange?.({ type: "settled" });
+          ledger.onChange?.({ type: "settled", message: `Đã tất toán cho ${settle.dataset.settleName}` });
         } catch (error) {
           settle.disabled = false;
-          meta.textContent = error.message;
+          setNote(errorNode, error.message, true);
         }
         return;
       }
 
       const remove = event.target.closest("[data-delete]");
       if (remove) {
-        if (!armOnce(remove, "[data-delete]", "Xóa buổi", "Xác nhận xóa")) return;
+        if (!armOnce(remove, "[data-delete]", "Xóa buổi", "Bấm lần nữa để xóa")) return;
         remove.disabled = true;
         try {
           await api(`/api/basic/sessions/${remove.dataset.delete}`, { method: "DELETE" });
           await load();
-          ledger.onChange?.({ type: "deleted" });
+          ledger.onChange?.({ type: "deleted", message: "Đã xóa buổi" });
         } catch (error) {
           remove.disabled = false;
-          meta.textContent = error.message;
+          setNote(errorNode, error.message, true);
         }
       }
     });
@@ -571,6 +767,7 @@
   async function load() {
     const data = await api("/api/basic");
     ledger.role = data.role || "";
+    ledger.memberName = data.memberName || "";
     ledger.members = Array.isArray(data.members) ? data.members : [];
     ledger.sessions = Array.isArray(data.sessions) ? data.sessions : [];
     ledger.credits = new Map((data.credits || []).map((item) => [item.memberId, Number(item.balance) || 0]));
@@ -583,6 +780,7 @@
     if (!root || ledger.entryRoot === root) return;
     ledger.entryRoot = root;
     root.innerHTML = entryMarkup();
+    hydrate(root);
     bindEntry(root);
     resetEntry();
   }
@@ -590,13 +788,14 @@
   function mountLedger(root) {
     if (!root || ledger.ledgerRoot === root) return;
     ledger.ledgerRoot = root;
-    root.innerHTML = ledgerMarkup();
+    ledger.ledgerMode = "";
+    root.innerHTML = "";
     bindLedger(root);
     paintLedger();
   }
 
   // Điền sẵn form nhập tiền từ một buổi vote đã chốt.
-  function prefill({ date, court, memberIds, voteSessionId, label }) {
+  function prefill({ date, court, memberIds, guestNames, voteSessionId, label }) {
     const form = q(ledger.entryRoot, "[data-ledger-form]");
     if (!form) return;
     resetEntry();
@@ -604,10 +803,13 @@
     if (court) form.court.value = court;
     const known = new Set(ledger.members.map((member) => member.memberId));
     (memberIds || []).forEach((id) => known.has(id) && ledger.selected.add(id));
+    (guestNames || []).forEach((name) => addGuestName(name));
     ledger.voteSessionId = voteSessionId || "";
     ledger.voteLabel = label || "";
     paintVoteLink();
     paintMembers();
+    paintGuests();
+    paintPreview();
     form.courtFee.focus();
   }
 

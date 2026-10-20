@@ -2,910 +2,803 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Quản lý nhóm cầu lông</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Nhóm Cầu Lông</title>
     <link rel="icon" href="/favicon.ico?v=3" sizes="32x32" />
-    <link
-      rel="icon"
-      href="/favicon-32.png?v=3"
-      type="image/png"
-      sizes="32x32"
-    />
+    <link rel="icon" href="/favicon-32.png?v=3" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3" />
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#111111" />
+    <meta name="theme-color" content="#12804b" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Cầu lông" />
+    <script>
+      // Áp theme trước khi vẽ để không nháy màu.
+      (function () {
+        try {
+          var saved = localStorage.getItem("theme");
+          var dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (_e) {}
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/tokens.css" />
     <link rel="stylesheet" href="/ui.css" />
     <link rel="stylesheet" href="/tournament-embed.css" />
   </head>
   <body class="app-shell">
-    <div class="shell">
-      <header class="topbar">
-        <div>
-          <p class="caption">Nhóm cầu lông</p>
-          <h1 class="page-title">Quản lý lịch và phí</h1>
+    <!-- ============ ĐĂNG NHẬP ============ -->
+    <main id="loginSection" class="login-page">
+      <div class="login-visual">
+        <div class="login-brand">
+          <span class="brand-mark large">N</span>
+          <span>NHÓM CẦU LÔNG</span>
         </div>
-      </header>
+        <div class="login-copy">
+          <span class="badge badge-yellow">PWA · QUẢN LÝ NHÓM</span>
+          <h1>Ra sân vui hơn.<br />Quản lý nhẹ hơn.</h1>
+          <p>Lịch chơi, chia tiền và giải đấu — gói gọn cho nhóm cầu của bạn.</p>
+          <div class="login-stats">
+            <span><b>Vote</b> lịch chơi</span>
+            <span><b>Chia</b> tiền sân</span>
+            <span><b>Giải</b> nội bộ</span>
+          </div>
+        </div>
+        <small>Ảnh: Sergei Wing · Unsplash</small>
+      </div>
 
-      <section id="loginSection" class="login-card mx-auto max-w-md">
-        <p class="login-eyebrow">Nhóm cầu lông</p>
-        <h2 class="login-title">Đăng nhập</h2>
-        <p class="login-lead">
-          Đăng nhập thành viên, đăng ký mới, hoặc vào bằng mật khẩu admin.
-        </p>
-        <div
-          class="login-segment"
-          id="authModeSegment"
-          role="tablist"
-          aria-label="Cách đăng nhập"
-        >
+      <div class="login-panel">
+        <button type="button" class="icon-btn" data-theme-toggle aria-label="Đổi giao diện"><i data-icon="moon"></i></button>
+        <div class="mobile-logo">
+          <span class="brand-mark">N</span>
+          <div>
+            <b>Nhóm Cầu Lông</b>
+            <small>Quản lý lịch và phí</small>
+          </div>
+        </div>
+
+        <div class="login-form">
+          <span class="eyebrow">CHÀO MỪNG BẠN</span>
+          <h2 id="loginTitle">Trở lại sân cầu</h2>
+          <p id="loginLead">Chọn tài khoản và xác nhận số điện thoại.</p>
+          <div class="segmented login-segment" id="authModeSegment" role="tablist" aria-label="Cách đăng nhập">
+            <button type="button" class="login-segment-btn is-on" data-mode="login">Đăng nhập</button>
+            <button type="button" class="login-segment-btn" data-mode="register">Đăng ký</button>
+            <button type="button" class="login-segment-btn" data-mode="admin">Admin</button>
+          </div>
+          <form id="loginForm" class="login-stack">
+            <div id="loginFields" class="login-stack">
+              <label class="field">
+                <span>Thành viên</span>
+                <select id="memberSelectInput" required></select>
+              </label>
+              <label class="field">
+                <span>Số điện thoại</span>
+                <input
+                  id="phoneInput"
+                  name="phone"
+                  type="tel"
+                  inputmode="numeric"
+                  autocomplete="tel-national"
+                  placeholder="09xx xxx xxx"
+                  required
+                />
+              </label>
+            </div>
+            <div id="registerFields" class="login-stack" hidden>
+              <label class="field">
+                <span>Họ và tên</span>
+                <input id="registerName" name="name" autocomplete="name" placeholder="Tên đầy đủ của bạn" />
+              </label>
+              <!-- Chrome hay autofill email vào field thứ 2 của form đăng ký; decoy nhận email đó. -->
+              <input
+                type="email"
+                name="email"
+                autocomplete="email"
+                tabindex="-1"
+                aria-hidden="true"
+                class="login-autofill-decoy"
+              />
+              <label class="field">
+                <span>Số điện thoại</span>
+                <input
+                  id="registerPhone"
+                  name="phone"
+                  type="tel"
+                  inputmode="numeric"
+                  autocomplete="tel-national"
+                  placeholder="09xx xxx xxx"
+                />
+              </label>
+            </div>
+            <div id="adminFields" class="login-stack" hidden>
+              <label class="field">
+                <span>Mật khẩu Admin</span>
+                <input id="passwordInput" type="password" autocomplete="current-password" />
+              </label>
+            </div>
+            <button type="submit" class="btn btn-primary full-btn">
+              <span id="authSubmitLabel">Đăng nhập</span>
+              <i data-icon="arrow"></i>
+            </button>
+          </form>
+          <p id="loginError" class="form-note is-error" hidden></p>
           <button
             type="button"
-            class="login-segment-btn is-on"
-            data-mode="login"
+            data-push-button
+            data-push-status="#pushLoginStatus"
+            class="btn btn-ghost full-btn login-push"
           >
-            Đăng nhập
+            Bật thông báo
           </button>
-          <button type="button" class="login-segment-btn" data-mode="register">
-            Đăng ký
-          </button>
-          <button type="button" class="login-segment-btn" data-mode="admin">
-            Admin
-          </button>
+          <p id="pushLoginStatus" class="form-note" hidden></p>
+          <small class="terms">Bằng cách tiếp tục, bạn đồng ý với quy định của nhóm.</small>
         </div>
-        <form id="loginForm" class="login-stack">
-          <div id="loginFields" class="login-stack">
-            <label class="login-field">
-              <span>Thành viên</span>
-              <select id="memberSelectInput" required></select>
-            </label>
-            <label class="login-field">
-              <span>Số điện thoại</span>
-              <input
-                id="phoneInput"
-                name="phone"
-                type="tel"
-                inputmode="numeric"
-                autocomplete="tel-national"
-                placeholder="09xxxxxxxx"
-                required
-              />
-            </label>
-          </div>
-          <div id="registerFields" class="login-stack" hidden>
-            <label class="login-field">
-              <span>Họ tên</span>
-              <input
-                id="registerName"
-                name="name"
-                autocomplete="name"
-                placeholder="Họ và tên"
-              />
-            </label>
-            <!-- Chrome hay autofill email vào field thứ 2 của form đăng ký; decoy nhận email đó. -->
-            <input
-              type="email"
-              name="email"
-              autocomplete="email"
-              tabindex="-1"
-              aria-hidden="true"
-              class="login-autofill-decoy"
-            />
-            <label class="login-field">
-              <span>Số điện thoại</span>
-              <input
-                id="registerPhone"
-                name="phone"
-                type="tel"
-                inputmode="numeric"
-                autocomplete="tel-national"
-                placeholder="09xxxxxxxx"
-              />
-            </label>
-          </div>
-          <div id="adminFields" class="login-stack" hidden>
-            <label class="login-field">
-              <span>Mật khẩu admin</span>
-              <input
-                id="passwordInput"
-                type="password"
-                autocomplete="current-password"
-              />
-            </label>
-          </div>
-          <button type="submit" class="login-submit">
-            <span id="authSubmitLabel">Đăng nhập</span>
-          </button>
-        </form>
-        <button
-          type="button"
-          data-push-button
-          data-push-status="#pushLoginStatus"
-          class="mt-3 w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
-        >
-          Bật thông báo
-        </button>
-        <p id="pushLoginStatus" class="mt-2 text-sm text-slate-500" hidden></p>
-        <p id="loginError" class="mt-3 hidden text-sm text-red-600"></p>
-      </section>
+      </div>
+    </main>
 
-      <main id="appSection" class="hidden space-y-5">
-        <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-          <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h2 id="roleTitle" class="text-lg font-semibold"></h2>
-            <div class="flex flex-wrap gap-2">
-              <button
-                type="button"
-                data-push-button
-                data-push-status="#pushStatus"
-                class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
-              >
-                Bật thông báo
-              </button>
-              <button
-                id="logoutBtn"
-                class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
-              >
-                Đăng xuất
-              </button>
+    <div id="appSection" hidden>
+      <!-- ============ THÀNH VIÊN ============ -->
+      <section id="userSection" class="mobile-shell" hidden>
+        <header class="app-header">
+          <div>
+            <span class="eyebrow" id="userHeaderEyebrow">NHÓM CẦU LÔNG</span>
+            <h1 id="userHeaderTitle">Xin chào</h1>
+          </div>
+          <div class="header-actions">
+            <button type="button" class="icon-btn" data-theme-toggle aria-label="Đổi giao diện"><i data-icon="moon"></i></button>
+            <button type="button" class="avatar-button" data-open-account aria-label="Tài khoản">
+              <span class="avatar avatar-md avatar-tone-0" id="userAvatar">?</span>
+            </button>
+          </div>
+        </header>
+
+        <main>
+          <div id="userHomeTabContent" class="screen-content">
+            <section class="balance-card" id="myDebtCard">
+              <div class="balance-top">
+                <span>Công nợ hiện tại</span>
+                <span class="badge badge-neutral" data-debt-badge>Đang tải</span>
+              </div>
+              <strong data-debt-amount>…</strong>
+              <p data-debt-meta>Đang tải sổ tiền sân…</p>
+              <div id="myDebtQrActions"></div>
+              <div class="decor-shuttle" aria-hidden="true">◒</div>
+            </section>
+
+            <button type="button" class="rank-mini" data-go-user-tab="ranking">
+              <span class="rank-number">#?</span>
+              <span>
+                <small>Bảng xếp hạng thành viên</small>
+                <b>Sắp ra mắt <em>· tính điểm theo trận</em></b>
+              </span>
+              <i data-icon="chevron"></i>
+            </button>
+
+            <div class="section-title"><h2>Vote buổi chơi</h2></div>
+            <p id="userVoteMessage" class="form-note" hidden></p>
+            <div id="userVoteList" class="stack-12"></div>
+
+            <div class="section-title"><h2>Sổ tiền sân</h2></div>
+            <div id="userLedgerMount" class="basic-embed"></div>
+          </div>
+
+          <div id="userRankingTabContent" class="screen-content" hidden>
+            <div class="filter-chips" aria-disabled="true">
+              <button type="button" class="active">Tháng này</button>
+              <button type="button">Quý</button>
+              <button type="button">Năm</button>
+              <button type="button">Tất cả</button>
+            </div>
+            <div class="coming-soon">
+              <span class="coming-icon"><i data-icon="trophy"></i></span>
+              <span class="badge badge-yellow">ĐANG PHÁT TRIỂN</span>
+              <h3>Bảng xếp hạng thành viên</h3>
+              <p>Điểm sẽ được cộng/trừ sau mỗi trận có kết quả. Khi admin bắt đầu nhập kết quả trận, bảng xếp hạng sẽ hiện ở đây.</p>
+            </div>
+            <div class="rule-card">
+              <div>
+                <i data-icon="sparkle"></i>
+                <span>
+                  <b>Cách tính điểm</b>
+                  <small>Thắng đội mạnh hơn +20 · cùng level +10 · yếu hơn +5</small>
+                  <small>Thua đội yếu hơn −20 · cùng level −10 · mạnh hơn −5</small>
+                </span>
+              </div>
             </div>
           </div>
-          <p id="pushStatus" class="mb-4 text-sm text-slate-500" hidden></p>
-          <p id="loginIdentity" class="text-sm text-slate-500"></p>
-        </section>
 
-        <section id="adminSection" class="hidden space-y-5">
-          <nav class="tabs" aria-label="Mục quản trị">
-            <button id="adminTabCourtBtn" type="button" class="tab">Vote</button>
-            <button id="adminTabExpensesBtn" type="button" class="tab">
-              Nhập tiền
-            </button>
-            <button id="adminTabLedgerBtn" type="button" class="tab">
-              Sổ nợ
-            </button>
-            <button id="adminTabCreditBtn" type="button" class="tab">
-              Tiền thừa
-            </button>
-            <button id="adminTabTournamentBtn" type="button" class="tab">
-              Giải đấu
-            </button>
-            <button id="adminTabNoticeBtn" type="button" class="tab">
-              Thông báo
-            </button>
-            <button id="adminTabGamesBtn" type="button" class="tab">
-              Trận
-            </button>
-            <button id="adminTabToolsBtn" type="button" class="tab">
-              Công cụ
-            </button>
-          </nav>
-
-          <div id="courtTabContent" class="space-y-5">
-            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <h3 class="mb-3 text-lg font-semibold">Vote buổi chơi</h3>
-              <form id="preSessionForm" class="vote-create">
-                <input id="preDateInput" type="date" required />
-                <input id="preTimeInput" type="time" required />
-                <input id="preLocationInput" placeholder="Sân / địa điểm" />
-                <input id="preNoteInput" placeholder="Ghi chú (tuỳ chọn)" />
-                <div class="vote-create-actions">
-                  <button class="vote-btn vote-btn-primary">Tạo vote</button>
-                  <button id="resendSessionPushBtn" type="button" class="vote-btn vote-btn-ghost">
-                    Gửi lại thông báo
-                  </button>
-                </div>
-              </form>
-              <p id="preSessionMessage" class="mt-2 text-sm"></p>
-              <p class="mt-3 text-xs text-slate-500">
-                Bấm vào tên để đổi Tham gia / Không. "Tính tiền" mở form Nhập tiền với người đã tham gia.
-              </p>
-              <p id="voteListMessage" class="mt-2 text-sm"></p>
-              <div id="voteSessionList" class="vote-list mt-3"></div>
-            </section>
-
-            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <div class="mb-3 flex items-center justify-between">
-                <h3 class="text-lg font-semibold">Level thành viên</h3>
-                <div class="flex items-center gap-2">
-                  <button
-                    id="openAddMemberBtn"
-                    class="rounded-lg bg-indigo-600 px-3 py-1 text-sm text-white"
-                  >
-                    + Thêm member
-                  </button>
-                  <button
-                    id="refreshMembersBtn"
-                    class="rounded-lg border border-slate-300 px-3 py-1 text-sm"
-                  >
-                    Reload
-                  </button>
-                </div>
-              </div>
-              <p id="memberManageMessage" class="mb-2 text-sm"></p>
-              <div class="overflow-x-auto">
-                <table class="min-w-full border border-slate-200 text-sm">
-                  <thead class="bg-slate-100">
-                    <tr>
-                      <th class="border border-slate-200 px-2 py-1 text-left">
-                        Tên
-                      </th>
-                      <th class="border border-slate-200 px-2 py-1 text-left">
-                        Loại
-                      </th>
-                      <th class="border border-slate-200 px-2 py-1 text-left">
-                        Giới tính
-                      </th>
-                      <th class="border border-slate-200 px-2 py-1 text-left">
-                        Birthday
-                      </th>
-                      <th class="border border-slate-200 px-2 py-1 text-left">
-                        SĐT
-                      </th>
-                      <th class="border border-slate-200 px-2 py-1 text-left">
-                        Level
-                      </th>
-                      <th class="border border-slate-200 px-2 py-1 text-left">
-                        Active
-                      </th>
-                      <th class="border border-slate-200 px-2 py-1 text-left">
-                        Thao tác
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody id="memberLevelTable"></tbody>
-                </table>
-              </div>
-            </section>
-
-            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <h3 class="mb-3 text-lg font-semibold">Xếp trận tự động</h3>
-              <div class="flex flex-wrap items-end gap-3">
-                <select
-                  id="matchSessionSelect"
-                  class="rounded-lg border border-slate-300 px-3 py-2"
-                ></select>
-                <input
-                  id="roundCountInput"
-                  type="number"
-                  min="1"
-                  max="10"
-                  value="2"
-                  class="w-24 rounded-lg border border-slate-300 px-3 py-2"
-                />
-                <button
-                  id="generateMatchesBtn"
-                  class="rounded-lg bg-indigo-600 px-4 py-2 text-white"
-                >
-                  Generate
-                </button>
-              </div>
-              <p id="matchMessage" class="mt-2 text-sm"></p>
-              <div id="matchResultTables" class="mt-3 space-y-3"></div>
-            </section>
+          <div id="userTournamentTabContent" class="screen-content" hidden>
+            <div id="userTournamentMount" class="tournament-embed"></div>
           </div>
 
-          <div id="expensesTabContent" class="hidden space-y-5">
+          <div id="userNoticeTabContent" class="screen-content" hidden>
+            <div class="notification-summary">
+              <span><i data-icon="bell"></i></span>
+              <div>
+                <b id="userNoticeSummary">Thông báo từ nhóm</b>
+                <small id="userNoticeSummaryMeta">Admin gửi thông báo tại đây</small>
+              </div>
+            </div>
+            <div id="userNoticeList" class="notification-list"></div>
+          </div>
+        </main>
+
+        <nav class="bottom-nav" aria-label="Mục người dùng">
+          <button id="userTabHomeBtn" type="button" class="active"><i data-icon="home"></i><span>Trang chủ</span></button>
+          <button id="userTabRankingBtn" type="button"><i data-icon="trophy"></i><span>BXH</span></button>
+          <button id="userTabTournamentBtn" type="button"><i data-icon="calendar"></i><span>Giải đấu</span></button>
+          <button id="userTabNoticeBtn" type="button">
+            <i data-icon="bell"></i><span>Thông báo</span><i class="nav-dot" id="userNoticeDot" hidden></i>
+          </button>
+        </nav>
+      </section>
+
+      <!-- ============ ADMIN ============ -->
+      <section id="adminSection" class="admin-shell" hidden>
+        <aside class="admin-sidebar">
+          <div class="brand">
+            <span class="brand-mark">N</span>
+            <div>
+              <b>Nhóm Cầu Lông</b>
+              <small>Không gian quản trị</small>
+            </div>
+          </div>
+          <nav aria-label="Mục quản trị">
+            <button type="button" data-admin-tab="court"><i data-icon="calendar"></i>Vote</button>
+            <button type="button" data-admin-tab="expenses"><i data-icon="wallet"></i>Nhập tiền</button>
+            <button type="button" data-admin-tab="ledger"><i data-icon="chart"></i>Sổ nợ</button>
+            <button type="button" data-admin-tab="credit"><i data-icon="wallet"></i>Tiền thừa</button>
+            <button type="button" data-admin-tab="ranking"><i data-icon="trophy"></i>BXH</button>
+            <button type="button" data-admin-tab="tournament"><i data-icon="trophy"></i>Giải đấu</button>
+            <button type="button" data-admin-tab="notices"><i data-icon="bell"></i>Thông báo</button>
+            <button type="button" data-admin-tab="tools"><i data-icon="settings"></i>Công cụ</button>
+          </nav>
+          <button type="button" class="admin-user" data-open-account>
+            <span class="avatar avatar-md avatar-tone-3">A</span>
+            <div>
+              <b>Quản trị viên</b>
+              <small>Toàn quyền</small>
+            </div>
+          </button>
+        </aside>
+
+        <div class="admin-top">
+          <div class="mobile-admin-brand">
+            <span class="brand-mark">N</span>
+            <b>Admin</b>
+          </div>
+          <div class="admin-top-actions">
+            <button type="button" class="icon-btn" data-theme-toggle aria-label="Đổi giao diện"><i data-icon="moon"></i></button>
+            <button type="button" class="avatar-button" data-open-account aria-label="Tài khoản">
+              <span class="avatar avatar-md avatar-tone-3">A</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="admin-tabs" aria-label="Mục quản trị">
+          <button type="button" data-admin-tab="court">Vote</button>
+          <button type="button" data-admin-tab="expenses">Nhập tiền</button>
+          <button type="button" data-admin-tab="ledger">Sổ nợ</button>
+          <button type="button" data-admin-tab="credit">Tiền thừa</button>
+          <button type="button" data-admin-tab="ranking">BXH</button>
+          <button type="button" data-admin-tab="tournament">Giải đấu</button>
+          <button type="button" data-admin-tab="notices">Thông báo</button>
+          <button type="button" data-admin-tab="tools">Công cụ</button>
+        </div>
+
+        <main class="admin-content">
+          <!-- Vote & xếp trận -->
+          <div id="courtTabContent" class="admin-grid">
+            <section class="admin-main">
+              <div class="page-heading">
+                <div>
+                  <span class="eyebrow">QUẢN LÝ BUỔI CHƠI</span>
+                  <h2>Vote &amp; xếp trận</h2>
+                  <p>Tạo lịch, chốt người và chia trận cân bằng.</p>
+                </div>
+                <div class="heading-actions">
+                  <button id="resendSessionPushBtn" type="button" class="btn btn-secondary">
+                    <i data-icon="bell"></i><span>Gửi lại thông báo</span>
+                  </button>
+                  <button id="openCreateVoteBtn" type="button" class="btn btn-primary">
+                    <i data-icon="plus"></i><span>Tạo vote mới</span>
+                  </button>
+                </div>
+              </div>
+              <p id="preSessionMessage" class="form-note" hidden></p>
+              <p id="voteListMessage" class="form-note" hidden></p>
+              <p class="hint-line">Bấm vào tên để đổi Tham gia / Không. "Tính tiền" mở form Nhập tiền với người đã tham gia.</p>
+              <div id="voteSessionList" class="stack-12"></div>
+
+              <div class="section-title"><h2>Xếp trận tự động</h2></div>
+              <div class="generate-bar">
+                <label class="generate-session">
+                  <span>Buổi</span>
+                  <select id="matchSessionSelect"></select>
+                </label>
+                <label class="generate-rounds">
+                  Số vòng
+                  <span class="stepper">
+                    <button type="button" data-step="-1" aria-label="Giảm">−</button>
+                    <input id="roundCountInput" type="number" min="1" max="10" value="2" inputmode="numeric" />
+                    <button type="button" data-step="1" aria-label="Tăng">+</button>
+                  </span>
+                </label>
+                <p><i data-icon="sparkle"></i> Hệ thống ưu tiên cân level và hạn chế lặp cặp</p>
+                <button id="generateMatchesBtn" type="button" class="btn btn-primary">
+                  <i data-icon="sparkle"></i><span>Generate</span>
+                </button>
+              </div>
+              <p id="matchMessage" class="form-note" hidden></p>
+              <div id="matchResultTables"></div>
+            </section>
+
+            <aside class="admin-panel">
+              <div class="panel-title">
+                <span><i data-icon="users"></i></span>
+                <div>
+                  <h3>Quản lý thành viên</h3>
+                  <p id="memberCountLabel">—</p>
+                </div>
+                <button id="refreshMembersBtn" type="button" class="icon-btn" aria-label="Tải lại"><i data-icon="refresh"></i></button>
+              </div>
+              <label class="search-box">
+                <i data-icon="search"></i>
+                <input id="memberSearchInput" type="search" placeholder="Tìm thành viên..." autocomplete="off" />
+              </label>
+              <p id="memberManageMessage" class="form-note" hidden></p>
+              <div id="memberLevelTable" class="compact-members"></div>
+              <button id="openAddMemberBtn" type="button" class="btn btn-secondary full-btn">
+                <i data-icon="plus"></i><span>Thêm member</span>
+              </button>
+            </aside>
+          </div>
+
+          <!-- Nhập tiền -->
+          <div id="expensesTabContent" hidden>
             <div id="adminEntryMount" class="basic-embed"></div>
           </div>
 
-          <div id="ledgerTabContent" class="hidden space-y-5">
+          <!-- Sổ nợ -->
+          <div id="ledgerTabContent" hidden>
             <div id="adminLedgerMount" class="basic-embed"></div>
           </div>
 
-          <div id="gamesTabContent" class="hidden space-y-5">
-            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <h3 class="mb-2 text-lg font-semibold">Games</h3>
-              <p class="text-sm text-slate-600">
-                Chưa có module game nào trong hệ thống (placeholder).
-              </p>
-              <div
-                class="mt-3 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500"
-              >
-                Empty state: danh sách games đang trống.
+          <!-- Tiền thừa -->
+          <div id="creditTabContent" class="page-narrow" hidden>
+            <div class="page-heading">
+              <div>
+                <span class="eyebrow">DÒNG TIỀN NHÓM</span>
+                <h2>Tiền thừa / nạp trước</h2>
+                <p>Khi thành viên chuyển dư hoặc nạp trước, ghi vào đây. Sổ nợ tự trừ số này; bấm "Đã hoàn thành" trên Sổ nợ sẽ trừ phần đã dùng.</p>
               </div>
-            </section>
+            </div>
+            <form id="creditForm" class="form-card">
+              <div class="form-grid">
+                <label class="field">
+                  <span>Thành viên</span>
+                  <select id="creditMemberSelect" required></select>
+                </label>
+                <label class="field">
+                  <span>Số tiền</span>
+                  <input id="creditAmountInput" inputmode="numeric" placeholder="0đ" autocomplete="off" required />
+                </label>
+                <label class="field">
+                  <span>Loại</span>
+                  <select id="creditDirectionInput">
+                    <option value="add">Ghi tiền thừa</option>
+                    <option value="use">Trừ tiền thừa</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Ghi chú</span>
+                  <input id="creditNoteInput" placeholder="Không bắt buộc" autocomplete="off" />
+                </label>
+              </div>
+              <button type="submit" class="btn btn-primary full-btn form-submit"><i data-icon="check"></i><span>Lưu</span></button>
+              <p id="creditMessage" class="form-note" hidden></p>
+            </form>
+            <div class="two-cards">
+              <section class="list-card">
+                <div class="card-head"><div><h3>Còn lại theo người</h3><p>Số dư nạp trước chưa dùng</p></div></div>
+                <div id="creditBalanceBody" class="simple-rows"></div>
+              </section>
+              <section class="list-card">
+                <div class="card-head"><div><h3>Lịch sử ghi</h3><p>Mới nhất ở trên</p></div></div>
+                <div id="creditEntryBody" class="simple-rows"></div>
+              </section>
+            </div>
           </div>
 
-          <div id="toolsTabContent" class="hidden space-y-5">
-            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <h3 class="mb-3 text-lg font-semibold">Quản trị dữ liệu</h3>
-              <div class="flex flex-wrap gap-3">
-                <button
-                  id="migrateSheetsBtn"
-                  class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
-                >
-                  Migrate từ Sheets
-                </button>
-                <button
-                  id="syncSheetsBtn"
-                  class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
-                >
-                  Sync sang Sheets ngay
-                </button>
-                <button
-                  id="testPushBtn"
-                  type="button"
-                  class="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100"
-                >
-                  Gửi nhắc lịch ngay
-                </button>
+          <!-- BXH -->
+          <div id="rankingTabContent" class="page-narrow" hidden>
+            <div class="page-heading">
+              <div>
+                <span class="eyebrow">THÀNH TÍCH</span>
+                <h2>Bảng xếp hạng thành viên</h2>
+                <p>Điểm cộng/trừ theo kết quả từng trận đánh đôi.</p>
               </div>
-              <p id="dataOpsMessage" class="mt-2 text-sm"></p>
+            </div>
+            <div class="coming-soon">
+              <span class="coming-icon"><i data-icon="trophy"></i></span>
+              <span class="badge badge-yellow">ĐANG PHÁT TRIỂN</span>
+              <h3>Chưa có dữ liệu kết quả trận</h3>
+              <p>Cần bổ sung chức năng nhập kết quả trận ở mục "Xếp trận tự động" trước khi tính được BXH. Xem BACKLOG.md.</p>
+            </div>
+            <div class="rule-card">
+              <div>
+                <i data-icon="sparkle"></i>
+                <span>
+                  <b>Cách tính điểm (dự kiến)</b>
+                  <small>Thắng đội mạnh hơn +20 · cùng level +10 · yếu hơn +5</small>
+                  <small>Thua đội yếu hơn −20 · cùng level −10 · mạnh hơn −5</small>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Giải đấu -->
+          <div id="tournamentTabContent" hidden>
+            <div id="adminTournamentMount" class="tournament-embed"></div>
+          </div>
+
+          <!-- Thông báo -->
+          <div id="noticeTabContent" class="page-narrow" hidden>
+            <div class="page-heading">
+              <div>
+                <span class="eyebrow">TRUYỀN THÔNG</span>
+                <h2>Gửi thông báo</h2>
+                <p>Nội dung được lưu lại và push tới thành viên đang bật thông báo.</p>
+              </div>
+            </div>
+            <form id="noticeForm" class="form-card">
+              <label class="field">
+                <span>Nội dung</span>
+                <textarea id="noticeContentInput" rows="5" maxlength="2000" placeholder="Nhập nội dung thông báo..." required></textarea>
+              </label>
+              <button type="submit" class="btn btn-primary form-submit"><i data-icon="bell"></i><span>Gửi thông báo</span></button>
+              <p id="noticeMessage" class="form-note" hidden></p>
+            </form>
+            <div class="section-title"><h2>Đã gửi</h2></div>
+            <div id="adminNoticeList" class="notification-list"></div>
+          </div>
+
+          <!-- Công cụ -->
+          <div id="toolsTabContent" class="page-narrow" hidden>
+            <div class="page-heading">
+              <div>
+                <span class="eyebrow">HỆ THỐNG</span>
+                <h2>Công cụ</h2>
+                <p>Đồng bộ dữ liệu, gửi nhắc lịch và báo cáo.</p>
+              </div>
+            </div>
+
+            <section class="form-card">
+              <div class="card-title"><h3>Quản trị dữ liệu</h3></div>
+              <div class="button-row">
+                <button id="migrateSheetsBtn" type="button" class="btn btn-ghost"><i data-icon="download"></i><span>Migrate từ Sheets</span></button>
+                <button id="syncSheetsBtn" type="button" class="btn btn-ghost"><i data-icon="refresh"></i><span>Sync sang Sheets ngay</span></button>
+                <button id="testPushBtn" type="button" class="btn btn-secondary"><i data-icon="bell"></i><span>Gửi nhắc lịch ngay</span></button>
+              </div>
+              <p id="dataOpsMessage" class="form-note" hidden></p>
             </section>
 
-            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <h3 class="mb-3 text-lg font-semibold">Báo cáo tháng (dữ liệu cũ)</h3>
-              <div class="flex flex-wrap gap-3">
-                <input
-                  id="reportMonthInput"
-                  type="month"
-                  class="rounded-lg border border-slate-300 px-3 py-2"
-                />
-                <button
-                  id="loadReportBtn"
-                  class="rounded-lg bg-blue-600 px-4 py-2 text-white"
-                >
-                  Xem báo cáo
-                </button>
-                <button
-                  id="downloadCsvBtn"
-                  class="rounded-lg border border-slate-300 px-4 py-2"
-                >
-                  Tải CSV
-                </button>
+            <section class="form-card">
+              <div class="card-title"><h3>Báo cáo tháng <small>(dữ liệu cũ)</small></h3></div>
+              <div class="button-row">
+                <input id="reportMonthInput" type="month" class="input" />
+                <button id="loadReportBtn" type="button" class="btn btn-primary"><span>Xem báo cáo</span></button>
+                <button id="downloadCsvBtn" type="button" class="btn btn-ghost"><i data-icon="download"></i><span>Tải CSV</span></button>
               </div>
-              <p id="reportMessage" class="mt-2 text-sm"></p>
-              <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div class="rounded-lg bg-slate-100 p-3 text-sm">
-                  <div class="text-xs text-slate-500">Tổng chi tháng</div>
-                  <div id="reportTotalCost" class="text-lg font-semibold">
-                    0
-                  </div>
-                </div>
-                <div class="rounded-lg bg-slate-100 p-3 text-sm">
-                  <div class="text-xs text-slate-500">Tổng số buổi</div>
-                  <div id="reportTotalSessions" class="text-lg font-semibold">
-                    0
-                  </div>
-                </div>
-                <div class="rounded-lg bg-slate-100 p-3 text-sm">
-                  <div class="text-xs text-slate-500">Tháng</div>
-                  <div id="reportMonthValue" class="text-lg font-semibold">
-                    -
-                  </div>
-                </div>
+              <p id="reportMessage" class="form-note" hidden></p>
+              <div class="kpi-grid three">
+                <div class="kpi success"><small>TỔNG CHI THÁNG</small><strong id="reportTotalCost">0</strong></div>
+                <div class="kpi warning"><small>TỔNG SỐ BUỔI</small><strong id="reportTotalSessions">0</strong></div>
+                <div class="kpi"><small>THÁNG</small><strong id="reportMonthValue">-</strong></div>
               </div>
-              <div class="mt-3 overflow-x-auto">
-                <h4 class="mb-2 font-medium">Tỷ lệ tham gia từng thành viên</h4>
-                <table class="min-w-full border border-slate-200 text-sm">
-                  <thead class="bg-slate-100">
-                    <tr>
-                      <th class="border border-slate-200 px-2 py-1 text-left">
-                        Thành viên
-                      </th>
-                      <th class="border border-slate-200 px-2 py-1 text-right">
-                        Số buổi tham gia
-                      </th>
-                      <th class="border border-slate-200 px-2 py-1 text-right">
-                        Tổng buổi
-                      </th>
-                      <th class="border border-slate-200 px-2 py-1 text-right">
-                        Tỷ lệ
-                      </th>
-                    </tr>
+              <h4 class="sub-title">Tỷ lệ tham gia từng thành viên</h4>
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr><th>Thành viên</th><th class="num">Số buổi tham gia</th><th class="num">Tổng buổi</th><th class="num">Tỷ lệ</th></tr>
                   </thead>
                   <tbody id="reportAttendanceBody"></tbody>
                 </table>
               </div>
-              <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-                <div class="overflow-x-auto">
-                  <h4 class="mb-2 font-medium">Top nợ nhiều nhất</h4>
-                  <table class="min-w-full border border-slate-200 text-sm">
-                    <thead class="bg-slate-100">
-                      <tr>
-                        <th class="border border-slate-200 px-2 py-1 text-left">
-                          Thành viên
-                        </th>
-                        <th
-                          class="border border-slate-200 px-2 py-1 text-right"
-                        >
-                          Số dư
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody id="reportTopDebtorsBody"></tbody>
-                  </table>
-                </div>
-                <div class="overflow-x-auto">
-                  <h4 class="mb-2 font-medium">Top thanh toán nhiều nhất</h4>
-                  <table class="min-w-full border border-slate-200 text-sm">
-                    <thead class="bg-slate-100">
-                      <tr>
-                        <th class="border border-slate-200 px-2 py-1 text-left">
-                          Thành viên
-                        </th>
-                        <th
-                          class="border border-slate-200 px-2 py-1 text-right"
-                        >
-                          Tổng đã thanh toán
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody id="reportTopPayersBody"></tbody>
-                  </table>
-                </div>
-              </div>
-            </section>
-
-            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <h3 class="mb-3 text-lg font-semibold">
-                Tools - Convert HTML to Ink Button
-              </h3>
-              <form id="htmlConvertForm" class="space-y-3">
+              <div class="two-cards">
                 <div>
-                  <label
-                    for="htmlConvertInput"
-                    class="mb-1 block text-sm font-medium"
-                    >HTML input</label
-                  >
-                  <textarea
-                    id="htmlConvertInput"
-                    rows="8"
-                    placeholder="<div>...</div>"
-                    class="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
-                    required
-                  ></textarea>
-                </div>
-                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label
-                      for="htmlConvertTextInputCTA1"
-                      class="mb-1 block text-sm font-medium"
-                      >Text cần chuyển thành button CTA 1</label
-                    >
-                    <input
-                      id="htmlConvertTextInputCTA1"
-                      placeholder="Mua ngay"
-                      class="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label
-                      for="htmlConvertTextInputCTA2"
-                      class="mb-1 block text-sm font-medium"
-                      >Text cần chuyển thành button CTA 2</label
-                    >
-                    <input
-                      id="htmlConvertTextInputCTA2"
-                      placeholder="Mua ngay"
-                      class="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label
-                      for="htmlConvertVariantIdInput"
-                      class="mb-1 block text-sm font-medium"
-                      >Variant ID</label
-                    >
-                    <input
-                      id="htmlConvertVariantIdInput"
-                      placeholder="51183887417659"
-                      class="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      required
-                    />
+                  <h4 class="sub-title">Top nợ nhiều nhất</h4>
+                  <div class="table-scroll">
+                    <table class="data-table">
+                      <thead><tr><th>Thành viên</th><th class="num">Số dư</th></tr></thead>
+                      <tbody id="reportTopDebtorsBody"></tbody>
+                    </table>
                   </div>
                 </div>
-                <div class="flex flex-wrap gap-2">
-                  <button
-                    id="htmlConvertBtn"
-                    type="submit"
-                    class="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white"
-                  >
-                    Convert
-                  </button>
+                <div>
+                  <h4 class="sub-title">Top thanh toán nhiều nhất</h4>
+                  <div class="table-scroll">
+                    <table class="data-table">
+                      <thead><tr><th>Thành viên</th><th class="num">Tổng đã thanh toán</th></tr></thead>
+                      <tbody id="reportTopPayersBody"></tbody>
+                    </table>
+                  </div>
                 </div>
-              </form>
-              <p id="htmlConvertMessage" class="mt-2 text-sm"></p>
-              <div class="mt-3">
-                <label
-                  for="htmlConvertOutput"
-                  class="mb-1 block text-sm font-medium"
-                  >Output HTML</label
-                >
-                <textarea
-                  id="htmlConvertOutput"
-                  rows="14"
-                  readonly
-                  class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-sm"
-                ></textarea>
               </div>
             </section>
-          </div>
 
-          <div id="tournamentTabContent" class="hidden space-y-5">
-            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <div id="adminTournamentMount" class="tournament-embed"></div>
-            </section>
-          </div>
-
-          <div id="noticeTabContent" class="hidden space-y-5">
-            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <h3 class="mb-1 text-lg font-semibold">Gửi thông báo</h3>
-              <p class="mb-3 text-sm text-slate-500">Nội dung được lưu lại và push tới thành viên đang bật thông báo.</p>
-              <form id="noticeForm" class="space-y-3">
-                <textarea
-                  id="noticeContentInput"
-                  rows="5"
-                  maxlength="2000"
-                  placeholder="Nhập nội dung thông báo..."
-                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  required
-                ></textarea>
-                <button class="rounded-lg bg-indigo-600 px-4 py-2 text-white">Gửi thông báo</button>
+            <details class="form-card tool-details">
+              <summary><b>Convert HTML to Ink Button</b><i data-icon="chevron"></i></summary>
+              <form id="htmlConvertForm" class="tool-form">
+                <label class="field">
+                  <span>HTML input</span>
+                  <textarea id="htmlConvertInput" rows="8" placeholder="<div>...</div>" class="mono" required></textarea>
+                </label>
+                <div class="form-grid">
+                  <label class="field">
+                    <span>Text cần chuyển thành button CTA 1</span>
+                    <input id="htmlConvertTextInputCTA1" placeholder="Mua ngay" required />
+                  </label>
+                  <label class="field">
+                    <span>Text cần chuyển thành button CTA 2</span>
+                    <input id="htmlConvertTextInputCTA2" placeholder="Mua ngay" required />
+                  </label>
+                  <label class="field">
+                    <span>Variant ID</span>
+                    <input id="htmlConvertVariantIdInput" placeholder="51183887417659" required />
+                  </label>
+                </div>
+                <button id="htmlConvertBtn" type="submit" class="btn btn-primary form-submit"><span>Convert</span></button>
               </form>
-              <p id="noticeMessage" class="mt-2 text-sm"></p>
-              <h4 class="mb-2 mt-5 font-medium">Đã gửi</h4>
-              <div id="adminNoticeList" class="space-y-3"></div>
-            </section>
+              <p id="htmlConvertMessage" class="form-note" hidden></p>
+              <label class="field">
+                <span>Output HTML</span>
+                <textarea id="htmlConvertOutput" rows="14" readonly class="mono"></textarea>
+              </label>
+            </details>
           </div>
-
-          <div id="creditTabContent" class="hidden space-y-5">
-            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <h3 class="mb-3 text-lg font-semibold">Tiền thừa / nạp trước</h3>
-              <p class="mb-3 text-sm text-slate-500">
-                Khi thành viên chuyển dư hoặc nạp trước, ghi vào đây. Sổ nợ tự trừ
-                số này; bấm "Đã hoàn thành" trên Sổ nợ sẽ trừ phần đã dùng.
-              </p>
-              <form
-                id="creditForm"
-                class="grid grid-cols-1 gap-3 sm:grid-cols-4"
-              >
-                <select
-                  id="creditMemberSelect"
-                  class="rounded-lg border border-slate-300 px-3 py-2"
-                  required
-                ></select>
-                <input
-                  id="creditAmountInput"
-                  inputmode="numeric"
-                  placeholder="Số tiền"
-                  class="rounded-lg border border-slate-300 px-3 py-2"
-                  required
-                />
-                <select
-                  id="creditDirectionInput"
-                  class="rounded-lg border border-slate-300 px-3 py-2"
-                >
-                  <option value="add">Ghi tiền thừa</option>
-                  <option value="use">Trừ tiền thừa</option>
-                </select>
-                <input
-                  id="creditNoteInput"
-                  placeholder="Ghi chú"
-                  class="rounded-lg border border-slate-300 px-3 py-2"
-                />
-                <button
-                  class="rounded-lg bg-indigo-600 px-4 py-2 text-white sm:col-span-4"
-                >
-                  Lưu
-                </button>
-              </form>
-              <p id="creditMessage" class="mt-2 text-sm"></p>
-              <div class="mt-4 overflow-x-auto">
-                <table class="min-w-full text-sm">
-                  <thead>
-                    <tr>
-                      <th class="text-left">Thành viên</th>
-                      <th class="text-right">Còn lại</th>
-                    </tr>
-                  </thead>
-                  <tbody id="creditBalanceBody"></tbody>
-                </table>
-              </div>
-              <h4 class="mb-2 mt-4 font-medium">Lịch sử ghi</h4>
-              <div class="overflow-x-auto">
-                <table class="min-w-full text-sm">
-                  <thead>
-                    <tr>
-                      <th class="text-left">Thành viên</th>
-                      <th class="text-right">Số tiền</th>
-                      <th class="text-left">Ghi chú</th>
-                    </tr>
-                  </thead>
-                  <tbody id="creditEntryBody"></tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-        </section>
-
-        <section id="userSection" class="hidden space-y-5">
-          <nav class="tabs" aria-label="Mục người dùng">
-            <button id="userTabHomeBtn" type="button" class="tab is-active">
-              Chung
-            </button>
-            <button id="userTabTournamentBtn" type="button" class="tab">
-              Giải đấu
-            </button>
-            <button id="userTabNoticeBtn" type="button" class="tab">
-              Thông báo
-            </button>
-          </nav>
-
-          <div id="userHomeTabContent" class="space-y-5">
-            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <h3 class="mb-3 text-lg font-semibold">Vote buổi chơi</h3>
-              <p id="userVoteMessage" class="mb-2 text-sm"></p>
-              <div id="userVoteList" class="vote-list space-y-3"></div>
-            </section>
-
-            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <h3 class="mb-3 text-lg font-semibold">Công nợ cá nhân</h3>
-              <div id="myDebtCard" class="text-sm"></div>
-              <div id="myDebtQrActions" class="mt-3"></div>
-            </section>
-
-            <div id="userLedgerMount" class="basic-embed"></div>
-          </div>
-
-          <div id="userTournamentTabContent" class="hidden space-y-5">
-            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <div id="userTournamentMount" class="tournament-embed"></div>
-            </section>
-          </div>
-
-          <div id="userNoticeTabContent" class="hidden space-y-5">
-            <section class="rounded-xl bg-white p-4 shadow-sm sm:p-5">
-              <h3 class="mb-3 text-lg font-semibold">Thông báo</h3>
-              <div id="userNoticeList" class="space-y-3"></div>
-            </section>
-          </div>
-        </section>
-      </main>
+        </main>
+      </section>
     </div>
 
-    <div
-      id="loadingModal"
-      class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40"
-    >
-      <div
-        class="flex items-center gap-3 rounded-xl bg-white px-5 py-4 shadow-lg"
-      >
-        <div
-          class="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600"
-        ></div>
-        <p class="text-sm font-medium text-slate-700">
-          Đang xử lý, vui lòng chờ...
-        </p>
+    <!-- ============ OVERLAYS ============ -->
+    <div id="loadingModal" class="overlay overlay-center" hidden>
+      <div class="loading-card">
+        <span class="spinner"></span>
+        <p>Đang xử lý, vui lòng chờ...</p>
       </div>
     </div>
 
-    <div
-      id="voteModal"
-      class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4"
-    >
-      <div class="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl">
-        <h3 class="text-lg font-semibold">Vote hôm nay</h3>
-        <p id="voteSessionText" class="mt-1 text-sm text-slate-500"></p>
-        <p
-          id="voteQuestionText"
-          class="mt-3 rounded-lg bg-slate-100 p-3 text-sm"
-        ></p>
-        <textarea
-          id="voteAnswerInput"
-          rows="3"
-          placeholder="Nhập câu trả lời của bạn"
-          class="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        ></textarea>
-        <p id="voteMessage" class="mt-2 text-sm"></p>
-        <div class="mt-4 flex flex-wrap justify-end gap-2">
-          <button
-            id="voteSkipBtn"
-            class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            Bỏ qua
+    <div id="accountModal" class="overlay" hidden>
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head">
+          <div>
+            <span class="eyebrow">TÀI KHOẢN</span>
+            <h2 id="accountName">Tài khoản</h2>
+            <p id="loginIdentity" class="sheet-sub"></p>
+          </div>
+          <button type="button" class="icon-btn" data-close-modal aria-label="Đóng"><i data-icon="close"></i></button>
+        </div>
+        <div class="menu-list">
+          <div class="menu-item">
+            <i data-icon="bell"></i>
+            <span><b>Thông báo đẩy</b><small>Nhận nhắc lịch và công nợ</small></span>
+            <button type="button" data-push-button data-push-status="#pushStatus" class="btn btn-secondary btn-sm">Bật thông báo</button>
+          </div>
+          <p id="pushStatus" class="form-note" hidden></p>
+          <button type="button" data-theme-toggle class="menu-row">
+            <i data-icon="moon"></i>
+            <span><b>Đổi giao diện</b><small>Sáng / tối</small></span>
+            <i data-icon="chevron"></i>
           </button>
-          <button
-            id="voteCloseBtn"
-            class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            Đóng
-          </button>
-          <button
-            id="voteSubmitBtn"
-            class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white"
-          >
-            Gửi vote
+          <button id="logoutBtn" type="button" class="menu-row danger-text">
+            <i data-icon="logout"></i>
+            <span><b>Đăng xuất</b><small>Trở lại màn hình đăng nhập</small></span>
           </button>
         </div>
       </div>
     </div>
 
-    <div
-      id="qrModal"
-      class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4"
-    >
-      <div class="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
-        <h3 class="text-lg font-semibold">Thanh toán công nợ qua QR</h3>
-        <p id="qrDebtInfo" class="mt-1 text-sm text-slate-500"></p>
-        <div class="mt-3 flex justify-center">
-          <img
-            id="qrImage"
-            alt="VietQR thanh toán công nợ"
-            class="h-64 w-64 rounded border border-slate-200 object-contain"
-          />
+    <div id="createVoteModal" class="overlay" hidden>
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head">
+          <div>
+            <span class="eyebrow">LỊCH CHƠI</span>
+            <h2>Tạo vote buổi chơi</h2>
+          </div>
+          <button type="button" class="icon-btn" data-close-modal aria-label="Đóng"><i data-icon="close"></i></button>
         </div>
-        <div class="mt-4 flex justify-end gap-2">
-          <button
-            id="qrCloseBtn"
-            class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            Đóng
-          </button>
-          <a
-            id="qrOpenTabLink"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white"
-            >Mở tab mới</a
-          >
-        </div>
+        <form id="preSessionForm" class="sheet-form">
+          <div class="two-fields">
+            <label class="field"><span>Ngày</span><input id="preDateInput" type="date" required /></label>
+            <label class="field"><span>Giờ</span><input id="preTimeInput" type="time" required /></label>
+          </div>
+          <label class="field"><span>Sân / địa điểm</span><input id="preLocationInput" placeholder="VD: Sân Lê Văn Thiêm" /></label>
+          <label class="field"><span>Ghi chú</span><input id="preNoteInput" placeholder="Không bắt buộc" /></label>
+          <button type="submit" class="btn btn-primary full-btn"><i data-icon="plus"></i><span>Tạo vote</span></button>
+        </form>
       </div>
     </div>
 
-    <div
-      id="bookingImageModal"
-      class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/70 p-4"
-    >
-      <div class="relative w-full max-w-3xl rounded-xl bg-white p-4 shadow-xl">
-        <button
-          id="bookingImageCloseBtn"
-          type="button"
-          class="absolute right-3 top-3 rounded-lg border border-slate-300 px-3 py-1 text-sm"
-        >
-          Đóng
-        </button>
-        <h3 class="pr-16 text-lg font-semibold">Ảnh đặt sân</h3>
-        <img
-          id="bookingImagePreview"
-          class="mt-3 max-h-[75vh] w-full rounded-lg object-contain"
-          alt="Ảnh đặt sân"
-        />
-      </div>
-    </div>
-
-    <div
-      id="attendanceModal"
-      class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4"
-    >
-      <div class="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl">
-        <h3 class="text-lg font-semibold">Xác nhận buổi upcoming</h3>
-        <p id="attendanceModalInfo" class="mt-2 text-sm text-slate-600"></p>
-        <p id="attendanceModalMessage" class="mt-2 text-sm"></p>
-        <div class="mt-4 flex flex-wrap justify-end gap-2">
-          <button
-            id="attendanceCloseBtn"
-            class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            Đóng
-          </button>
-          <button
-            id="attendanceNoBtn"
-            class="rounded-lg bg-rose-600 px-4 py-2 text-sm text-white"
-          >
-            Không tham gia
-          </button>
-          <button
-            id="attendanceYesBtn"
-            class="rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white"
-          >
-            Có tham gia
-          </button>
+    <div id="guestModal" class="overlay" hidden>
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head">
+          <div>
+            <span class="eyebrow">THÊM NGƯỜI CHƠI</span>
+            <h2>Thêm giao lưu</h2>
+            <p class="sheet-sub" id="guestModalSession"></p>
+          </div>
+          <button type="button" class="icon-btn" data-close-modal aria-label="Đóng"><i data-icon="close"></i></button>
         </div>
-      </div>
-    </div>
-
-    <div
-      id="memberModal"
-      class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4"
-    >
-      <div class="w-full max-w-xl rounded-xl bg-white p-5 shadow-xl">
-        <h3 id="memberModalTitle" class="text-lg font-semibold">Thêm member</h3>
-        <form id="memberForm" class="mt-3 space-y-3">
-          <input id="memberModalIdInput" type="hidden" />
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label class="text-sm">
-              <span class="mb-1 block font-medium">Tên</span>
-              <input
-                id="memberNameInput"
-                required
-                class="w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
+        <form id="guestForm" class="sheet-form">
+          <label class="field">
+            <span>Tên khách</span>
+            <input id="guestNameInput" list="guestNameSuggestions" maxlength="60" placeholder="VD: Nguyễn Văn Bảo" autocomplete="off" required />
+            <datalist id="guestNameSuggestions"></datalist>
+          </label>
+          <div class="two-fields">
+            <label class="field">
+              <span>Level</span>
+              <select id="guestLevelInput"></select>
             </label>
-            <label class="text-sm">
-              <span class="mb-1 block font-medium">Loại</span>
-              <select
-                id="memberTypeInput"
-                class="w-full rounded-lg border border-slate-300 px-3 py-2"
-              >
+            <label class="field">
+              <span>Trạng thái</span>
+              <select id="guestStatusInput">
+                <option value="yes">Tham gia</option>
+                <option value="no">Không</option>
+              </select>
+            </label>
+          </div>
+          <div class="hint" id="guestHint" hidden>
+            <i data-icon="sparkle"></i>
+            <span><b id="guestHintTitle"></b><small id="guestHintMeta"></small></span>
+          </div>
+          <p id="guestMessage" class="form-note" hidden></p>
+          <button type="submit" class="btn btn-primary full-btn"><span>Thêm vào buổi chơi</span></button>
+        </form>
+      </div>
+    </div>
+
+    <div id="voteModal" class="overlay" hidden>
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head">
+          <div>
+            <span class="eyebrow">BÌNH CHỌN</span>
+            <h2>Vote hôm nay</h2>
+            <p id="voteSessionText" class="sheet-sub"></p>
+          </div>
+          <button id="voteCloseBtn" type="button" class="icon-btn" aria-label="Đóng"><i data-icon="close"></i></button>
+        </div>
+        <div class="sheet-form">
+          <p id="voteQuestionText" class="question-box"></p>
+          <label class="field">
+            <span>Câu trả lời</span>
+            <textarea id="voteAnswerInput" rows="3" placeholder="Nhập câu trả lời của bạn"></textarea>
+          </label>
+          <p id="voteMessage" class="form-note" hidden></p>
+        </div>
+        <div class="sheet-actions">
+          <button id="voteSkipBtn" type="button" class="btn btn-ghost">Bỏ qua</button>
+          <button id="voteSubmitBtn" type="button" class="btn btn-primary"><i data-icon="check"></i><span>Gửi vote</span></button>
+        </div>
+      </div>
+    </div>
+
+    <div id="qrModal" class="overlay" hidden>
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head">
+          <div>
+            <span class="eyebrow">THANH TOÁN NHANH</span>
+            <h2>Quét mã VietQR</h2>
+          </div>
+          <button id="qrCloseBtn" type="button" class="icon-btn" aria-label="Đóng"><i data-icon="close"></i></button>
+        </div>
+        <div class="qr-box">
+          <img id="qrImage" alt="VietQR thanh toán công nợ" />
+          <span class="badge badge-blue">VIETQR</span>
+        </div>
+        <div class="qr-info">
+          <span>Người nhận <b id="qrReceiver"></b></span>
+          <span>Số tiền <b id="qrAmount" class="negative"></b></span>
+          <span>Nội dung <b id="qrDebtInfo"></b></span>
+        </div>
+        <a id="qrOpenTabLink" target="_blank" rel="noopener noreferrer" class="btn btn-primary full-btn">
+          <span>Mở trong tab mới</span><i data-icon="arrow"></i>
+        </a>
+      </div>
+    </div>
+
+    <div id="bookingImageModal" class="overlay overlay-center dark-overlay" hidden>
+      <button id="bookingImageCloseBtn" type="button" class="floating-close" aria-label="Đóng"><i data-icon="close"></i></button>
+      <img id="bookingImagePreview" class="full-photo" alt="Ảnh đặt sân" />
+      <div class="photo-caption">
+        <b id="bookingImageTitle">Ảnh đặt sân</b>
+        <span id="bookingImageMeta"></span>
+      </div>
+    </div>
+
+    <div id="attendanceModal" class="overlay" hidden>
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head">
+          <div>
+            <span class="eyebrow">XÁC NHẬN</span>
+            <h2>Bạn có đi buổi này?</h2>
+          </div>
+          <button id="attendanceCloseBtn" type="button" class="icon-btn" aria-label="Đóng"><i data-icon="close"></i></button>
+        </div>
+        <div id="attendanceModalInfo" class="attendance-info"></div>
+        <p id="attendanceModalMessage" class="form-note" hidden></p>
+        <div class="vote-actions">
+          <button id="attendanceYesBtn" type="button" class="btn btn-primary"><i data-icon="check"></i><span>Có tham gia</span></button>
+          <button id="attendanceNoBtn" type="button" class="btn btn-ghost"><i data-icon="close"></i><span>Không</span></button>
+        </div>
+      </div>
+    </div>
+
+    <div id="memberModal" class="overlay" hidden>
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head">
+          <div>
+            <span class="eyebrow">THÀNH VIÊN</span>
+            <h2 id="memberModalTitle">Thêm member</h2>
+          </div>
+          <button id="memberModalCloseBtn" type="button" class="icon-btn" aria-label="Đóng"><i data-icon="close"></i></button>
+        </div>
+        <form id="memberForm" class="sheet-form">
+          <input id="memberModalIdInput" type="hidden" />
+          <label class="field"><span>Tên</span><input id="memberNameInput" required /></label>
+          <div class="two-fields">
+            <label class="field">
+              <span>Loại</span>
+              <select id="memberTypeInput">
                 <option value="Cố định">Cố định</option>
                 <option value="GL">GL</option>
               </select>
             </label>
-            <label class="text-sm">
-              <span class="mb-1 block font-medium">Giới tính</span>
-              <select
-                id="memberGenderInput"
-                class="w-full rounded-lg border border-slate-300 px-3 py-2"
-              >
+            <label class="field">
+              <span>Giới tính</span>
+              <select id="memberGenderInput">
                 <option value="">-</option>
                 <option value="Nam">Nam</option>
                 <option value="Nữ">Nữ</option>
               </select>
             </label>
-            <label class="text-sm">
-              <span class="mb-1 block font-medium">Birthday</span>
-              <input
-                id="memberBirthdayInput"
-                type="date"
-                class="w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
-            </label>
-            <label class="text-sm">
-              <span class="mb-1 block font-medium">Số điện thoại</span>
-              <input
-                id="memberPhoneInput"
-                class="w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
-            </label>
-            <label class="text-sm">
-              <span class="mb-1 block font-medium">Level</span>
-              <input
-                id="memberLevelInput"
-                type="number"
-                min="1"
-                max="10"
-                value="5"
-                class="w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
-            </label>
-            <label class="flex items-center gap-2 pt-6 text-sm">
-              <input id="memberActiveInput" type="checkbox" checked />
-              <span>Đang hoạt động</span>
-            </label>
           </div>
-          <p id="memberModalMessage" class="text-sm"></p>
-          <div class="flex flex-wrap justify-end gap-2">
-            <button
-              id="memberModalCloseBtn"
-              type="button"
-              class="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            >
-              Đóng
-            </button>
-            <button
-              type="submit"
-              class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white"
-            >
-              Lưu
-            </button>
+          <div class="two-fields">
+            <label class="field"><span>Sinh nhật</span><input id="memberBirthdayInput" type="date" /></label>
+            <label class="field"><span>Level (1–10)</span><input id="memberLevelInput" type="number" min="1" max="10" value="5" /></label>
           </div>
+          <label class="field"><span>Số điện thoại</span><input id="memberPhoneInput" inputmode="tel" /></label>
+          <label class="check-row">
+            <input id="memberActiveInput" type="checkbox" checked />
+            <span>Đang hoạt động</span>
+          </label>
+          <p id="memberModalMessage" class="form-note" hidden></p>
+          <button type="submit" class="btn btn-primary full-btn"><i data-icon="check"></i><span>Lưu</span></button>
         </form>
       </div>
     </div>
 
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden>
+      <span><i data-icon="check"></i></span>
+      <b id="toastText"></b>
+    </div>
+
+    <script src="/icons.js"></script>
     <script src="/firebase-config.js"></script>
     <script src="/push.js"></script>
     <script src="/tournament-panel.js"></script>

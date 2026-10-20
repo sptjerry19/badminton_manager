@@ -16,18 +16,16 @@
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: var(--font-body);
   color: var(--ink);
-  background:
-    radial-gradient(circle at 10% 0%, #efe9df 0%, transparent 40%),
-    linear-gradient(180deg, #fafaf8 0%, #f0efe9 100%);
+  background: var(--page);
 }
 
 h1,
 h2,
 h3,
 .display {
-  font-family: "Oswald", sans-serif;
+  font-family: var(--font-body);
   letter-spacing: 0.02em;
   margin: 0;
 }

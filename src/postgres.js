@@ -748,7 +748,7 @@ async function listVoteSessions({
   const sessionIds = sessionsResult.rows.map((row) => row.session_id);
   const participantsResult = await query(
     `
-    SELECT session_id, member_id, member_name, member_name_ci, participant_level, status
+    SELECT session_id, member_id, member_name, member_name_ci, participant_type, participant_level, status
     FROM session_participants
     WHERE session_id = ANY($1::text[])
     ORDER BY member_name ASC
@@ -785,6 +785,11 @@ async function listVoteSessions({
       memberId: row.member_id || "",
       name: row.member_name,
       status: ["yes", "no"].includes(status) ? status : "pending",
+      guest: row.participant_type === "GL",
+      level:
+        row.participant_level === null || row.participant_level === undefined
+          ? null
+          : normalizeLevel(row.participant_level),
     });
     if (memberNameCi && row.member_name_ci === memberNameCi) {
       myStatusBySession[sid] = status;
