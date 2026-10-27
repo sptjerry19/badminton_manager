@@ -818,12 +818,13 @@ function renderMatchTables(rounds = []) {
     .join("");
 }
 
-function groupMatchesToRounds(matches = []) {
+function groupMatchesToRounds(matches = [], waitingByRound = {}) {
   const map = new Map();
   matches.forEach((match) => {
     const key = Number(match.round || 1);
     if (!map.has(key)) map.set(key, []);
     map.get(key).push({
+      id: match.id,
       teamA: match.teamA || [],
       teamB: match.teamB || [],
       levelDiff: Number(match.levelDiff || 0)
@@ -834,14 +835,17 @@ function groupMatchesToRounds(matches = []) {
     .map(([round, matchRows]) => ({
       round,
       matches: matchRows,
-      waiting: []
+      waiting: waitingByRound[round] || waitingByRound[String(round)] || []
     }));
 }
 
 async function loadMatchesForDate(date) {
-  if (!date) return [];
+  if (!date) return { matches: [], waitingByRound: {} };
   const data = await api(`/api/matches?date=${encodeURIComponent(date)}`);
-  return data.matches || [];
+  return {
+    matches: data.matches || [],
+    waitingByRound: data.waitingByRound || {}
+  };
 }
 
 // ---------- Báo cáo ----------
@@ -939,8 +943,24 @@ function markNoticesSeen() {
   try {
     localStorage.setItem(noticeSeenKey(), newest);
   } catch (_error) {}
+  refreshUserNoticeChrome();
+}
+
+function refreshUserNoticeChrome() {
+  const seenAt = readNoticeSeen();
+  const unread = countUnread(state.notices, seenAt);
   const dot = $("userNoticeDot");
-  if (dot) dot.hidden = true;
+  if (dot) dot.hidden = !unread;
+  if ($("userNoticeSummary")) {
+    $("userNoticeSummary").textContent = unread ? `Bạn có ${unread} thông báo mới` : "Không có thông báo mới";
+  }
+  if ($("userNoticeSummaryMeta")) {
+    $("userNoticeSummaryMeta").textContent = state.notices[0]
+      ? `Cập nhật gần nhất ${relativeTime(state.notices[0].createdAt).toLowerCase()}`
+      : "Admin gửi thông báo tại đây";
+  }
+  const markAllBtn = $("userNoticeMarkAllBtn");
+  if (markAllBtn) markAllBtn.disabled = !unread;
 }
 
 function countUnread(notices, seenAt) {
@@ -976,14 +996,12 @@ async function loadNotices(containerId, options = {}) {
   state.notices = data.notices || [];
   if (containerId === "userNoticeList") {
     const seenAt = readNoticeSeen();
-    const unread = countUnread(state.notices, seenAt);
-    $("userNoticeDot").hidden = !unread;
-    $("userNoticeSummary").textContent = unread ? `Bạn có ${unread} thông báo mới` : "Không có thông báo mới";
-    $("userNoticeSummaryMeta").textContent = state.notices[0]
-      ? `Cập nhật gần nhất ${relativeTime(state.notices[0].createdAt).toLowerCase()}`
-      : "Admin gửi thông báo tại đây";
+    refreshUserNoticeChrome();
     renderNoticeList(containerId, state.notices, seenAt);
-    if (state.activeUserTab === "notices") markNoticesSeen();
+    if (state.activeUserTab === "notices") {
+      markNoticesSeen();
+      renderNoticeList(containerId, state.notices, readNoticeSeen());
+    }
     return;
   }
   renderNoticeList(containerId, state.notices);
@@ -1083,8 +1101,8 @@ async function loadAdminDashboard() {
   const selectedSessionId = $("matchSessionSelect")?.value || "";
   const selectedSession = state.sessions.find((item) => item.sessionId === selectedSessionId);
   if (selectedSession?.date) {
-    const matches = await loadMatchesForDate(selectedSession.date);
-    renderMatchTables(groupMatchesToRounds(matches));
+    const plan = await loadMatchesForDate(selectedSession.date);
+    renderMatchTables(groupMatchesToRounds(plan.matches, plan.waitingByRound));
   } else {
     renderMatchTables([]);
   }
@@ -1276,6 +1294,13 @@ function bindTabs() {
 }
 
 function bindNotices() {
+  $("userNoticeMarkAllBtn")?.addEventListener("click", () => {
+    if (!state.notices.length) return;
+    markNoticesSeen();
+    renderNoticeList("userNoticeList", state.notices, readNoticeSeen());
+    showToast("Đã đánh dấu đọc hết thông báo");
+  });
+
   $("noticeForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const content = $("noticeContentInput").value.trim();
@@ -1693,8 +1718,8 @@ function bindMatches() {
         renderMatchTables([]);
         return;
       }
-      const matches = await loadMatchesForDate(selectedSession.date);
-      renderMatchTables(groupMatchesToRounds(matches));
+      const plan = await loadMatchesForDate(selectedSession.date);
+      renderMatchTables(groupMatchesToRounds(plan.matches, plan.waitingByRound));
     } catch (error) {
       renderMatchTables([]);
       setMessage("matchMessage", error.message, true);
