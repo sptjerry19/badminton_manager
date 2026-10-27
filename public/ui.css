@@ -889,9 +889,27 @@ button.badge {
   display: flex;
   align-items: center;
   gap: 12px;
+  width: 100%;
   margin: 14px 0;
-  padding-top: 14px;
+  padding: 12px 8px 0;
+  border: 0;
   border-top: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0 0 12px 12px;
+}
+
+button.attendance:hover,
+button.attendance:focus-visible {
+  background: var(--surface-2);
+}
+
+.attendance > .icon {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
 }
 
 .avatar-stack {
@@ -916,8 +934,10 @@ button.badge {
   font-weight: 800;
 }
 
-.attendance > div:last-child {
+.attendance-meta {
   display: flex;
+  min-width: 0;
+  flex: 1;
   flex-direction: column;
 }
 
@@ -931,16 +951,72 @@ button.badge {
   font-size: 12px;
 }
 
+.session-detail-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 8px;
+}
+
+.session-detail-group h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.session-detail-group h3 small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#sessionDetailModal .member-count {
+  margin-top: 0;
+}
+
 .vote-actions {
   display: grid;
   grid-template-columns: 1.3fr 1fr;
   gap: 8px;
 }
 
-.vote-actions .btn.is-picked-no {
-  background: var(--red-soft);
-  color: var(--red);
-  border: 1px solid color-mix(in srgb, var(--red) 25%, transparent);
+.vote-actions .vote-yes,
+.vote-actions .vote-no {
+  border: 1px solid transparent;
+}
+
+.vote-actions .vote-yes {
+  background: var(--green-50);
+  color: var(--green-ink);
+  border-color: var(--green-100);
+}
+
+.vote-actions .vote-yes.is-picked {
+  background: var(--green-700);
+  color: #fff;
+  border-color: var(--green-700);
+  box-shadow: 0 6px 16px #12804b3d;
+}
+
+.vote-actions .vote-no {
+  background: var(--surface-2);
+  color: var(--muted);
+  border-color: var(--line);
+}
+
+.vote-actions .vote-no.is-picked {
+  background: var(--red);
+  color: #fff;
+  border-color: var(--red);
+  box-shadow: 0 6px 16px #da3f4f3d;
+}
+
+.vote-actions .btn.is-dimmed {
+  opacity: 0.42;
+  box-shadow: none;
 }
 
 .guest-row {
