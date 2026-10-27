@@ -1,14 +1,3 @@
-:root {
-  --ink: #111111;
-  --paper: #f7f7f5;
-  --line: #e5e5e0;
-  --muted: #64748b;
-  --clay: #b42318;
-  --ok: #047857;
-  --blue: #1d4ed8;
-  --radius: 10px;
-}
-
 * {
   box-sizing: border-box;
 }

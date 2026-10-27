@@ -50,7 +50,7 @@
             <span><b>Giải</b> nội bộ</span>
           </div>
         </div>
-        <small>Ảnh: Sergei Wing · Unsplash</small>
+        <small>Ảnh nền lưu cục bộ (nguồn: Sergei Wing · Unsplash)</small>
       </div>
 
       <div class="login-panel">
@@ -225,6 +225,7 @@
                 <b id="userNoticeSummary">Thông báo từ nhóm</b>
                 <small id="userNoticeSummaryMeta">Admin gửi thông báo tại đây</small>
               </div>
+              <button id="userNoticeMarkAllBtn" type="button" class="btn btn-ghost btn-sm">Đọc hết</button>
             </div>
             <div id="userNoticeList" class="notification-list"></div>
           </div>
@@ -726,6 +727,22 @@
       <div class="photo-caption">
         <b id="bookingImageTitle">Ảnh đặt sân</b>
         <span id="bookingImageMeta"></span>
+      </div>
+    </div>
+
+    <div id="sessionDetailModal" class="overlay" hidden>
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head">
+          <div>
+            <span class="eyebrow">DANH SÁCH THAM DỰ</span>
+            <h2 id="sessionDetailTitle">Chi tiết buổi chơi</h2>
+            <p id="sessionDetailMeta" class="sheet-sub"></p>
+          </div>
+          <button type="button" class="icon-btn" data-close-modal aria-label="Đóng"><i data-icon="close"></i></button>
+        </div>
+        <div id="sessionDetailCounts" class="member-count"></div>
+        <div id="sessionDetailMembers" class="session-detail-groups"></div>
       </div>
     </div>
 

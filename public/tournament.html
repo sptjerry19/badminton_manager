@@ -7,6 +7,15 @@
     <link rel="icon" href="/favicon.ico?v=3" sizes="32x32" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#12804b" />
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("theme");
+          var dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (_e) {}
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -21,6 +30,9 @@
       <section id="loginView" class="auth">
         <div class="bezel">
           <div class="core stack">
+            <div class="row" style="justify-content: flex-end">
+              <button type="button" class="btn ghost theme-toggle-btn" data-theme-toggle aria-label="Đổi giao diện">Giao diện</button>
+            </div>
             <p class="eyebrow">Tournament</p>
             <h1>Giải đấu 3 nội dung</h1>
             <p class="lead">Đôi nam · Đôi nam nữ · Đôi nữ. Đăng ký hoặc đăng nhập để tham dự.</p>
@@ -70,7 +82,10 @@
             <p class="eyebrow">Giải đấu</p>
             <h2 id="identityTitle">...</h2>
           </div>
-          <button id="logoutBtn" class="btn ghost" type="button">Đăng xuất</button>
+          <div class="row">
+            <button type="button" class="btn ghost theme-toggle-btn" data-theme-toggle aria-label="Đổi giao diện">Giao diện</button>
+            <button id="logoutBtn" class="btn ghost" type="button">Đăng xuất</button>
+          </div>
         </div>
 
         <div id="profileGate" class="bezel" hidden>

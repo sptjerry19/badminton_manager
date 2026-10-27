@@ -10,6 +10,7 @@ const state = {
   loginAuthMode: "login",
   activeVote: null,
   upcomingSessionId: "",
+  sessionDetailId: "",
   guestSessionId: "",
   userBasicBalance: 0,
   notices: [],
@@ -516,24 +517,60 @@ function renderUserVoteList(sessions) {
               ${session.note ? `<p class="note">${escapeHtmlText(session.note)}</p>` : ""}
             </div>
           </div>
-          <div class="attendance">
+          <button type="button" class="attendance" data-action="open-session-detail" data-session="${sid}">
             <div class="avatar-stack">
               ${shown.map((member) => avatar(member.name, "sm")).join("")}
               ${more > 0 ? `<span class="more-avatar">+${more}</span>` : ""}
             </div>
-            <div>
+            <div class="attendance-meta">
               <b>${counts.yes.length} tham gia</b>
               <small>${counts.membersYes} thành viên + ${counts.guestsYes} giao lưu</small>
             </div>
-          </div>
+            ${icon("chevron", 16)}
+          </button>
           <div class="vote-actions">
-            <button type="button" class="btn ${myStatus === "yes" ? "btn-primary" : "btn-secondary"}" data-action="user-respond" data-status="yes" data-session="${sid}">${icon("check")}<span>Có tham gia</span></button>
-            <button type="button" class="btn btn-ghost${myStatus === "no" ? " is-picked-no" : ""}" data-action="user-respond" data-status="no" data-session="${sid}">${icon("close")}<span>Không</span></button>
+            <button type="button" class="btn vote-yes${myStatus === "yes" ? " is-picked" : ""}${myStatus === "no" ? " is-dimmed" : ""}" data-action="user-respond" data-status="yes" data-session="${sid}" aria-pressed="${myStatus === "yes"}">${icon("check")}<span>${myStatus === "yes" ? "Đã tham gia" : "Có tham gia"}</span></button>
+            <button type="button" class="btn vote-no${myStatus === "no" ? " is-picked" : ""}${myStatus === "yes" ? " is-dimmed" : ""}" data-action="user-respond" data-status="no" data-session="${sid}" aria-pressed="${myStatus === "no"}">${icon("close")}<span>${myStatus === "no" ? "Không tham gia" : "Không"}</span></button>
           </div>
         </div>
       </article>`;
     })
     .join("");
+}
+
+function openUserSessionDetail(sessionId) {
+  const session = state.voteSessions.find((item) => item.sessionId === sessionId);
+  const modal = $("sessionDetailModal");
+  if (!session || !modal) return;
+  state.sessionDetailId = session.sessionId;
+  const bits = dateBits(session.date);
+  const counts = voteCounts(session);
+  const groups = [
+    { key: "yes", title: "Tham gia", items: counts.members.filter((member) => member.status === "yes") },
+    { key: "pending", title: "Chưa trả lời", items: counts.members.filter((member) => member.status === "pending") },
+    { key: "no", title: "Không tham gia", items: counts.members.filter((member) => member.status === "no") }
+  ];
+  $("sessionDetailTitle").textContent = `${session.time || "Chưa có giờ"} · ${bits.weekday}`;
+  $("sessionDetailMeta").textContent = [bits.short, session.location].filter(Boolean).join(" · ");
+  $("sessionDetailCounts").innerHTML = `
+    <span><b>${counts.stats.yes || 0}</b> tham gia</span>
+    <span>${counts.membersYes} thành viên</span>
+    <span>${counts.guestsYes} giao lưu</span>
+    <span>${counts.stats.no || 0} không · ${counts.stats.pending || 0} chưa trả lời</span>
+  `;
+  $("sessionDetailMembers").innerHTML = groups
+    .map((group) => {
+      const chips = group.items
+        .sort((a, b) => a.name.localeCompare(b.name, "vi"))
+        .map((member) => adminMemberChip(session, member, false))
+        .join("");
+      return `<section class="session-detail-group">
+        <h3>${escapeHtmlText(group.title)} <small>${group.items.length}</small></h3>
+        <div class="member-chips">${chips || `<span class="hint-line">Không có ai.</span>`}</div>
+      </section>`;
+    })
+    .join("");
+  toggleModal("sessionDetailModal", true);
 }
 
 function openBookingImage(session) {
@@ -818,12 +855,13 @@ function renderMatchTables(rounds = []) {
     .join("");
 }
 
-function groupMatchesToRounds(matches = []) {
+function groupMatchesToRounds(matches = [], waitingByRound = {}) {
   const map = new Map();
   matches.forEach((match) => {
     const key = Number(match.round || 1);
     if (!map.has(key)) map.set(key, []);
     map.get(key).push({
+      id: match.id,
       teamA: match.teamA || [],
       teamB: match.teamB || [],
       levelDiff: Number(match.levelDiff || 0)
@@ -834,14 +872,17 @@ function groupMatchesToRounds(matches = []) {
     .map(([round, matchRows]) => ({
       round,
       matches: matchRows,
-      waiting: []
+      waiting: waitingByRound[round] || waitingByRound[String(round)] || []
     }));
 }
 
 async function loadMatchesForDate(date) {
-  if (!date) return [];
+  if (!date) return { matches: [], waitingByRound: {} };
   const data = await api(`/api/matches?date=${encodeURIComponent(date)}`);
-  return data.matches || [];
+  return {
+    matches: data.matches || [],
+    waitingByRound: data.waitingByRound || {}
+  };
 }
 
 // ---------- Báo cáo ----------
@@ -939,8 +980,24 @@ function markNoticesSeen() {
   try {
     localStorage.setItem(noticeSeenKey(), newest);
   } catch (_error) {}
+  refreshUserNoticeChrome();
+}
+
+function refreshUserNoticeChrome() {
+  const seenAt = readNoticeSeen();
+  const unread = countUnread(state.notices, seenAt);
   const dot = $("userNoticeDot");
-  if (dot) dot.hidden = true;
+  if (dot) dot.hidden = !unread;
+  if ($("userNoticeSummary")) {
+    $("userNoticeSummary").textContent = unread ? `Bạn có ${unread} thông báo mới` : "Không có thông báo mới";
+  }
+  if ($("userNoticeSummaryMeta")) {
+    $("userNoticeSummaryMeta").textContent = state.notices[0]
+      ? `Cập nhật gần nhất ${relativeTime(state.notices[0].createdAt).toLowerCase()}`
+      : "Admin gửi thông báo tại đây";
+  }
+  const markAllBtn = $("userNoticeMarkAllBtn");
+  if (markAllBtn) markAllBtn.disabled = !unread;
 }
 
 function countUnread(notices, seenAt) {
@@ -976,14 +1033,12 @@ async function loadNotices(containerId, options = {}) {
   state.notices = data.notices || [];
   if (containerId === "userNoticeList") {
     const seenAt = readNoticeSeen();
-    const unread = countUnread(state.notices, seenAt);
-    $("userNoticeDot").hidden = !unread;
-    $("userNoticeSummary").textContent = unread ? `Bạn có ${unread} thông báo mới` : "Không có thông báo mới";
-    $("userNoticeSummaryMeta").textContent = state.notices[0]
-      ? `Cập nhật gần nhất ${relativeTime(state.notices[0].createdAt).toLowerCase()}`
-      : "Admin gửi thông báo tại đây";
+    refreshUserNoticeChrome();
     renderNoticeList(containerId, state.notices, seenAt);
-    if (state.activeUserTab === "notices") markNoticesSeen();
+    if (state.activeUserTab === "notices") {
+      markNoticesSeen();
+      renderNoticeList(containerId, state.notices, readNoticeSeen());
+    }
     return;
   }
   renderNoticeList(containerId, state.notices);
@@ -1083,8 +1138,8 @@ async function loadAdminDashboard() {
   const selectedSessionId = $("matchSessionSelect")?.value || "";
   const selectedSession = state.sessions.find((item) => item.sessionId === selectedSessionId);
   if (selectedSession?.date) {
-    const matches = await loadMatchesForDate(selectedSession.date);
-    renderMatchTables(groupMatchesToRounds(matches));
+    const plan = await loadMatchesForDate(selectedSession.date);
+    renderMatchTables(groupMatchesToRounds(plan.matches, plan.waitingByRound));
   } else {
     renderMatchTables([]);
   }
@@ -1100,6 +1155,9 @@ async function loadUserDashboard() {
   activateUserTab(state.activeUserTab || "home");
   renderUpcoming(data.upcomingSession);
   renderUserVoteList(state.voteSessions);
+  if (state.sessionDetailId && $("sessionDetailModal") && !$("sessionDetailModal").hidden) {
+    openUserSessionDetail(state.sessionDetailId);
+  }
   await loadUserBasicLedger(data.auth?.memberName || "");
   if (state.activeUserTab !== "notices") loadNotices("userNoticeList", { loading: false }).catch(() => {});
   if (data.activeVote) {
@@ -1276,6 +1334,13 @@ function bindTabs() {
 }
 
 function bindNotices() {
+  $("userNoticeMarkAllBtn")?.addEventListener("click", () => {
+    if (!state.notices.length) return;
+    markNoticesSeen();
+    renderNoticeList("userNoticeList", state.notices, readNoticeSeen());
+    showToast("Đã đánh dấu đọc hết thông báo");
+  });
+
   $("noticeForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const content = $("noticeContentInput").value.trim();
@@ -1648,6 +1713,10 @@ function bindVotes() {
       openBookingImage(state.voteSessions.find((item) => item.sessionId === sessionId));
       return;
     }
+    if (action === "open-session-detail" && sessionId) {
+      openUserSessionDetail(sessionId);
+      return;
+    }
     if (action === "user-respond" && sessionId) {
       button.disabled = true;
       await submitAttendance(button.dataset.status, sessionId);
@@ -1693,8 +1762,8 @@ function bindMatches() {
         renderMatchTables([]);
         return;
       }
-      const matches = await loadMatchesForDate(selectedSession.date);
-      renderMatchTables(groupMatchesToRounds(matches));
+      const plan = await loadMatchesForDate(selectedSession.date);
+      renderMatchTables(groupMatchesToRounds(plan.matches, plan.waitingByRound));
     } catch (error) {
       renderMatchTables([]);
       setMessage("matchMessage", error.message, true);
