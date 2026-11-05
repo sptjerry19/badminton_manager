@@ -34,7 +34,7 @@ test("Startup chỉ đọc trạng thái; database chưa migrate không bị t�
 });
 test("Database mới migrate đầy đủ, không tự thêm thành viên mẫu",async t=>{
   const pool=await fixture(t);
-  assert.equal((await runMigrations(pool)).applied.length,3);
+  assert.equal((await runMigrations(pool)).applied.length,loadMigrations().length);
   assert.equal((await pool.query("SELECT count(*)::int AS count FROM members")).rows[0].count,0);
   assert.equal((await pool.query("SELECT count(*)::int AS count FROM tournament_events")).rows[0].count,3);
   const client=await pool.connect();
@@ -47,9 +47,9 @@ test("Database mới migrate đầy đủ, không tự thêm thành viên mẫu"
 test("Chạy migration lặp hoặc đồng thời chỉ ghi mỗi phiên bản một lần",async t=>{
   const pool=await fixture(t);
   const runs=await Promise.all([runMigrations(pool),runMigrations(pool)]);
-  assert.equal(runs.reduce((sum,r)=>sum+r.applied.length,0),3);
+  assert.equal(runs.reduce((sum,r)=>sum+r.applied.length,0),loadMigrations().length);
   assert.deepEqual((await runMigrations(pool)).applied,[]);
-  assert.equal((await migrationStatus(pool)).applied.length,3);
+  assert.equal((await migrationStatus(pool)).applied.length,loadMigrations().length);
 });
 test("Nâng cấp schema cũ giữ nguyên thành viên, công nợ, ngày trả và cấu hình",async t=>{
   const pool=await fixture(t);

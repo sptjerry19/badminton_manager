@@ -315,7 +315,7 @@ app.get("/api/bootstrap", requireAuth, async (req, res) => {
       auth: { role, memberName },
       upcomingSession,
       activeVote,
-      todaysMatches,
+      todaysMatches: todaysMatches.matches,
       voteSessions,
     });
   } catch (error) {
@@ -892,8 +892,12 @@ app.get("/api/matches", requireAuth, async (req, res) => {
     const date =
       String(req.query.date || "").trim() ||
       businessTime.dateKey();
-    const matches = await getGeneratedMatchesByDate(date);
-    return res.json({ date, matches });
+    const plan = await getGeneratedMatchesByDate(date);
+    return res.json({
+      date,
+      matches: plan.matches,
+      waitingByRound: plan.waitingByRound,
+    });
   } catch (error) {
     return res.status(400).json({ message: error.message });
   }

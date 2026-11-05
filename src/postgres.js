@@ -1739,9 +1739,18 @@ async function replaceGeneratedMatchesForDate(sessionId, matchDate, rounds) {
   if (!date) throw new Error("Thiếu matchDate để lưu lịch trận.");
 
   await query(`DELETE FROM generated_matches WHERE match_date = $1`, [date]);
+  await query(`DELETE FROM generated_match_round_waiting WHERE match_date = $1`, [date]);
   let inserted = 0;
   for (const roundItem of rounds || []) {
     const roundNo = Number(roundItem.round || 1);
+    const waitingNames = Array.isArray(roundItem.waiting) ? roundItem.waiting : [];
+    await query(
+      `
+      INSERT INTO generated_match_round_waiting(match_date, round, waiting_json, updated_at)
+      VALUES ($1, $2, $3::jsonb, $4)
+      `,
+      [date, roundNo, JSON.stringify(waitingNames), nowIso()],
+    );
     const matches = Array.isArray(roundItem.matches) ? roundItem.matches : [];
     for (let i = 0; i < matches.length; i += 1) {
       const match = matches[i];
@@ -1782,17 +1791,34 @@ async function replaceGeneratedMatchesForDate(sessionId, matchDate, rounds) {
 
 async function getGeneratedMatchesByDate(matchDate) {
   const date = String(matchDate || "").trim();
-  if (!date) return [];
-  const result = await query(
-    `
-    SELECT *
-    FROM generated_matches
-    WHERE match_date = $1
-    ORDER BY round ASC, match_no ASC
-    `,
-    [date],
-  );
-  return result.rows.map((row) => ({
+  if (!date) return { matches: [], waitingByRound: {} };
+  const [result, waitingResult] = await Promise.all([
+    query(
+      `
+      SELECT *
+      FROM generated_matches
+      WHERE match_date = $1
+      ORDER BY round ASC, match_no ASC
+      `,
+      [date],
+    ),
+    query(
+      `
+      SELECT round, waiting_json
+      FROM generated_match_round_waiting
+      WHERE match_date = $1
+      ORDER BY round ASC
+      `,
+      [date],
+    ),
+  ]);
+  const waitingByRound = {};
+  waitingResult.rows.forEach((row) => {
+    const roundNo = Number(row.round || 1);
+    waitingByRound[roundNo] = Array.isArray(row.waiting_json) ? row.waiting_json : [];
+  });
+  const matches = result.rows.map((row) => ({
+    id: Number(row.id),
     matchDate: row.match_date,
     sessionId: row.session_id,
     round: Number(row.round || 1),
@@ -1805,6 +1831,7 @@ async function getGeneratedMatchesByDate(matchDate) {
     status: row.status || "scheduled",
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : "",
   }));
+  return { matches, waitingByRound };
 }
 
 async function getMonthlyReport(month) {
@@ -2121,6 +2148,7 @@ async function replaceAllDataFromSnapshot(snapshot) {
   try {
     await client.query("BEGIN");
     await client.query("DELETE FROM generated_matches");
+    await client.query("DELETE FROM generated_match_round_waiting");
     await client.query("DELETE FROM birthday_drink_orders");
     await client.query("DELETE FROM birthday_event_drinks");
     await client.query("DELETE FROM birthday_event_brands");

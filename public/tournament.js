@@ -425,7 +425,33 @@ async function openPartnerModal(eventId) {
   }
 }
 
+function isDarkTheme() {
+  return document.documentElement.classList.contains("dark");
+}
+
+function paintThemeToggleButtons() {
+  document.querySelectorAll("[data-theme-toggle]").forEach((btn) => {
+    btn.textContent = isDarkTheme() ? "Sáng" : "Tối";
+  });
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", isDarkTheme() ? "#09160f" : "#12804b");
+}
+
+function toggleThemeMode() {
+  const dark = !isDarkTheme();
+  document.documentElement.classList.toggle("dark", dark);
+  try {
+    localStorage.setItem("theme", dark ? "dark" : "light");
+  } catch (_error) {}
+  paintThemeToggleButtons();
+}
+
 function bindEvents() {
+  document.querySelectorAll("[data-theme-toggle]").forEach((btn) => {
+    btn.addEventListener("click", toggleThemeMode);
+  });
+  paintThemeToggleButtons();
+
   document.querySelectorAll("#authModeSegment .segment-btn").forEach((btn) => {
     btn.addEventListener("click", () => setAuthMode(btn.dataset.mode));
   });

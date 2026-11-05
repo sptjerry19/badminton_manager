@@ -18,6 +18,8 @@ Startup chỉ đọc schema_migrations và kiểm checksum. Database thiếu mig
 - 0002: phân bổ thanh toán, giao dịch hoàn và mã chống gửi trùng của bước 3.
 - 0003: giá trị mặc định cho settings và nội dung giải đấu bắt buộc; ON CONFLICT DO NOTHING giữ cấu hình đã chỉnh. Không tạo tài khoản/thành viên mẫu.
 
+- 0004: lưu ngồi chờ theo vòng, giữ tính năng đã có trên main mà không đưa DDL trở lại startup.
+
 schema_migrations lưu tên file, SHA-256 và ngày áp dụng. Checksum chuẩn hóa CRLF/LF để không báo sai khi checkout trên Windows. Không sửa/xóa file đã được áp dụng; thêm file phiên bản lớn hơn. Các file SQL phải được đóng gói cùng backend; vercel.json đưa migrations/** vào function bundle.
 
 Mỗi đợt migration dùng một transaction và advisory lock để ngăn hai tiến trình chạy chồng. Nếu một câu lệnh lỗi, cả đợt và bản ghi phiên bản rollback. Không nuốt lỗi ALTER TABLE. Ràng buộc trên dữ liệu cũ được kiểm tra; nếu có hàng mồ côi, migration từ chối và giữ nguyên dữ liệu để đối soát, không tự xóa/sửa. Thời gian chờ khóa 15 giây, timeout mỗi statement 120 giây.

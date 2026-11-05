@@ -538,6 +538,12 @@ test("API báo cáo chỉ cho admin và trả tháng được yêu cầu", async
     assert.equal(Object.hasOwn(await personal.json(), "monthlyReport"), false);
     const admin = await fetch(base + "/api/basic", {headers:{cookie:adminCookie}});
     assert.equal((await admin.json()).monthlyReport.timeZone, "Asia/Ho_Chi_Minh");
+    const matches = await fetch(base + "/api/matches?date=2026-11-05", {headers:{cookie:adminCookie}});
+    const plan = await matches.json();
+    assert.ok(Array.isArray(plan.matches));
+    assert.equal(typeof plan.waitingByRound,"object");
+    const bootstrap = await fetch(base + "/api/bootstrap", {headers:{cookie:userCookie}});
+    assert.ok(Array.isArray((await bootstrap.json()).todaysMatches));
   } finally {
     server.closeAllConnections();
     await new Promise(resolve => server.close(resolve));
@@ -593,4 +599,23 @@ test("Buổi tiền sân vẫn kiểm tra và giữ liên kết vote sau khi tá
   const vote = await db.createSession({date:"2026-11-05",time:"18:00"});
   const created = await session({voteSessionId:vote.sessionId});
   assert.equal(created.voteSessionId, vote.sessionId);
+});
+
+test("Giữ ID trận và ngồi chờ theo vòng sau khi tích hợp main", async () => {
+  const date = "2099-01-01";
+  await db.replaceGeneratedMatchesForDate("test-vote", date, [
+    {round:1, waiting:["Khách chờ"], matches:[{teamA:[{name:"An"}],teamB:[{name:"Bình"}],courtNo:1}]},
+    {round:2, waiting:["An"], matches:[]},
+  ]);
+  const saved = await db.getGeneratedMatchesByDate(date);
+  assert.equal(saved.matches.length,1);
+  assert.ok(Number.isInteger(saved.matches[0].id) && saved.matches[0].id > 0);
+  assert.deepEqual(saved.waitingByRound[1],["Khách chờ"]);
+  assert.deepEqual(saved.waitingByRound[2],["An"]);
+  await db.replaceGeneratedMatchesForDate("test-vote", date, [
+    {round:2, waiting:["Bình"], matches:[]},
+  ]);
+  const replaced = await db.getGeneratedMatchesByDate(date);
+  assert.equal(replaced.matches.length,0);
+  assert.deepEqual(replaced.waitingByRound,{2:["Bình"]});
 });

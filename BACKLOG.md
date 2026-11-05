@@ -63,8 +63,8 @@ Các mục tiếp theo là tính năng/UI chưa hoàn tất, không được coi
 - [ ] Xem trước điểm: "Đội 1 +20 · Đội 2 −5".
 - [ ] Trạng thái trận Chưa đấu / Đã có kết quả, nút "Sửa kết quả" / hủy kết quả.
 - [ ] Toast "Đã lưu kết quả · BXH được cộng điểm".
-- [ ] Bổ sung `id` vào response từng trận của GET `/api/matches`: DB đã có `generated_matches.id`, nhưng mapper hiện chưa trả trường này. Chưa có kết quả / điểm BXH cho trận thường.
-- [ ] Lưu và tải lại danh sách "Ngồi chờ" theo vòng: hiện Generate có `waiting`, nhưng schema chưa có `generated_match_round_waiting`, GET `/api/matches` chưa có `waitingByRound` và client dựng lại `waiting: []`.
+- [x] `generated_matches.id` và ID từng trận trong GET `/api/matches`: đã tích hợp cập nhật mới nhất từ main. Chưa có kết quả / điểm BXH cho trận thường.
+- [x] Lưu và tải lại danh sách "Ngồi chờ" theo vòng: đã tích hợp cập nhật mới nhất từ main; bảng `generated_match_round_waiting` nằm trong migration 0004, API trả `waitingByRound`.
 
 ## 3. Hồ sơ điểm cá nhân 🔴 (phụ thuộc mục 1–2)
 
