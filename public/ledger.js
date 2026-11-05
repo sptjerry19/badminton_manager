@@ -7,6 +7,7 @@
     members: [],
     sessions: [],
     credits: new Map(),
+    monthlyReport: null,
     selected: new Set(),
     guests: [],
     voteSessionId: "",
@@ -50,10 +51,7 @@
   }
 
   function localToday() {
-    const now = new Date();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    return `${now.getFullYear()}-${month}-${day}`;
+    return window.BusinessTime.dateKey();
   }
 
   function equalShares(total, count) {
@@ -391,7 +389,7 @@
           </div>
           <div class="kpi success">
             <span>${icon("check")}</span>
-            <small>ĐÃ THU THÁNG NÀY</small>
+            <small title="Tiền sân thu mới trừ khoản đảo thanh toán trong tháng, theo giờ Việt Nam">THU TIỀN SÂN RÒNG</small>
             <strong data-kpi-paid>0đ</strong>
             <em data-kpi-paid-meta></em>
           </div>
@@ -486,20 +484,18 @@
         ? `${debtors} người còn nợ`
         : "Đã thu đủ.";
 
-    const monthKey = localToday().slice(0, 7);
-    let paidMonth = 0;
-    let paidCount = 0;
-    ledger.sessions
-      .filter((session) => String(session.date || "").startsWith(monthKey))
-      .forEach((session) => {
-        (session.shares || []).forEach((share) => {
-          if (!share.paid) return;
-          paidMonth += Number(share.shareAmount) || 0;
-          paidCount += 1;
-        });
-      });
-    q(root, "[data-kpi-paid]").textContent = money(paidMonth);
-    q(root, "[data-kpi-paid-meta]").textContent = `${paidCount} phần đã trả trong tháng`;
+    const report = ledger.monthlyReport;
+    q(root, "[data-kpi-paid]").textContent = report ? money(report.netCashReceived) : "—";
+    const details = report
+      ? [
+          `Tháng ${report.month} · ${report.settlementCount} phần thanh toán`,
+          `Thu mới ${money(report.cashReceived)} · đảo ${money(report.cashReversed)}`,
+          `Dùng tiền dư ${money(report.creditUsed)} · hoàn tiền dư ${money(report.creditRestored)}`
+        ]
+      : ["Chưa tải được báo cáo thu tiền."];
+    if (report?.legacyPaidCount) details.push(`${report.legacyPaidCount} phần cũ (${money(report.legacyPaidAmount)}) chưa rõ nguồn tiền`);
+    if (report?.undatedLegacyPaidCount) details.push(`${report.undatedLegacyPaidCount} phần cũ chưa rõ ngày trả`);
+    q(root, "[data-kpi-paid-meta]").textContent = details.join(" · ");
 
     const credits = [...ledger.credits.values()].filter((value) => value > 0);
     q(root, "[data-kpi-credit]").textContent = money(credits.reduce((sum, value) => sum + value, 0));
@@ -711,15 +707,11 @@
       if (status) {
         status.disabled = true;
         try {
-          const data = await api(`/api/basic/shares/${status.dataset.share}`, {
+          await api(`/api/basic/shares/${status.dataset.share}`, {
             method: "PATCH",
             body: { paid: status.dataset.paid !== "true" }
           });
-          ledger.sessions.forEach((session) => {
-            const share = (session.shares || []).find((item) => item.id === status.dataset.share);
-            if (share) Object.assign(share, data.share);
-          });
-          paintLedger();
+          await load();
           ledger.onChange?.({ type: "paid" });
         } catch (error) {
           status.disabled = false;
@@ -770,6 +762,7 @@
     ledger.memberName = data.memberName || "";
     ledger.members = Array.isArray(data.members) ? data.members : [];
     ledger.sessions = Array.isArray(data.sessions) ? data.sessions : [];
+    ledger.monthlyReport = data.monthlyReport || null;
     ledger.credits = new Map((data.credits || []).map((item) => [item.memberId, Number(item.balance) || 0]));
     paintMembers();
     paintLedger();

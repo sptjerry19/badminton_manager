@@ -1,4 +1,4 @@
-# Backlog: các mục trong bản demo UI/UX chưa làm được
+# Backlog: nợ còn mở và tính năng sản phẩm
 
 Bản demo tham chiếu: https://boho-tarot-07163411.figma.site/
 
@@ -7,6 +7,37 @@ Giao diện đã được làm lại theo demo (token màu, font Be Vietnam Pro,
 Ký hiệu: 🔴 cần backend mới · 🟡 cần mở rộng API hoặc DB · 🟢 chỉ cần frontend
 
 ---
+
+## Trạng thái đợt xử lý nợ kỹ thuật — 2026-11-05
+
+Các mục dưới đây đã được triển khai trong mã và kiểm chứng; chưa đồng nghĩa đã rollout production:
+
+- [x] Backup Postgres đầy đủ, restore vào DB riêng và đối chiếu dữ liệu.
+- [x] Bộ test tự động trên Docker riêng, bao gồm cạnh tranh ghi tiền và rollback.
+- [x] Transaction/khóa chung, lịch sử phân bổ tiền dư, hoàn tác và chống gửi trùng.
+- [x] Báo cáo theo thời điểm thanh toán/đảo và múi giờ Việt Nam; tách tiền dư khỏi thu mới.
+- [x] Migration có phiên bản/checksum, seed mẫu riêng, kiểm tra cấu hình và xác minh TLS.
+- [x] Tách module sổ tiền, tiền dư và báo cáo; giữ API facade và chung ngữ cảnh transaction; cập nhật tài liệu.
+
+### Công việc vận hành còn mở
+
+- [ ] Cấu hình lịch backup, kho lưu mã hóa ngoài máy, retention và lịch thử restore định kỳ.
+- [ ] Đối soát các khoản cũ thiếu ngày trả hoặc liên kết sử dụng tiền dư.
+- [ ] Kiểm tra secret/quyền/CA của production, chạy migration trên bản restore riêng và thực hiện rollout có kiểm chứng.
+- [ ] Đặt lịch dọn phiên hết hạn bằng db:prune-sessions.
+
+### Nợ kỹ thuật tiếp theo, ngoài đợt đã hoàn thành
+
+- [ ] Phân trang và giới hạn truy vấn sổ tiền khi dữ liệu lớn; hiện vẫn tải toàn bộ lịch sử.
+- [ ] Mã yêu cầu đang chờ của form nạp/trừ chưa được giữ qua reload; client cũ không gửi requestId chưa có bảo vệ retry.
+- [ ] Công cụ migrate-from-sheets chỉ xử lý dữ liệu cũ, không phải khôi phục đầy đủ; cần thay thế/giới hạn trước khi dùng với dữ liệu tài chính mới.
+- [ ] Các miền thành viên/vote/snapshot cũ trong src/postgres.js và giải đấu còn có thể tách tiếp khi cần, với test bảo vệ.
+
+Luồng xác thực thành viên được loại khỏi đợt này theo yêu cầu. Hướng dẫn hiện tại: [README](README.md), [ranh giới module](docs/architecture.md), [vận hành DB](docs/database-operations.md).
+
+## Tính năng sản phẩm còn thiếu so với demo
+
+Các mục tiếp theo là tính năng/UI chưa hoàn tất, không được coi là đã làm xong chỉ vì đợt nợ kỹ thuật đã hoàn thành.
 
 ## 1. Bảng xếp hạng thành viên (BXH theo điểm) 🔴
 
@@ -32,8 +63,8 @@ Ký hiệu: 🔴 cần backend mới · 🟡 cần mở rộng API hoặc DB · 
 - [ ] Xem trước điểm: "Đội 1 +20 · Đội 2 −5".
 - [ ] Trạng thái trận Chưa đấu / Đã có kết quả, nút "Sửa kết quả" / hủy kết quả.
 - [ ] Toast "Đã lưu kết quả · BXH được cộng điểm".
-- [ ] `generated_matches` hiện chỉ lưu đội và level; cần thêm id ổn định cho từng trận để gắn kết quả.
-- [ ] Danh sách "Ngồi chờ" khi load lại theo ngày đang rỗng (API `/api/matches` không trả `waiting`). Cần lưu kèm khi generate.
+- [ ] Bổ sung `id` vào response từng trận của GET `/api/matches`: DB đã có `generated_matches.id`, nhưng mapper hiện chưa trả trường này. Chưa có kết quả / điểm BXH cho trận thường.
+- [ ] Lưu và tải lại danh sách "Ngồi chờ" theo vòng: hiện Generate có `waiting`, nhưng schema chưa có `generated_match_round_waiting`, GET `/api/matches` chưa có `waitingByRound` và client dựng lại `waiting: []`.
 
 ## 3. Hồ sơ điểm cá nhân 🔴 (phụ thuộc mục 1–2)
 
@@ -56,17 +87,17 @@ Ký hiệu: 🔴 cần backend mới · 🟡 cần mở rộng API hoặc DB · 
 
 ## 5. Sổ nợ / Nhập tiền 🟡
 
-- [ ] Nút **"Hoàn tác"** sau khi bấm "Đã hoàn thành" cho một người (chưa có API hoàn tác tất toán).
+- [ ] Nút hoàn tác toàn bộ lần tất toán theo người. Hiện đã có PATCH `/api/basic/shares/:shareId` với `paid: false` để hoàn tác từng phần và ghi đối ứng; chưa có API/UI hoàn tác hàng loạt theo người. Khoản cũ thiếu phân bổ phải đối soát.
 - [ ] Nút **"Xuất báo cáo"** ở đầu trang Sổ nợ (demo có; báo cáo CSV hiện chỉ có cho dữ liệu cũ ở Công cụ).
 - [ ] KPI "Đã thu tháng này **↑ 12% so tháng trước**": chưa so sánh với tháng trước.
-- [ ] KPI "Đã thu tháng này" hiện tính theo **ngày buổi chơi** thuộc tháng này, không theo ngày bấm đã trả (chưa lưu thời điểm thanh toán của từng phần).
-- [ ] Demo làm tròn "mỗi người trả" lên 1.000đ. Hệ thống hiện chia chính xác đến đồng (giữ logic cũ). Cần quyết định có làm tròn không.
+- [x] KPI đã đổi thành **Thu tiền sân ròng**, theo thời điểm thanh toán/đảo và giờ Việt Nam; tiền dư dùng/hoàn và các khoản cũ thiếu thông tin được báo riêng. Có `paid_at` và lịch sử phân bổ, không suy đoán ngày cho khoản cũ.
+- [ ] Quyết định có làm tròn mỗi người lên 1.000đ theo demo không. Hiện sổ tiền sân chia đến đồng và phân bổ phần dư để tổng các phần bằng tổng chi.
 - [ ] Sửa buổi đã lưu (hiện chỉ xóa rồi nhập lại).
 
 ## 6. Thông báo 🟡
 
 - [ ] Trạng thái **đã đọc / chưa đọc** đang lưu ở `localStorage` theo thiết bị. Muốn đồng bộ nhiều thiết bị thì cần bảng `notice_reads`.
-- [ ] Nút "Đọc hết" (demo có).
+- [x] Nút "Đọc hết" (tab Thông báo user).
 - [ ] Phân loại thông báo theo icon (lịch chơi / nhắc nợ / kết quả trận / giải đấu). Hiện mọi thông báo dùng icon chuông vì bảng `notices` chỉ có nội dung.
 - [ ] Thông báo tự động "Kết quả trận đã cập nhật · +20 điểm" (phụ thuộc mục 2).
 
@@ -79,14 +110,14 @@ Ký hiệu: 🔴 cần backend mới · 🟡 cần mở rộng API hoặc DB · 
 - [ ] Segmented "Của tôi / Lịch đấu / Bảng giải" phía user theo layout demo.
 - [ ] Card "Cặp đôi của bạn" (avatar đôi, tổng level, Hợp lệ), nút "Chọn đồng đội…" viền nét đứt.
 - [ ] Admin: KPI (VĐV / cặp đôi / trận), card cài đặt dạng toggle, rule tổng level dạng chip.
-- [ ] Trang `/tournament` độc lập chưa có dark mode.
+- [x] Trang `/tournament` độc lập: dark mode (dùng chung `localStorage` theme với app chính).
 
 ## 8. Khác 🟢
 
 - [ ] Trang đăng nhập: demo hiện số liệu thật ("18 thành viên · 42 buổi · 286 trận"). Hiện để chữ tĩnh vì chưa có API thống kê công khai.
-- [ ] Ảnh nền sân cầu ở trang đăng nhập đang lấy từ Unsplash (hotlink). Nên tải về `public/` để chạy được offline (PWA).
+- [x] Ảnh nền đăng nhập: `public/login-court.jpg` (offline/PWA).
 - [ ] Màn **Style guide** (demo có ở Công cụ) chưa đưa vào app.
-- [ ] Tab **"Trận" (Games)** placeholder cũ đã được bỏ khỏi menu admin vì không có chức năng.
+- [x] Tab **"Trận" (Games)** placeholder cũ đã được bỏ khỏi menu admin vì không có chức năng.
 
 ---
 

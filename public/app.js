@@ -266,8 +266,8 @@ function paintUserHeader() {
   const title = $("userHeaderTitle");
   const eyebrow = $("userHeaderEyebrow");
   if (tab === "home") {
-    const now = new Date();
-    eyebrow.textContent = `${WEEKDAYS[now.getDay()]}, ${now.getDate()} tháng ${now.getMonth() + 1}`.toUpperCase();
+    const bits = dateBits(window.BusinessTime.dateKey());
+    eyebrow.textContent = `${bits.weekday}, ${Number(bits.day)} tháng ${bits.month}`.toUpperCase();
     title.textContent = `Xin chào, ${givenName(state.auth?.memberName) || "bạn"}`;
     return;
   }
@@ -917,7 +917,8 @@ function relativeTime(iso) {
     month: "2-digit",
     year: "numeric",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
+    timeZone: window.BusinessTime.timeZone
   }).format(date);
 }
 
@@ -1089,7 +1090,7 @@ async function loadAdminDashboard() {
     renderMatchTables([]);
   }
   const dateInput = $("preDateInput");
-  if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+  if (dateInput && !dateInput.value) dateInput.value = window.BusinessTime.dateKey();
 }
 
 async function loadUserDashboard() {
@@ -1298,38 +1299,56 @@ function bindNotices() {
 }
 
 function bindCredits() {
+  let pendingRequest = null;
+  let saving = false;
   $("creditAmountInput").addEventListener("input", (event) => {
     const digits = String(event.target.value || "").replace(/[^\d]/g, "");
     event.target.value = digits ? formatMoney(Number(digits)) : "";
   });
   $("creditForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (saving) return;
     const amount = Number(String($("creditAmountInput").value || "").replace(/[^\d]/g, ""));
     if (!amount) {
       setMessage("creditMessage", "Nhập số tiền lớn hơn 0.", true);
       return;
     }
+    const payload = {
+      memberId: $("creditMemberSelect").value,
+      amount,
+      direction: $("creditDirectionInput").value || "add",
+      note: $("creditNoteInput").value || ""
+    };
+    const fingerprint = JSON.stringify(payload);
+    if (!pendingRequest || pendingRequest.fingerprint !== fingerprint) {
+      pendingRequest = { fingerprint, requestId: crypto.randomUUID() };
+    }
+    saving = true;
+    const submit = $("creditForm").querySelector('button[type="submit"]');
+    if (submit) submit.disabled = true;
     try {
       const data = await api("/api/credits", {
         method: "POST",
-        body: JSON.stringify({
-          memberId: $("creditMemberSelect").value,
-          amount,
-          direction: $("creditDirectionInput").value || "add",
-          note: $("creditNoteInput").value || ""
-        })
+        body: JSON.stringify({ ...payload, requestId: pendingRequest.requestId })
       });
+      pendingRequest = null;
       $("creditAmountInput").value = "";
       $("creditNoteInput").value = "";
       renderCreditBoard(data);
       setMessage("creditMessage", data.message || "Đã lưu.");
     } catch (error) {
+      // Giữ requestId để lần gửi lại cùng nội dung không ghi tiền hai lần.
       setMessage("creditMessage", error.message, true);
+    } finally {
+      saving = false;
+      if (submit) submit.disabled = false;
     }
   });
 }
 
 function bindTools() {
+  const reportMonth = $("reportMonthInput");
+  if (reportMonth && !reportMonth.value) reportMonth.value = window.BusinessTime.monthKey();
   $("migrateSheetsBtn").addEventListener("click", async () => {
     const ok = window.confirm(
       "Migrate từ Google Sheets sẽ ghi đè dữ liệu hiện có trong Postgres. Bạn có chắc muốn tiếp tục?"
@@ -1515,7 +1534,7 @@ function bindMembers() {
 function bindVotes() {
   $("openCreateVoteBtn").addEventListener("click", () => {
     const dateInput = $("preDateInput");
-    if (!dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+    if (!dateInput.value) dateInput.value = window.BusinessTime.dateKey();
     toggleModal("createVoteModal", true);
   });
 
