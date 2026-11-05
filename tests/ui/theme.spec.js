@@ -23,7 +23,7 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { if (server) await new Promise(resolve => server.close(resolve)); });
 
-async function app(page, { season, mode, role = "user", blockedStorage = false, debt = true } = {}) {
+async function app(page, { season, mode, role = "user", blockedStorage = false, debt = true, schedule = [], scheduleNow, scheduleFailure = false, scheduleOverride = {}, scheduleGate } = {}) {
   const errors = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.addInitScript(({ season, mode, blockedStorage }) => {
@@ -47,6 +47,17 @@ async function app(page, { season, mode, role = "user", blockedStorage = false, 
     if (!url.pathname.startsWith("/api/")) return route.continue();
     let data;
     switch (url.pathname) {
+      case "/api/theme-config":
+        if (scheduleGate) await scheduleGate;
+        const failure = typeof scheduleFailure === "function" ? scheduleFailure() : scheduleFailure;
+        if (failure === "timeout") return;
+        if (failure) return route.abort();
+        data = {
+          version: 1, timeZone: "Asia/Ho_Chi_Minh", configValid: true,
+          serverNow: (typeof scheduleNow === "function" ? scheduleNow() : scheduleNow) || new Date().toISOString(),
+          schedules: typeof schedule === "function" ? schedule() : schedule,
+          ...scheduleOverride,
+        }; break;
       case "/api/tournament/login-options":
       case "/api/login-options": data = { members }; break;
       case "/api/bootstrap":
@@ -176,7 +187,7 @@ test("Stored seasonal themes do not recolor login or admin", async ({ page }) =>
     await expect(page.locator("html")).toHaveAttribute("data-seasonal", "false");
   }
   await page.locator("#adminSection .avatar-button[data-open-account]").click();
-  await expect(page.locator("[data-member-only]")).toBeHidden();
+  await expect(page.locator("[data-member-only]:visible")).toHaveCount(0);
   await page.locator("#logoutBtn").click();
   await expect(page.locator("#loginSection")).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-app-view", "login");
@@ -218,7 +229,7 @@ for (const mode of ["light", "dark"]) {
       await noOverflow(page);
       await preferences(page);
       await noOverflow(page);
-      await expect(page.locator("[data-member-theme-choice]")).toHaveCount(9);
+      await expect(page.locator("[data-member-theme-choice]")).toHaveCount(10);
       await closePreferences(page);
     }
     await page.setViewportSize({ width: 390, height: 844 });
@@ -277,6 +288,9 @@ test("Preferences update across tabs", async ({ page, context }) => {
   });
   await expect(page.locator("html")).toHaveAttribute("data-member-theme", "halloween");
   await expect(page.locator("html")).toHaveClass("dark");
+  await other.evaluate(() => { localStorage.setItem("member-theme", "auto"); });
+  await expect(page.locator("html")).toHaveAttribute("data-theme-selection", "auto");
+  await expect(page.locator("html")).toHaveAttribute("data-member-theme", "default");
 });
 
 test("All theme choices can be reached, persisted and reopened in the compact picker", async ({ page }) => {
@@ -348,4 +362,173 @@ test("Reduced motion is respected by the theme picker", async ({ page }) => {
   }));
   expect(durations.animation).toBe("none");
   expect(durations.transition).toBe("0s");
+});
+
+const novemberSchedule = [
+  { id: "halloween", start: "10-24", end: "11-10" },
+  { id: "teachers-day", start: "11-10", end: "12-01" },
+];
+test.describe("Automatic Vietnam calendar", () => {
+  test.use({ timezoneId: "America/Los_Angeles" });
+
+  test("New visitor follows the Vietnam calendar even with a wrong device date and foreign timezone", async ({ page }) => {
+    await page.clock.setFixedTime(new Date("2035-06-01T00:00:00Z"));
+    const errors = await app(page, { mode: "dark", schedule: novemberSchedule, scheduleNow: "2026-11-09T17:00:00.000Z" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme-selection", "auto");
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "teachers-day");
+    await preferences(page);
+    await expect(page.getByRole("radio", { name: "Tự động theo lịch" })).toBeChecked();
+    await expect(page.locator("[data-theme-schedule-status]")).toContainText("Nhà giáo Việt Nam");
+    await page.screenshot({ path: "test-results/automatic-vietnam-calendar.png", animations: "disabled" });
+    expect(errors).toEqual([]);
+  });
+
+  test("The app waits for initial schedule before revealing the member screen", async ({ page }) => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const opening = app(page, { schedule: novemberSchedule, scheduleNow: "2026-11-15T00:00:00.000Z", scheduleGate: gate });
+    await expect(page.locator("#userSection")).toBeAttached();
+    await expect(page.locator("#appSection")).toBeHidden();
+    release();
+    await opening;
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "teachers-day");
+  });
+
+  test("The page switches at Vietnam midnight without reloading", async ({ page }) => {
+    const start = new Date("2026-11-09T16:59:00Z");
+    await page.clock.install({ time: start });
+    await app(page, { schedule: novemberSchedule, scheduleNow: start.toISOString() });
+    await page.clock.pauseAt("2026-11-09T16:59:10Z");
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "halloween");
+    await page.clock.runFor(61000);
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "teachers-day");
+    await expect(page.locator("html")).toHaveAttribute("data-theme-selection", "auto");
+  });
+
+  test("Manual choice survives midnight and reload; choosing Auto resumes the group calendar", async ({ page }) => {
+    await app(page, { season: "christmas", mode: "light", schedule: novemberSchedule, scheduleNow: "2026-11-15T00:00:00.000Z" });
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "christmas");
+    await page.reload();
+    await expect(page.locator("#userSection")).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "christmas");
+    await preferences(page);
+    await page.getByRole("radio", { name: "Tự động theo lịch" }).check();
+    await closePreferences(page);
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "teachers-day");
+    await page.reload();
+    await expect(page.locator("#userSection")).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-theme-selection", "auto");
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "teachers-day");
+    await expect(page.locator("html")).not.toHaveClass("dark");
+  });
+
+  test("A manual theme is not replaced by a midnight boundary", async ({ page }) => {
+    const start = new Date("2026-11-09T16:59:00Z");
+    await page.clock.install({ time: start });
+    await app(page, { season: "tet", schedule: novemberSchedule, scheduleNow: start.toISOString() });
+    await page.clock.pauseAt("2026-11-09T16:59:10Z");
+    await page.clock.runFor(61000);
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "tet");
+    await preferences(page);
+    await page.getByRole("radio", { name: "Tự động theo lịch" }).check();
+    await closePreferences(page);
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "teachers-day");
+  });
+
+  test("Visible tabs refresh env schedules periodically and preserve manual overrides", async ({ page }) => {
+    const start = new Date("2026-11-05T00:00:00Z");
+    let configured = novemberSchedule;
+    await page.clock.install({ time: start });
+    await app(page, { schedule: () => configured, scheduleNow: start.toISOString() });
+    await page.clock.pauseAt("2026-11-05T00:00:10Z");
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "halloween");
+    configured = [{ id: "national-day", start: "11-01", end: "12-01" }];
+    // Stop just after the 5-minute poll so virtual time cannot expire the HTTP timeout before routing completes.
+    await page.clock.runFor(291000);
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "national-day");
+    await page.evaluate(() => window.AppTheme.setSeason("tet"));
+    configured = novemberSchedule;
+    await page.clock.runFor(300001);
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "tet");
+  });
+
+
+  test("Returning to a tab refreshes changed schedules before the next periodic poll", async ({ page }) => {
+    const start = new Date("2026-11-05T00:00:00Z");
+    let configured = novemberSchedule;
+    await page.clock.install({ time: start });
+    await app(page, { schedule: () => configured, scheduleNow: start.toISOString() });
+    await page.clock.pauseAt("2026-11-05T00:00:10Z");
+    configured = [{ id: "tet", start: "2026-11-01", end: "2026-12-01" }];
+    await page.clock.runFor(61000);
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "tet");
+  });
+
+  test("Resume gets fresh server time even if the device clock jumps while monotonic time stays paused", async ({ page }) => {
+    const start = new Date("2026-11-05T00:00:00Z");
+    let serverTime = start.toISOString();
+    await page.clock.install({ time: start });
+    await app(page, { schedule: novemberSchedule, scheduleNow: () => serverTime });
+    await page.clock.pauseAt("2026-11-05T00:00:10Z");
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "halloween");
+    serverTime = "2026-11-15T00:00:00.000Z";
+    await page.clock.setSystemTime(serverTime);
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "teachers-day");
+  });
+
+  test("A loaded schedule still changes at midnight when a later refresh loses connection", async ({ page }) => {
+    const start = new Date("2026-11-09T16:59:00Z");
+    let offline = false;
+    await page.clock.install({ time: start });
+    await app(page, { schedule: novemberSchedule, scheduleNow: start.toISOString(), scheduleFailure: () => offline });
+    await page.clock.pauseAt("2026-11-09T16:59:10Z");
+    await page.clock.runFor(61000);
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "teachers-day");
+    offline = true;
+    await page.clock.runFor(230000);
+    await preferences(page);
+    await expect(page.locator("[data-theme-schedule-status]")).toContainText("Vẫn áp dụng lịch đã tải");
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "teachers-day");
+  });
+
+  test("Unavailable schedule falls back safely and still allows manual selection", async ({ page }) => {
+    const errors = await app(page, { scheduleFailure: true });
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "default");
+    await preferences(page);
+    await expect(page.locator("[data-theme-schedule-status]")).toContainText("Chưa tải được lịch");
+    await page.getByRole("radio", { name: "Halloween" }).check();
+    await closePreferences(page);
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "halloween");
+    expect(errors).toEqual([]);
+  });
+
+  test("A hanging schedule request times out without blocking the app", async ({ page }) => {
+    const errors = await app(page, { scheduleFailure: "timeout" });
+    await expect(page.locator("#userSection")).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "default");
+    expect(errors).toEqual([]);
+  });
+
+  test("Malformed schedule data is rejected without changing the app or exposing raw content", async ({ page }) => {
+    const errors = await app(page, {
+      scheduleNow: "2026-11-15T00:00:00.000Z",
+      scheduleOverride: { schedules: [{ id: "<script>bad</script>", start: "11-01", end: "12-01" }] },
+    });
+    await expect(page.locator("html")).toHaveAttribute("data-member-theme", "default");
+    await preferences(page);
+    await expect(page.locator("[data-theme-schedule-status]")).toContainText("Chưa tải được lịch");
+    expect(errors).toEqual([]);
+  });
+
+  test("Automatic theme applies only to members, including after logout", async ({ page }) => {
+    await app(page, { role: "admin", schedule: novemberSchedule, scheduleNow: "2026-11-15T00:00:00.000Z" });
+    await expect(page.locator("html")).toHaveAttribute("data-seasonal", "false");
+    expect((await palette(page)).accent).toBe("#12804b");
+    await page.locator("#adminSection .avatar-button[data-open-account]").click();
+    await page.locator("#logoutBtn").click();
+    await expect(page.locator("#loginSection")).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-seasonal", "false");
+  });
 });

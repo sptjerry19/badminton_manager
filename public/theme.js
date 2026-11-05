@@ -1,4 +1,4 @@
-/* Member theme preferences. Runs in <head> before styles; no API/database dependency. */
+/* Preferences bootstrap before styles. Holiday dates load from the public config endpoint. */
 (function (root) {
   "use strict";
   const doc = root.document;
@@ -149,12 +149,24 @@
     }
   ];
   const themes = new Map(catalog.map(theme => [theme.id, theme]));
+  const calendar = root.ThemeCalendar;
   const modes = new Set(["light", "dark", "system"]);
   const media = root.matchMedia("(prefers-color-scheme: dark)");
+  let selection = "auto";
   let season = "default";
   let mode = "system";
   let view = "login";
   let mounted = false;
+  let rules = [];
+  let configStatus = "loading";
+  let configValid = true;
+  let hasConfig = false;
+  let serverEpoch = null;
+  let serverTick = 0;
+  let inFlight = null;
+  let midnightTimer = null;
+  let initialReady = Promise.resolve();
+  const tick = () => root.performance.now();
 
   function read(key) {
     try { return root.localStorage.getItem(key); } catch (_) { return null; }
@@ -165,11 +177,14 @@
   function restore() {
     const savedSeason = read(SEASON_KEY);
     const savedMode = read(MODE_KEY);
-    season = themes.has(savedSeason) ? savedSeason : "default";
+    selection = savedSeason === "auto" || themes.has(savedSeason) ? savedSeason : "auto";
     mode = modes.has(savedMode) ? savedMode : "system";
   }
+  function clockNow() {
+    return new Date(serverEpoch === null ? Date.now() : serverEpoch + Math.max(0, tick() - serverTick));
+  }
   function isDark() { return mode === "dark" || (mode === "system" && media.matches); }
-  function state() { return { season, mode, view, dark: isDark() }; }
+  function state() { return { season, selection, mode, view, dark: isDark(), scheduleStatus: configStatus }; }
 
   function paint() {
     const member = view === "member";
@@ -178,17 +193,31 @@
     doc.querySelectorAll("[data-season-banner]").forEach(el => { el.hidden = !member || !theme.banner; });
     doc.querySelectorAll("[data-season-label]").forEach(el => { el.textContent = theme.banner || ""; });
     doc.querySelectorAll("[data-season-caption]").forEach(el => { el.textContent = theme.caption || ""; });
-    doc.querySelectorAll("[data-member-theme-choice]").forEach(input => { input.checked = input.value === season; });
+    doc.querySelectorAll("[data-member-theme-choice]").forEach(input => { input.checked = input.value === selection; });
     doc.querySelectorAll("[data-color-mode-choice]").forEach(input => { input.checked = input.value === mode; });
     doc.querySelectorAll("[data-theme-toggle]").forEach(button => {
       button.setAttribute("aria-label", isDark() ? "Chuyển sang giao diện sáng" : "Chuyển sang giao diện tối");
       if (root.UI && button.classList.contains("icon-btn")) button.innerHTML = root.UI.icon(isDark() ? "sun" : "moon");
     });
+    let hint;
+    if (selection !== "auto") hint = "Đang chọn thủ công: " + theme.label + ".";
+    else if (configStatus === "loading" && !hasConfig) hint = "Đang tải lịch lễ hội…";
+    else if (configStatus === "error") hint = hasConfig
+      ? "Tạm mất kết nối. Vẫn áp dụng lịch đã tải: " + theme.label + "."
+      : "Chưa tải được lịch. Đang dùng Mặc định; bạn có thể chọn chủ đề thủ công.";
+    else if (!configValid) hint = "Một phần lịch chưa hợp lệ. Đang áp dụng: " + theme.label + ".";
+    else if (!rules.length) hint = "Nhóm chưa đặt lịch lễ hội; đang dùng Mặc định.";
+    else hint = "Tự động: " + theme.label + " · giờ Việt Nam.";
+    doc.querySelectorAll("[data-theme-schedule-status]").forEach(el => {
+      if (el.textContent !== hint) el.textContent = hint;
+    });
   }
   function apply() {
+    season = selection === "auto" ? calendar.resolveTheme(rules, clockNow()) : selection;
     const html = doc.documentElement;
     html.classList.toggle("dark", isDark());
     html.dataset.memberTheme = season;
+    html.dataset.themeSelection = selection;
     html.dataset.appView = view;
     const theme = themes.get(view === "member" ? season : "default");
     html.dataset.seasonal = String(view === "member" && Boolean(theme.banner));
@@ -196,13 +225,58 @@
     if (meta) meta.setAttribute("content", theme.chrome[isDark() ? 1 : 0]);
     if (mounted) paint();
   }
+  function armMidnight() {
+    root.clearTimeout(midnightTimer);
+    if (!mounted || selection !== "auto" || view !== "member") return;
+    midnightTimer = root.setTimeout(notify, Math.max(1, calendar.untilNextDay(clockNow()) + 25));
+  }
   function notify() {
     apply();
+    armMidnight();
     doc.dispatchEvent(new root.CustomEvent("app-theme-change", { detail: state() }));
   }
+  function refreshSchedule() {
+    if (inFlight) return inFlight;
+    inFlight = Promise.resolve().then(async () => {
+      const controller = new root.AbortController();
+      const timeout = root.setTimeout(() => controller.abort(), 3000);
+      const started = tick();
+      try {
+        const response = await root.fetch("/api/theme-config", {
+          credentials: "omit", cache: "no-store", signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("Schedule unavailable");
+        const payload = await response.json();
+        const timestamp = Date.parse(payload.serverNow);
+        if (payload.version !== 1 || payload.timeZone !== calendar.timeZone ||
+            typeof payload.serverNow !== "string" || !Number.isFinite(timestamp) ||
+            typeof payload.configValid !== "boolean") throw new Error("Invalid schedule config");
+        const schedules = calendar.normalizeRules(payload.schedules);
+        serverEpoch = timestamp + (tick() - started) / 2;
+        serverTick = tick();
+        rules = schedules;
+        configValid = payload.configValid;
+        configStatus = "ready";
+        hasConfig = true;
+      } catch (_) {
+        // Keep the last valid schedule in this visit; otherwise fall back to Default.
+        configStatus = "error";
+      } finally {
+        root.clearTimeout(timeout);
+        inFlight = null;
+        notify();
+      }
+    });
+    return inFlight;
+  }
+  function resume() {
+    notify();
+    // Refresh on resume even when the device suspended its monotonic clock during sleep.
+    if (view === "member" && doc.visibilityState === "visible") refreshSchedule();
+  }
   function setSeason(value) {
-    season = themes.has(value) ? value : "default";
-    write(SEASON_KEY, season);
+    selection = value === "auto" || themes.has(value) ? value : "auto";
+    write(SEASON_KEY, selection);
     notify();
   }
   function setMode(value) {
@@ -213,12 +287,14 @@
   function setView(value) {
     view = value === "member" || value === "admin" ? value : "login";
     apply();
+    armMidnight();
   }
   function toggle() { setMode(isDark() ? "light" : "dark"); }
   function renderChoices() {
+    const automatic = { id: "auto", label: "Tự động theo lịch", subtitle: "Theo giờ Việt Nam", colors: ["#12804b", "#f4c74b", "#ba4d6a"] };
     doc.querySelectorAll("[data-member-theme-options]").forEach(container => {
       const fragment = doc.createDocumentFragment();
-      catalog.forEach(theme => {
+      [automatic, ...catalog].forEach(theme => {
         const label = doc.createElement("label");
         label.className = "theme-option";
         const input = doc.createElement("input");
@@ -256,7 +332,7 @@
     });
   }
   function mount() {
-    if (mounted) return;
+    if (mounted) return initialReady;
     renderChoices();
     mounted = true;
     doc.querySelectorAll("[data-theme-toggle]").forEach(button => button.addEventListener("click", toggle));
@@ -269,7 +345,15 @@
     doc.querySelectorAll("[data-open-account]").forEach(button => button.addEventListener("click", () => {
       root.requestAnimationFrame(revealChoice);
     }));
+    doc.addEventListener("visibilitychange", () => { if (doc.visibilityState === "visible") resume(); });
+    root.addEventListener("focus", resume);
+    root.addEventListener("pageshow", resume);
+    root.setInterval(() => {
+      if (view === "member" && doc.visibilityState === "visible") refreshSchedule();
+    }, 300000);
     paint();
+    initialReady = refreshSchedule();
+    return initialReady;
   }
   restore();
   apply();
@@ -277,5 +361,5 @@
   root.addEventListener("storage", event => {
     if (event.key === MODE_KEY || event.key === SEASON_KEY || event.key === null) { restore(); notify(); }
   });
-  root.AppTheme = Object.freeze({ mount, setView, setSeason, setMode, toggle, state });
+  root.AppTheme = Object.freeze({ mount, setView, setSeason, setMode, toggle, state, get ready() { return initialReady; } });
 })(window);

@@ -1161,6 +1161,7 @@ async function loadUserBasicLedger(memberName = "") {
 }
 
 async function loadDashboard() {
+  await window.AppTheme.ready;
   const data = await api("/api/bootstrap");
   if (data.auth.role === "admin") return loadAdminDashboard();
   return loadUserDashboard();
@@ -1819,7 +1820,7 @@ async function init() {
     if (data) renderAdminVoteList(data.sessions || []);
   });
   try {
-    await loadLoginOptions();
+    await Promise.all([loadLoginOptions(), window.AppTheme.ready]);
     await loadDashboard();
     showAppMode();
     if (state.auth?.role === "user") window.registerPush?.({ prompt: false }).catch(() => {});

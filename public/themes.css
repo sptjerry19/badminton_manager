@@ -188,7 +188,7 @@ html[data-app-view="member"][data-seasonal="true"] .rank-mini em {
 }
 .theme-options {
   position: relative;
-  max-height: min(38dvh, 300px);
+  max-height: min(32dvh, 260px);
   overflow-y: auto;
   overscroll-behavior-y: contain;
   scrollbar-width: thin;
@@ -898,3 +898,5 @@ html.dark[data-app-view="member"][data-member-theme="national-day"] {
   --overlay: #100d11b3;
   --season-art: url("/themes/national-day-header.svg");
 }
+
+.schedule-status { margin-top: 10px; line-height: 1.5; }
