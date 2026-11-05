@@ -76,3 +76,33 @@ html.dark {
 
   color-scheme: dark;
 }
+
+/* Semantic accent and component tokens. Seasonal themes override these only. */
+:root {
+  --accent-950: var(--green-950);
+  --accent-900: var(--green-900);
+  --accent-800: var(--green-800);
+  --accent-700: var(--green-700);
+  --accent-600: var(--green-600);
+  --accent-100: var(--green-100);
+  --accent-50: var(--green-50);
+  --accent-ink: var(--green-ink);
+  --on-accent: #fff;
+  --primary: var(--accent-700);
+  --primary-hover: var(--accent-800);
+  --primary-soft: var(--accent-50);
+  --green: var(--accent-700);
+  --green-deep: var(--accent-800);
+  --focus-ring: #1d9b5b40;
+  --accent-shadow: #12804b33;
+  --balance-start: var(--green-950);
+  --balance-end: var(--green-700);
+  --balance-ink: #fff;
+  --balance-muted: #cfdfd5;
+  --balance-meta: #bdd2c5;
+  --balance-shadow: #07512e38;
+  --balance-button-bg: #fff;
+  --balance-button-ink: var(--green-800);
+  --overlay: #030f088c;
+  --toast-bg: #13281b;
+}

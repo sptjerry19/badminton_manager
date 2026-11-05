@@ -12,16 +12,8 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Cầu lông" />
-    <script>
-      // Áp theme trước khi vẽ để không nháy màu.
-      (function () {
-        try {
-          var saved = localStorage.getItem("theme");
-          var dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
-          if (dark) document.documentElement.classList.add("dark");
-        } catch (_e) {}
-      })();
-    </script>
+    <script src="/theme-calendar.js"></script>
+    <script src="/theme.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -31,6 +23,7 @@
     <link rel="stylesheet" href="/tokens.css" />
     <link rel="stylesheet" href="/ui.css" />
     <link rel="stylesheet" href="/tournament-embed.css" />
+    <link rel="stylesheet" href="/themes.css" />
   </head>
   <body class="app-shell">
     <!-- ============ ĐĂNG NHẬP ============ -->
@@ -146,6 +139,11 @@
     <div id="appSection" hidden>
       <!-- ============ THÀNH VIÊN ============ -->
       <section id="userSection" class="mobile-shell" hidden>
+        <div class="member-season-banner" data-season-banner hidden>
+          <div class="season-brand"><span>JERRY</span><small>BADMINTON</small></div>
+          <span class="season-date" data-season-label></span>
+          <p data-season-caption></p>
+        </div>
         <header class="app-header">
           <div>
             <span class="eyebrow" id="userHeaderEyebrow">NHÓM CẦU LÔNG</span>
@@ -595,11 +593,23 @@
             <button type="button" data-push-button data-push-status="#pushStatus" class="btn btn-secondary btn-sm">Bật thông báo</button>
           </div>
           <p id="pushStatus" class="form-note" hidden></p>
-          <button type="button" data-theme-toggle class="menu-row">
-            <i data-icon="moon"></i>
-            <span><b>Đổi giao diện</b><small>Sáng / tối</small></span>
-            <i data-icon="chevron"></i>
-          </button>
+          <section class="appearance-settings" aria-labelledby="appearanceTitle">
+            <h3 id="appearanceTitle">Giao diện</h3>
+            <fieldset class="theme-fieldset" data-member-only hidden>
+              <legend>Chủ đề</legend>
+              <div class="theme-options" data-member-theme-options></div>
+              <p class="appearance-note schedule-status" data-theme-schedule-status data-member-only role="status" hidden></p>
+            </fieldset>
+            <fieldset class="theme-fieldset">
+              <legend>Chế độ hiển thị</legend>
+              <div class="color-mode-options">
+                <label><input type="radio" name="colorMode" value="light" data-color-mode-choice /><span>Sáng</span></label>
+                <label><input type="radio" name="colorMode" value="dark" data-color-mode-choice /><span>Tối</span></label>
+                <label><input type="radio" name="colorMode" value="system" data-color-mode-choice /><span>Theo thiết bị</span></label>
+              </div>
+            </fieldset>
+            <p class="appearance-note">Lựa chọn được lưu trên trình duyệt này.</p>
+          </section>
           <button id="logoutBtn" type="button" class="menu-row danger-text">
             <i data-icon="logout"></i>
             <span><b>Đăng xuất</b><small>Trở lại màn hình đăng nhập</small></span>

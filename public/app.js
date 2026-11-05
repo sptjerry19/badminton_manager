@@ -162,30 +162,10 @@ function setMessage(id, message, isError = false) {
   el.classList.toggle("is-error", Boolean(isError));
 }
 
-// ---------- Theme ----------
-
-function isDark() {
-  return document.documentElement.classList.contains("dark");
-}
-
-function paintThemeButtons() {
-  document.querySelectorAll(".icon-btn[data-theme-toggle]").forEach((button) => {
-    button.innerHTML = icon(isDark() ? "sun" : "moon");
-  });
-}
-
-function toggleTheme() {
-  const dark = !isDark();
-  document.documentElement.classList.toggle("dark", dark);
-  try {
-    localStorage.setItem("theme", dark ? "dark" : "light");
-  } catch (_error) {}
-  paintThemeButtons();
-}
-
 // ---------- Đăng nhập ----------
 
 function showLoginMode() {
+  window.AppTheme.setView("login");
   $("loginSection").hidden = false;
   $("appSection").hidden = true;
   state.tournamentMountedFor = "";
@@ -250,6 +230,7 @@ function renderLoginOptions() {
 
 function renderRoleHeader(auth) {
   const isAdmin = auth.role === "admin";
+  window.AppTheme.setView(isAdmin ? "admin" : "member");
   $("adminSection").hidden = !isAdmin;
   $("userSection").hidden = isAdmin;
   $("accountName").textContent = isAdmin ? "Quản trị viên" : auth.memberName || "Thành viên";
@@ -1180,6 +1161,7 @@ async function loadUserBasicLedger(memberName = "") {
 }
 
 async function loadDashboard() {
+  await window.AppTheme.ready;
   const data = await api("/api/bootstrap");
   if (data.auth.role === "admin") return loadAdminDashboard();
   return loadUserDashboard();
@@ -1234,7 +1216,6 @@ function closestOverlay(node) {
 }
 
 function bindChrome() {
-  document.querySelectorAll("[data-theme-toggle]").forEach((button) => button.addEventListener("click", toggleTheme));
   document.querySelectorAll("[data-open-account]").forEach((button) =>
     button.addEventListener("click", () => toggleModal("accountModal", true))
   );
@@ -1828,7 +1809,7 @@ function bindEvents() {
 
 async function init() {
   window.UI.hydrate(document);
-  paintThemeButtons();
+  window.AppTheme.mount();
   bindEvents();
   window.BasicLedger.onChange(async (change) => {
     if (state.auth?.role !== "admin") return;
@@ -1839,7 +1820,7 @@ async function init() {
     if (data) renderAdminVoteList(data.sessions || []);
   });
   try {
-    await loadLoginOptions();
+    await Promise.all([loadLoginOptions(), window.AppTheme.ready]);
     await loadDashboard();
     showAppMode();
     if (state.auth?.role === "user") window.registerPush?.({ prompt: false }).catch(() => {});

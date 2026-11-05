@@ -3,3 +3,7 @@ node_modules
 credentials.json
 badminton-e1571.json
 .DS_Store
+
+# Local browser verification
+/test-results/
+/playwright-report/

@@ -3,6 +3,7 @@ require("dotenv").config();
 const path = require("path");
 const crypto = require("crypto");
 const express = require("express");
+const { createThemeConfigHandler } = require("./src/theme-config");
 const session = require("express-session");
 const PgSession = require("connect-pg-simple")(session);
 const { PORT, ADMIN_PASSWORD, SESSION_SECRET } = require("./src/config");
@@ -94,6 +95,8 @@ const notificationService = new NotificationService();
 const loginMaxAgeMs = 1000 * 60 * 60 * 24 * 90;
 
 app.set("trust proxy", 1);
+// Public display configuration; runs before session/DB middleware and exposes only date rules.
+app.get("/api/theme-config", createThemeConfigHandler());
 app.use(express.json({ limit: "2mb" }));
 app.use(
   session({

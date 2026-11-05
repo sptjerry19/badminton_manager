@@ -129,7 +129,7 @@
 
 .tournament-embed .tp-control:focus {
   outline: none;
-  border-color: var(--green-700);
+  border-color: var(--accent-700);
   box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.08);
 }
 
@@ -198,13 +198,13 @@
 }
 
 .tournament-embed .tp-event-option input:checked + .tp-event-option-ui {
-  border-color: var(--green-700);
-  background: var(--green-700);
+  border-color: var(--accent-700);
+  background: var(--accent-700);
   box-shadow: 0 8px 18px rgba(17, 17, 17, 0.12);
 }
 
 .tournament-embed .tp-event-option input:checked + .tp-event-option-ui .tp-event-option-text {
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .tournament-embed .tp-event-option input:checked + .tp-event-option-ui .tp-event-option-mark {
@@ -219,7 +219,7 @@
   top: 1px;
   width: 5px;
   height: 9px;
-  border: solid var(--green-700);
+  border: solid var(--accent-700);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
@@ -243,7 +243,7 @@
   width: 18px;
   height: 18px;
   margin: 1px 0 0;
-  accent-color: var(--green-600);
+  accent-color: var(--accent-600);
 }
 
 .tournament-embed .tp-confirm span,
@@ -262,8 +262,8 @@
   font: inherit;
   font-weight: 700;
   cursor: pointer;
-  background: var(--green-700);
-  color: #fff;
+  background: var(--accent-700);
+  color: var(--on-accent);
 }
 
 .tournament-embed .tp-btn-block {
@@ -272,7 +272,7 @@
 }
 
 .tournament-embed .tp-btn.tp-ok {
-  background: var(--green-700);
+  background: var(--accent-700);
 }
 
 .tournament-embed .tp-btn.tp-danger {
@@ -305,9 +305,9 @@
 }
 
 .tournament-embed .tp-tab.is-on {
-  background: var(--green-700);
-  color: #fff;
-  border-color: var(--green-700);
+  background: var(--accent-700);
+  color: var(--on-accent);
+  border-color: var(--accent-700);
 }
 
 .tournament-embed .tp-badge {
@@ -329,7 +329,7 @@
 .tournament-embed .tp-badge.locked,
 .tournament-embed .tp-badge.done {
   background: var(--green-100);
-  color: var(--green-700);
+  color: var(--green-ink);
 }
 
 .tournament-embed .tp-badge.blocked {
@@ -357,7 +357,7 @@
 
 .tournament-embed .tp-banner.is-ok {
   background: var(--green-50);
-  color: var(--green-700);
+  color: var(--green-ink);
 }
 
 .tournament-embed .tp-banner.is-wait {
@@ -399,7 +399,7 @@
 }
 
 .tournament-embed .tp-msg.is-ok {
-  color: var(--green-700);
+  color: var(--accent-700);
 }
 
 .tournament-embed .tp-score {
@@ -492,9 +492,9 @@
 }
 
 .tp-modal-close:hover {
-  background: var(--green-700);
-  border-color: var(--green-700);
-  color: #fff;
+  background: var(--accent-700);
+  border-color: var(--accent-700);
+  color: var(--on-accent);
 }
 
 .tp-modal-hint {
@@ -502,9 +502,9 @@
   gap: 2px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: var(--green-50);
+  background: var(--accent-50);
   border: 1px solid #a7f3d0;
-  color: var(--green-700);
+  color: var(--accent-700);
 }
 
 .tp-modal-hint-label {
@@ -512,7 +512,7 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--green-700);
+  color: var(--accent-700);
 }
 
 .tp-modal-hint strong {
@@ -523,7 +523,7 @@
 
 .tp-modal-hint-text {
   font-size: 13px;
-  color: var(--green-700);
+  color: var(--accent-700);
 }
 
 .tp-candidate-list {
@@ -566,8 +566,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--green-700);
-  color: #fff;
+  background: var(--accent-700);
+  color: var(--on-accent);
   font-family: inherit;
   font-size: 18px;
   font-weight: 600;
@@ -604,7 +604,7 @@
 
 .tp-chip-sum {
   background: var(--green-100);
-  color: var(--green-700);
+  color: var(--green-ink);
 }
 
 .tp-modal-invite {
@@ -616,8 +616,8 @@
   padding: 8px 14px;
   border: 0;
   border-radius: 10px;
-  background: var(--green-700);
-  color: #fff;
+  background: var(--accent-700);
+  color: var(--on-accent);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -625,7 +625,7 @@
 }
 
 .tp-modal-invite:hover {
-  background: var(--green-700);
+  background: var(--accent-700);
 }
 
 .tp-modal .tp-msg {
@@ -691,8 +691,8 @@
   inset: 12px auto auto 50%;
   transform: translateX(-50%);
   z-index: 5;
-  background: var(--green-700);
-  color: #fff;
+  background: var(--accent-700);
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 600;
   padding: 8px 12px;
@@ -831,8 +831,8 @@
 }
 
 .sched-filter.is-on {
-  background: var(--green-800);
-  color: #fff;
+  background: var(--accent-800);
+  color: var(--on-accent);
 }
 
 .sched-hint,
@@ -905,7 +905,7 @@
 }
 
 .sched-order:focus {
-  outline: 2px solid var(--green-600);
+  outline: 2px solid var(--accent-600);
   background: var(--surface);
 }
 
@@ -991,8 +991,8 @@
   border: 0;
   border-radius: 8px;
   padding: 0 12px;
-  background: var(--green-800);
-  color: #fff;
+  background: var(--accent-800);
+  color: var(--on-accent);
   font-weight: 700;
   cursor: pointer;
 }

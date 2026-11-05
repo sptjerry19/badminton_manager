@@ -1,5 +1,7 @@
 # Badminton Group Manager
 
+Giao diện thành viên có 8 theme lễ hội, hỗ trợ Sáng / Tối / Theo thiết bị và tự động theo lịch Việt Nam cấu hình qua env. Xem [hướng dẫn, kiểm thử và ảnh preview](docs/member-themes.md).
+
 Web app quản lý nhóm cầu lông (7 thành viên cố định) với:
 - Điểm danh theo buổi
 - Tính phí tự động theo rule hiện tại
