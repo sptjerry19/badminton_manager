@@ -1,9 +1,11 @@
 const path = require("path");
+const { isProduction } = require("./runtime-config");
+const IS_PRODUCTION = isProduction();
 
 const PORT = Number(process.env.PORT || 3000);
-const APP_PASSWORD = process.env.APP_PASSWORD || process.env.ADMIN_PASSWORD || "123456";
+const APP_PASSWORD = process.env.APP_PASSWORD || process.env.ADMIN_PASSWORD || (IS_PRODUCTION ? "" : "123456");
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || APP_PASSWORD;
-const SESSION_SECRET = process.env.SESSION_SECRET || "badminton-session-secret";
+const SESSION_SECRET = process.env.SESSION_SECRET || (IS_PRODUCTION ? "" : "badminton-session-secret");
 const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID || "";
 const GOOGLE_APPLICATION_CREDENTIALS =
   process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "credentials.json");
@@ -27,6 +29,7 @@ const DEFAULT_FIXED_MEMBERS = [
 ];
 
 module.exports = {
+  IS_PRODUCTION,
   PORT,
   APP_PASSWORD,
   ADMIN_PASSWORD,

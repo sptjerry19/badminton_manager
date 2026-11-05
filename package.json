@@ -5,7 +5,19 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "db:backup": "node scripts/postgres-backup.js backup",
+    "db:restore": "node scripts/postgres-backup.js restore",
+    "db:verify": "node scripts/postgres-backup.js verify",
+    "test:backup": "node --test scripts/postgres-backup.test.js",
+    "db:drill": "node scripts/verify-backup-local.js",
+    "test:money": "node scripts/test-money.js",
+    "test": "node scripts/test-money.js --all",
+    "db:migrate": "node scripts/database.js migrate",
+    "db:status": "node scripts/database.js status",
+    "db:seed-demo": "node scripts/database.js seed-demo",
+    "db:prune-sessions": "node scripts/database.js prune-sessions",
+    "config:check": "node scripts/check-config.js"
   },
   "engines": {
     "node": ">=22"

@@ -1,334 +1,131 @@
 # Badminton Group Manager
 
-Web app quản lý nhóm cầu lông (7 thành viên cố định) với:
-- Điểm danh theo buổi
-- Tính phí tự động theo rule hiện tại
-- Cập nhật công nợ tự động vào Google Sheets
-- Giao diện tiếng Việt, dùng tốt trên điện thoại
+Ứng dụng quản lý nhóm cầu lông: thành viên, vote tham gia, khách giao lưu, xếp trận, sổ tiền sân, tiền dư, thông báo và giải đấu. Giao diện tiếng Việt, hỗ trợ mobile và dark mode.
 
----
+## Chạy dự án
 
-## 1) Kiến trúc hiện tại (Phase 2.5)
+Cần Node.js >=22, npm và Postgres. Tạo .env từ .env.example nếu chưa có, điền kết nối database và các secret của môi trường chạy.
 
-- **Primary DB:** Vercel Postgres (`POSTGRES_URL`)
-- **Backup/Reporting mirror:** Google Sheets
-- **Cơ chế sync:** dữ liệu được đồng bộ từ Postgres -> Google Sheets mỗi ngày qua Vercel Cron (`/api/cron/sync-sheets`)
-- **Manual sync:** admin có thể gọi `POST /api/admin/sync-sheets`
+    npm ci
+    npm run config:check
+    npm run db:migrate
+    npm start
 
----
+npm run dev chạy qua nodemon. Không có bước build frontend riêng; Express phục vụ các file trong public/. Trang chính ở /, giải đấu độc lập ở /tournament; /basic chuyển về /.
 
-## 2) Plan chi tiết (tiếng Việt)
+Startup chỉ kiểm tra lịch sử migration. Schema thiếu hoặc checksum không khớp sẽ không sẵn sàng; không tự tạo bảng hoặc thêm thành viên mẫu. Chạy migration bằng kết nối trực tiếp trước khi khởi động bản mới.
 
-### 1.1 Cấu trúc thư mục project
+    npm run db:status
+    npm run db:seed-demo -- --confirm-demo
 
-```text
-badmintonManager/
-├─ public/
-│  ├─ index.html          # Giao diện web tiếng Việt
-│  └─ app.js              # Logic frontend (login, submit buổi, xem công nợ)
-├─ src/
-│  ├─ config.js           # Biến môi trường + default settings
-│  ├─ calc.js             # Logic tính tiền theo rule nhóm
-│  └─ sheets.js           # Tầng làm việc với Google Sheets API
-├─ server.js              # Express API + static server
-├─ package.json
-├─ .env.example
-└─ README.md
-```
+Seed demo là tùy chọn, chỉ dành cho development khi bảng members còn trống. Production thêm thành viên qua giao diện quản trị hoặc API hiện có.
 
-### 2.2 Các sheet trong Google Sheets cần có (Phase 2)
+## Cấu hình và triển khai
 
-Backend sẽ tự tạo sheet và header nếu chưa có:
+POSTGRES_URL dùng cho runtime. POSTGRES_MIGRATION_URL là kết nối trực tiếp tùy chọn dành cho migration. Kết nối từ xa xác minh chứng chỉ; có thể cấu hình CA riêng qua POSTGRES_CA_FILE.
 
-1. `Config`
-   - `key`, `value`
-   - Lưu tham số hệ thống: `extraCourtRate`, `maleGuestRate`, `femaleGuestRate`, `highThreshold`, `lowThreshold`
+Production được nhận diện bằng NODE_ENV=production hoặc VERCEL=1. Cần ADMIN_PASSWORD riêng ít nhất 12 ký tự, SESSION_SECRET và CRON_SECRET riêng ít nhất 32 ký tự. Cookie production dùng HTTPS. Không tự đổi secret của môi trường thật khi cập nhật mã.
 
-2. `Members`
-   - `memberId`, `name`, `type`, `gender`, `level`, `active`, `phoneNumber`, `zaloId`, `createdAt`, `updatedAt`
-   - `level` được validate từ 1 -> 10
+Vercel dùng server.js, đóng gói migrations/** và có các cron sync Sheets/nhắc lịch trong vercel.json. Migration chạy ở bước vận hành riêng trước rollout, không tự chạy trong build hoặc request. GET /api/health kiểm tra trạng thái khởi tạo database và trả 503 nếu chưa sẵn sàng khi kiểm tra.
 
-3. `Sessions`
-   - `sessionId`, `date`, `time`, `location`, `note`, `fixedCourtCost`, `extraCourts`, `shuttlecockCost`, `totalCost`, `createdBy`, `createdAt`
+Chi tiết: [migration, TLS, secret và rollout](docs/database-operations.md).
 
-4. `SessionParticipants`
-   - `sessionId`, `memberId`, `memberName`, `status` (`yes`/`no`/`pending`), `respondedAt`
+## Kiến trúc mã nguồn
 
-5. `Polls`
-   - `pollId`, `sessionId`, `question`, `createdAt`
+- server.js: route HTTP, session, kiểm tra vai trò, tích hợp thông báo và cron.
+- src/postgres.js: API tương thích cho các caller hiện có, cùng nghiệp vụ thành viên/vote, dữ liệu cũ và đồng bộ Sheets.
+- src/db/client.js: một pool và một ngữ cảnh transaction dùng chung.
+- src/db/connection.js: cấu hình kết nối và xác minh TLS.
+- src/db/migrations.js, migrations/: lịch sử schema, checksum và chạy migration.
+- src/finance/ledger.js: tạo buổi, chia tiền, thanh toán, hoàn tác và xóa buổi.
+- src/finance/credits.js, locks.js: tài khoản tiền dư và khóa đồng thời theo người.
+- src/finance/reports.js: thu tiền sân ròng theo sự kiện thanh toán/đảo.
+- src/finance/values.js: các phép chuyển đổi và chia phần tiền dùng chung.
+- src/matchmaking.js, src/tournament*.js: xếp trận và giải đấu.
+- src/notification.js, src/sheets.js: push và mirror Google Sheets.
+- public/: HTML/CSS/JavaScript; business-time.js dùng chung quy tắc giờ Việt Nam với Node.
+- scripts/, tests/: công cụ backup, lệnh DB và kiểm thử bằng Docker riêng.
 
-6. `PollAnswers`
-   - `pollId`, `sessionId`, `memberId`, `memberName`, `answer`, `answeredAt`
+Các module tài chính không import ngược src/postgres.js. API xuất từ src/postgres.js giữ nguyên để server, giải đấu và thông báo tiếp tục hoạt động. Xem [ranh giới module và transaction](docs/architecture.md).
 
-7. `Payments`
-   - `paymentId`, `date`, `memberId`, `memberName`, `amount`, `note`, `createdAt`
+## Nghiệp vụ tiền hiện tại
 
-8. `Debts`
-   - Bảng công nợ tổng hợp tự động recompute sau mỗi lần submit buổi / thêm payment
+Tổng buổi = tiền sân + tiền cầu + phát sinh. Chia đến đồng cho người được chọn, phân bổ phần dư để tổng các phần đúng bằng tổng buổi. Thành viên và khách đều có phần tiền riêng.
 
-9. `MatchPairHistory`
-   - Lưu lịch sử cặp đôi để giảm lặp cặp khi auto generate trận
+Thanh toán dùng tiền dư sẵn có trước, phần còn lại là thu ngoài tiền dư. Mỗi lần trả lưu phân bổ theo phần tiền. Hoàn tác hoặc xóa buổi ghi đối ứng đúng tiền dư đã dùng, giữ lịch sử. Khoản cũ thiếu phân bổ cần đối soát trước khi hoàn tác; không tự suy đoán lịch sử.
 
-### 2.3 API endpoints Phase 2
+KPI “Thu tiền sân ròng” tính theo thời điểm thanh toán/đảo và Asia/Ho_Chi_Minh, không theo ngày chơi. Tiền dư sử dụng/hoàn được báo riêng, không cộng trùng vào thu mới; khoản cũ thiếu nguồn tiền hoặc ngày trả được báo riêng.
 
-- `GET /api/login-options`
-  - Lấy danh sách thành viên cố định cho dropdown user login
+- [Thanh toán, hoàn tác và chống gửi trùng](docs/payment-ledger.md)
+- [Định nghĩa báo cáo và múi giờ](docs/monthly-report.md)
 
-- `POST /api/login`
-  - Admin: `{ mode: "admin", password }`
-  - User: `{ mode: "user", memberName, phoneNumber }`
+## API chính
 
-- `POST /api/logout`
-  - Đăng xuất
+Các route ghi nghiệp vụ dưới đây yêu cầu admin, trừ vote của thành viên và các route đăng nhập/đăng ký công khai. Danh sách tập trung vào luồng chính; server.js là nguồn đầy đủ.
 
-- `GET /api/bootstrap`
-  - Admin: trả về `members`, `sessions`, `debts`, `payments`
-  - User: trả về `upcomingSession`, `myDebt`, `myHistory`, `myPayments`
+- GET /api/login-options, POST /api/login, POST /api/logout: đăng nhập/đăng xuất hiện có. Luồng xác thực thành viên không được thay đổi trong đợt xử lý nợ này.
+- GET /api/bootstrap: dữ liệu khởi tạo theo vai trò.
+- POST /api/members, PATCH /api/members/:memberId, DELETE /api/members/:memberId: quản lý thành viên. Người có lịch sử tài chính được khóa hoạt động thay vì xóa.
+- GET /api/sessions/votes, POST /api/sessions: danh sách/tạo buổi vote.
+- POST /api/sessions/:sessionId/respond và /poll-answer: phản hồi của thành viên; admin có thể thao tác theo quyền route.
+- POST /api/sessions/:sessionId/guests: admin thêm khách giao lưu.
+- POST /api/sessions/:sessionId/matches, GET /api/matches?date=YYYY-MM-DD: tạo và tải trận.
+- GET /api/basic: dữ liệu sổ tiền cho người đã đăng nhập; có monthlyReport khi là admin.
+- POST /api/basic/sessions: tạo buổi tiền sân với date, court, courtFee, shuttleFee, extraFee, memberIds, guestNames và voteSessionId tùy chọn.
+- PATCH /api/basic/shares/:shareId: đặt paid=true hoặc false.
+- PATCH /api/basic/people/paid: tất toán các phần chưa trả của một người.
+- DELETE /api/basic/sessions/:id: xóa buổi và xử lý đối ứng.
+- GET /api/basic/report?month=YYYY-MM: báo cáo sổ tiền sân cho admin.
+- GET /api/credits: admin xem tổng hợp, thành viên xem số dư của mình.
+- POST /api/credits: nạp/trừ tiền dư; nhận memberId, amount, direction=add|use, note và requestId tùy chọn.
+- GET /api/notices, POST /api/notices: đọc/đăng thông báo.
+- /api/tournament/*: đăng ký, hồ sơ, cặp, trận, điểm và bảng giải theo quyền hiện có.
 
-- `POST /api/sessions`
-  - Admin tạo buổi và poll để điểm danh trước trận (Phase 2): `date`, `time`, `location`, `note`, `pollQuestion`
+API dữ liệu cũ vẫn còn GET /api/debts và GET /api/reports/monthly?month=YYYY-MM[&format=csv]. Báo cáo này phục vụ bảng dữ liệu cũ, không đại diện sổ basic_sessions/basic_shares hiện tại.
 
-- `POST /api/sessions/:sessionId/settle`
-  - Admin chốt dữ liệu thực tế sau trận (Phase 1): `fixedCourtCost`, `extraCourts`, `shuttlecockCost`, `fixedMembers[]`, `guests[]`
-  - Endpoint này mới là nơi tính phí và cập nhật công nợ
+Các route đã tắt trả HTTP 410:
+- POST /api/sessions/:sessionId/settle
+- POST /api/payments
+- POST /api/expenses
+- Nhóm /api/birthday-events và các route chọn đồ uống/admin-view trước đây
 
-- `POST /api/sessions/:sessionId/respond`
-  - User trả lời tham gia `yes/no`
+Không dùng công thức phí theo giới tính/ngưỡng số người của src/calc.js để mô tả sổ tiền sân hiện tại; phần đó thuộc nghiệp vụ cũ.
 
-- `POST /api/sessions/:sessionId/poll-answer`
-  - User/admin gửi câu trả lời poll riêng (modal vote)
+## Backup và Google Sheets
 
-- `POST /api/sessions/:sessionId/guests`
-  - Admin thêm GL vào danh sách điểm danh trước buổi (`guestName`, `level`, `status`)
-  - GL được đưa vào xếp trận nếu status = `yes`
+Postgres là nguồn dữ liệu chính. Google Sheets là mirror một phần cho báo cáo, không chứa đầy đủ sổ tiền sân, tiền dư, lịch sử thanh toán và giải đấu.
 
-- `POST /api/sessions/:sessionId/matches`
-  - Admin generate Round 1..N cho đánh đôi theo level
-  - Dữ liệu được lưu theo `match_date` để reload không bị mất
+    npm run db:backup
+    npm run db:restore -- <file.dump>
+    npm run db:verify -- <file.dump>
 
-- `GET /api/matches?date=YYYY-MM-DD`
-  - Lấy lịch trận đã generate theo ngày (admin + user)
+Dùng Postgres client native hoặc POSTGRES_TOOLS_IMAGE theo hướng dẫn. Restore chỉ cho database trống có tên riêng, khác database nguồn. Công cụ đối chiếu SHA-256 archive, cấu trúc cột, số hàng và nội dung bảng. backups/ và các file dump không vào Git.
 
-- `PATCH /api/members/level`
-  - Admin update level member (1-10)
+    npm run db:drill
 
-- `POST /api/payments`
-  - Admin ghi nhận thanh toán: `{ date, memberName, amount, note }`
+Drill tạo backup thật từ nguồn đã cấu hình rồi restore vào container riêng; thao tác này khác npm test chỉ dùng dữ liệu giả. Chi tiết: [backup, khôi phục, phạm vi và lưu giữ](docs/postgres-backup.md).
 
-- `GET /api/reports/monthly?month=YYYY-MM`
-  - JSON report tháng
+Admin có thể POST /api/admin/sync-sheets hoặc để cron đồng bộ. POST /api/admin/migrate-from-sheets là công cụ dữ liệu cũ có ghi đè nhóm bảng cũ; không dùng làm quy trình khôi phục toàn bộ ứng dụng hiện tại.
 
-- `GET /api/reports/monthly?month=YYYY-MM&format=csv`
-  - Export CSV
+## Kiểm thử
 
-- `POST /api/admin/sync-sheets`
-  - Admin trigger đồng bộ Postgres -> Google Sheets thủ công
+Cần Docker đang chạy, có image postgres:17. Runner tự tạo database trong container riêng, dùng dữ liệu giả rồi dọn cả khi test thất bại.
 
-- `POST /api/admin/migrate-from-sheets`
-  - One-time migration: import toàn bộ dữ liệu hiện có từ Google Sheets vào Postgres
+    docker pull postgres:17
+    npm test
+    npm run test:money
+    npm run test:backup
 
-- `GET /api/cron/sync-sheets`
-  - Dùng cho Vercel Cron (bảo vệ bằng `CRON_SECRET`)
+npm test bao gồm cấu hình, TLS, migration, rollback, tiền, báo cáo, timezone, quyền API báo cáo và hành vi gửi lại form. test:money chạy nhóm nghiệp vụ/transaction; test:backup chạy các test công cụ backup không cần kết nối nguồn.
 
-### 1.4 Cách tính tiền (logic)
+Không truyền database production cho bộ test và không chạy trực tiếp file integration test. Xem [chi tiết kiểm thử](docs/money-tests.md).
 
-Giữ đúng rule hiện tại:
+    npm run db:prune-sessions
 
-- `Tổng chi buổi = tiền sân cố định + số sân thêm * 300k + tiền cầu`
-- Đếm người tham gia:
-  - TV cố định: checkbox có mặt
-  - GL: dòng có tên
+Lệnh dọn phiên hết hạn chạy riêng; không còn xóa phiên ở startup. Lịch backup, kho lưu ngoài máy, retention và lịch dọn phiên phải được cấu hình ở môi trường vận hành.
 
-#### Nhánh A: `tổng người > 12`
-- GL Nam: 80k/người
-- GL Nữ: 60k/người
-- `Tổng GL = tổng phí GL theo giới tính`
-- Phần còn lại cho TV cố định:
-  - `pool_fixed = max(tổng chi - tổng GL, 0)`
-  - `mỗi TV cố định có mặt = pool_fixed / số TV có mặt`
+## Phạm vi và việc còn lại
 
-#### Nhánh B: `tổng người <= 12`
-- Chia đều tổng chi cho tất cả người có mặt (TV + GL)
+Sáu bước xử lý nợ đã được triển khai trong mã và có kiểm thử; triển khai production, đối soát dữ liệu cũ và cấu hình backup ngoài máy là công việc vận hành riêng. Xem [BACKLOG](BACKLOG.md) để phân biệt nợ còn mở với tính năng mới như BXH/hồ sơ điểm.
 
-#### Cảnh báo
-- Nếu `tổng người < 8` mà vẫn nhập `sân thêm > 0` -> ghi warning để nhắc không nên đặt thêm sân.
-
----
-
-## 3) Code đầy đủ và cách chạy
-
-### 2.1 Cài đặt
-
-```bash
-npm install
-cp .env.example .env
-```
-
-Sửa `.env`:
-- `APP_PASSWORD`: mật khẩu dùng chung cả nhóm
-- `ADMIN_PASSWORD`: mật khẩu admin
-- `SESSION_SECRET`: chuỗi bất kỳ
-- `POSTGRES_URL`: connection string Vercel Postgres
-- `CRON_SECRET`: secret cho cron sync endpoint
-- `GOOGLE_SHEET_ID`: ID file Google Sheet
-- `GOOGLE_APPLICATION_CREDENTIALS`: đường dẫn `credentials.json`
-  - hoặc dùng `GOOGLE_SERVICE_ACCOUNT_JSON` (khi deploy)
-
-### 3.2 Chạy local
-
-```bash
-npm run dev
-```
-
-Mở `http://localhost:3000`
-
----
-
-## 4) Hướng dẫn setup Google Service Account + credentials.json
-
-1. Vào [Google Cloud Console](https://console.cloud.google.com/)
-2. Tạo project mới (hoặc dùng project có sẵn)
-3. Enable API: **Google Sheets API**
-4. Vào **IAM & Admin** → **Service Accounts** → **Create service account**
-5. Vào service account vừa tạo → tab **Keys** → **Add key** → **Create new key** → chọn **JSON**
-6. File JSON tải về, đổi tên thành `credentials.json` và đặt trong root project
-7. Mở Google Sheet của bạn:
-   - bấm Share
-   - chia sẻ cho email service account (dạng `xxx@xxx.iam.gserviceaccount.com`)
-   - quyền **Editor**
-8. Lấy `GOOGLE_SHEET_ID` từ URL:
-   - `https://docs.google.com/spreadsheets/d/<GOOGLE_SHEET_ID>/edit`
-
----
-
-## 5) Hướng dẫn deploy lên Vercel
-
-### 4.1 Chuẩn bị
-- Đẩy code lên GitHub
-- Tạo account Vercel
-
-### 4.2 Tạo project trên Vercel
-1. `New Project` -> import repo GitHub
-2. Framework preset: `Other`
-3. Build command: để trống
-4. Output directory: để trống
-
-### 5.3 Environment variables trên Vercel
-
-Thêm các biến:
-- `APP_PASSWORD`
-- `ADMIN_PASSWORD`
-- `SESSION_SECRET`
-- `POSTGRES_URL`
-- `CRON_SECRET`
-- `GOOGLE_SHEET_ID`
-- `GOOGLE_SERVICE_ACCOUNT_JSON` (paste toàn bộ JSON service account thành 1 dòng)
-
-> Trên Vercel nên dùng `GOOGLE_SERVICE_ACCOUNT_JSON` để không cần upload file `credentials.json`.
-> Nếu cấu hình `CRON_SECRET`, Vercel Cron sẽ tự gửi `Authorization: Bearer <CRON_SECRET>`.
-
-### 4.4 Deploy
-- Bấm Deploy
-- Sau deploy, mở URL Vercel để test login/submit
-
----
-
-## 5) Hướng dẫn sử dụng cho người không biết code
-
-### 5.1 Tạo buổi đánh mới
-1. Mở web
-2. Nhập mật khẩu chung
-3. Chọn ngày đánh
-4. Nhập tiền sân cố định, số sân thêm, tiền cầu
-5. Tick ai đi trong 7 thành viên cố định
-6. Bấm `+ Thêm GL` để nhập khách giao lưu (tên + giới tính)
-7. Bấm `Submit điểm danh & tính tiền`
-8. Web sẽ hiện bảng tính tiền + tự cập nhật công nợ
-
-### 5.2 Xem công nợ
-- Kéo xuống mục `Công nợ tổng hợp`
-- Cột `Số dư`:
-  - Dương: còn nợ
-  - Âm: đã đóng dư
-
-### 5.3 Ghi nhận đã thanh toán
-1. Vào phần `Ghi nhận thanh toán`
-2. Chọn ngày, nhập tên, số tiền, ghi chú (nếu có)
-3. Bấm `Lưu thanh toán`
-4. Bảng công nợ tự cập nhật ngay
-
-### 5.4 Thêm thành viên mới
-1. Mở Google Sheet -> tab `Members`
-2. Thêm dòng mới:
-   - `name`: tên người
-   - `type`: `Cố định` hoặc `GL`
-   - `active`: `TRUE`
-3. Reload web, hệ thống sẽ lấy danh sách mới
-
----
-
-## 6) Phase 2 đã triển khai
-
-1. **Level thành viên**
-   - `Members.level` chuẩn hóa 1-10
-   - Admin update level trực tiếp trên UI và API
-
-2. **Login admin/user + phone**
-   - Admin login bằng password env (`ADMIN_PASSWORD`)
-   - User login bằng dropdown thành viên + số điện thoại
-   - Số điện thoại được lưu vào `Members.phoneNumber`
-
-3. **RBAC đơn giản**
-   - Admin: full quyền quản trị
-   - User: chỉ xem dữ liệu cá nhân + vote tham gia + trả lời poll
-
-4. **Session + điểm danh + poll**
-   - Admin tạo buổi với ngày/giờ/địa điểm/note/poll
-   - User phải phản hồi `yes/no` cho buổi upcoming
-   - Nếu buổi có poll thì user bắt buộc nhập câu trả lời poll
-
-5. **Auto xếp trận**
-   - Generate theo vòng, cân bằng level 2 đội, giảm lặp cặp
-   - Lưu lịch sử cặp vào `MatchPairHistory`
-
-6. **NotificationService abstraction**
-   - `NotificationService.sendToMember(memberId, message)`
-   - Hiện tại là stub log console, sẵn điểm nối Telegram/Zalo OA
-
-7. **Công nợ và payment**
-   - Debt được recompute theo số người `yes` từng buổi
-   - Công thức: share từng buổi = `totalCost / số người yes`
-   - `debt = totalDue - totalPaid`
-
-8. **Báo cáo tháng + CSV**
-   - Tổng chi tháng
-   - Tỷ lệ tham gia từng member
-   - Top nợ / top thanh toán
-
-## 7) Cập nhật mới (Vote modal + QR + Match persistence)
-
-1. **Modal vote trên User Dashboard**
-   - Nếu hôm nay có poll active, user sẽ thấy popup ngay khi vào trang.
-   - Vote không hiển thị trực tiếp trong card upcoming nữa.
-   - Modal có nút `Đóng`, `Bỏ qua`, `Gửi vote`.
-
-2. **Thanh toán công nợ bằng VietQR**
-   - Trong `Công nợ cá nhân`, nếu `balance > 0` sẽ hiện nút `Thanh toán bằng QR`.
-   - Click mở modal QR động theo số tiền nợ hiện tại.
-
-3. **Fix generate trận đấu**
-   - Tạo mới hoặc update theo `match_date` (không trùng lặp khi generate lại cùng ngày).
-   - Reload trang vẫn hiển thị lịch trận đã generate.
-
-4. **Hiển thị lịch trận trên User**
-   - User có section `Trận đấu hôm nay`.
-   - Hiển thị round, sân, đội 1/đội 2, trạng thái.
-
----
-
-## 8) Ghi chú vận hành
-
-- Ứng dụng ưu tiên sự đơn giản và dễ bảo trì:
-  - Primary DB là Postgres, Google Sheets là lớp mirror/backup
-  - Deploy dễ trên Vercel/Render/Railway
-- Khi dữ liệu tăng lớn, nên tối ưu thêm index cho bảng `session_participants`, `participants`, `generated_matches`.
+Chưa triển khai bản thay đổi hoặc chạy migration trên production trong đợt này.

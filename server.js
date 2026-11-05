@@ -1,11 +1,13 @@
 require("dotenv").config();
+require("./src/runtime-config").validateRuntimeConfig();
 
 const path = require("path");
 const crypto = require("crypto");
+const businessTime = require("./public/business-time");
 const express = require("express");
 const session = require("express-session");
 const PgSession = require("connect-pg-simple")(session);
-const { PORT, ADMIN_PASSWORD, SESSION_SECRET } = require("./src/config");
+const { PORT, ADMIN_PASSWORD, SESSION_SECRET, IS_PRODUCTION } = require("./src/config");
 const { NotificationService } = require("./src/notification");
 const { generateMatchPlan, buildPairKey } = require("./src/matchmaking");
 const {
@@ -41,6 +43,7 @@ const {
   getSnapshotForSheetSync,
   replaceAllDataFromSnapshot,
   getBasicLedger,
+  getBasicMonthlyReport,
   createBasicSession,
   setBasicSharePaid,
   settleBasicPerson,
@@ -111,7 +114,7 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: Boolean(process.env.VERCEL),
+      secure: IS_PRODUCTION,
       maxAge: loginMaxAgeMs,
     },
   }),
@@ -173,8 +176,13 @@ async function ensureInitialized() {
   return initPromise;
 }
 
-app.get("/api/health", (req, res) => {
-  res.json({ ok: true });
+app.get("/api/health", async (_req, res) => {
+  try {
+    await ensureInitialized();
+    res.json({ ok: true });
+  } catch (_error) {
+    res.status(503).json({ ok: false, message: "Database chưa sẵn sàng. Kiểm tra kết nối và chạy migration trước khi khởi động." });
+  }
 });
 
 app.use("/api", async (req, res, next) => {
@@ -196,7 +204,7 @@ app.use("/api", async (req, res, next) => {
     console.error("Không thể khởi tạo Postgres:", error.message);
     return res.status(500).json({
       message:
-        "Không thể kết nối Postgres. Kiểm tra POSTGRES_URL và quyền truy cập database.",
+        "Database chưa sẵn sàng. Kiểm tra kết nối, quyền truy cập và npm run db:migrate.",
     });
   }
 });
@@ -294,7 +302,7 @@ app.get("/api/bootstrap", requireAuth, async (req, res) => {
       });
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = businessTime.dateKey();
     const [upcomingSession, activeVote, todaysMatches, voteSessions] =
       await Promise.all([
         getUpcomingSessionForMember(memberName),
@@ -361,6 +369,7 @@ app.post(
         memberId: req.body?.memberId,
         amount: signed,
         note: req.body?.note,
+        requestId: req.body?.requestId,
       });
       return res.json({
         ok: true,
@@ -882,7 +891,7 @@ app.get("/api/matches", requireAuth, async (req, res) => {
   try {
     const date =
       String(req.query.date || "").trim() ||
-      new Date().toISOString().slice(0, 10);
+      businessTime.dateKey();
     const plan = await getGeneratedMatchesByDate(date);
     return res.json({
       date,
@@ -1157,12 +1166,22 @@ app.get(
   },
 );
 
+app.get("/api/basic/report", requireAuth, requireRole(["admin"]), async (req, res) => {
+  try {
+    const month = req.query.month === undefined ? undefined : String(req.query.month).trim();
+    return res.json(await getBasicMonthlyReport(month));
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+});
+
 app.get("/api/basic", requireAuth, async (req, res) => {
   try {
-    const [members, sessions, creditSummary] = await Promise.all([
+    const [members, sessions, creditSummary, monthlyReport] = await Promise.all([
       getMembers(),
       getBasicLedger(),
       getMemberCreditSummary(),
+      req.session.role === "admin" ? getBasicMonthlyReport() : Promise.resolve(null),
     ]);
     return res.json({
       role: req.session.role,
@@ -1171,6 +1190,7 @@ app.get("/api/basic", requireAuth, async (req, res) => {
         .filter((member) => member.active)
         .map((member) => ({ memberId: member.memberId, name: member.name })),
       sessions,
+      ...(monthlyReport ? { monthlyReport } : {}),
       credits: creditSummary.balances.map((item) => ({
         memberId: item.memberId,
         balance: item.balance,

@@ -3,3 +3,8 @@ node_modules
 credentials.json
 badminton-e1571.json
 .DS_Store
+
+# Postgres backups contain private data
+/backups/
+*.dump
+*.dump.json
