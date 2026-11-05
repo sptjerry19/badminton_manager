@@ -48,7 +48,7 @@ body.app-shell {
 }
 
 .app-shell :focus-visible {
-  outline: 3px solid #1d9b5b40;
+  outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -87,19 +87,19 @@ body.app-shell {
 }
 
 .btn-primary {
-  background: var(--green-700);
-  color: #fff;
-  box-shadow: 0 5px 14px #12804b33;
+  background: var(--accent-700);
+  color: var(--on-accent);
+  box-shadow: 0 5px 14px var(--accent-shadow);
 }
 
 .btn-primary:hover {
-  background: var(--green-800);
+  background: var(--accent-800);
 }
 
 .btn-secondary {
-  background: var(--green-50);
-  color: var(--green-ink);
-  border: 1px solid var(--green-100);
+  background: var(--accent-50);
+  color: var(--accent-ink);
+  border: 1px solid var(--accent-100);
 }
 
 .btn-ghost {
@@ -155,7 +155,7 @@ body.app-shell {
   padding: 6px 0;
   border: 0;
   background: transparent;
-  color: var(--green-ink);
+  color: var(--accent-ink);
   font-size: 13px;
   font-weight: 700;
 }
@@ -174,7 +174,7 @@ body.app-shell {
   flex: none;
   border: 2px solid var(--surface);
   border-radius: 50%;
-  color: var(--green-950);
+  color: var(--accent-950);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -237,14 +237,14 @@ button.badge {
 
 .eyebrow {
   display: block;
-  color: var(--green-ink);
+  color: var(--accent-ink);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.13em;
   line-height: 1.4;
 }
 
-.positive { color: var(--green-600) !important; }
+.positive { color: var(--success) !important; }
 .negative { color: var(--red) !important; }
 .danger-text { color: var(--red) !important; }
 
@@ -295,7 +295,7 @@ button.badge {
 .field textarea:focus,
 .input:focus,
 .search-box:focus-within {
-  border-color: var(--green-600);
+  border-color: var(--accent-600);
   box-shadow: 0 0 0 3px #1d9b5b1a;
 }
 
@@ -315,12 +315,12 @@ button.badge {
 .check-row input {
   width: 18px;
   height: 18px;
-  accent-color: var(--green-600);
+  accent-color: var(--accent-600);
 }
 
 .form-note {
   margin: 10px 0 0;
-  color: var(--green-ink);
+  color: var(--accent-ink);
   font-size: 13px;
   font-weight: 600;
 }
@@ -475,7 +475,7 @@ button.badge {
   height: 36px;
   border-radius: 11px;
   background: var(--yellow);
-  color: var(--green-950);
+  color: var(--accent-950);
   font-size: 19px;
   font-style: italic;
   font-weight: 900;
@@ -512,7 +512,7 @@ button.badge {
 .segmented button.active,
 .segmented button.is-on {
   background: var(--surface);
-  color: var(--green-ink);
+  color: var(--accent-ink);
   box-shadow: var(--shadow-sm);
 }
 
@@ -592,7 +592,7 @@ button.badge {
 }
 
 .bottom-nav button.active {
-  color: var(--green-ink);
+  color: var(--accent-ink);
 }
 
 .bottom-nav button.active::before {
@@ -602,7 +602,7 @@ button.badge {
   width: 22px;
   height: 3px;
   border-radius: 4px;
-  background: var(--green-600);
+  background: var(--accent-600);
 }
 
 .nav-dot {
@@ -622,9 +622,9 @@ button.badge {
   overflow: hidden;
   padding: 20px;
   border-radius: 22px;
-  color: #fff;
-  background: linear-gradient(140deg, var(--green-950), var(--green-700));
-  box-shadow: 0 14px 32px #07512e38;
+  color: var(--balance-ink);
+  background: linear-gradient(140deg, var(--balance-start), var(--balance-end));
+  box-shadow: 0 14px 32px var(--balance-shadow);
 }
 
 .balance-card::after {
@@ -644,7 +644,7 @@ button.badge {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #cfdfd5;
+  color: var(--balance-muted);
   font-size: 13px;
 }
 
@@ -658,7 +658,7 @@ button.badge {
 
 .balance-card > p {
   margin: 0 0 18px;
-  color: #bdd2c5;
+  color: var(--balance-meta);
   font-size: 12px;
 }
 
@@ -666,8 +666,8 @@ button.badge {
   position: relative;
   z-index: 2;
   border: 0;
-  background: #fff;
-  color: var(--green-800);
+  background: var(--balance-button-bg);
+  color: var(--balance-button-ink);
   box-shadow: none;
 }
 
@@ -734,7 +734,7 @@ button.badge {
 }
 
 .rank-mini em {
-  color: var(--green-600);
+  color: var(--accent-600);
   font-size: 12px;
   font-style: normal;
   font-weight: 600;
@@ -833,8 +833,8 @@ button.badge {
 .date-tile-lg strong {
   width: 100%;
   padding: 3px;
-  background: var(--green-700);
-  color: #fff;
+  background: var(--accent-700);
+  color: var(--on-accent);
   font-size: 10px;
 }
 
@@ -928,8 +928,8 @@ button.attendance:focus-visible {
   height: 32px;
   border: 2px solid var(--surface);
   border-radius: 50%;
-  background: var(--green-50);
-  color: var(--green-ink);
+  background: var(--accent-50);
+  color: var(--accent-ink);
   font-size: 11px;
   font-weight: 800;
 }
@@ -989,16 +989,16 @@ button.attendance:focus-visible {
 }
 
 .vote-actions .vote-yes {
-  background: var(--green-50);
-  color: var(--green-ink);
-  border-color: var(--green-100);
+  background: var(--accent-50);
+  color: var(--accent-ink);
+  border-color: var(--accent-100);
 }
 
 .vote-actions .vote-yes.is-picked {
-  background: var(--green-700);
-  color: #fff;
-  border-color: var(--green-700);
-  box-shadow: 0 6px 16px #12804b3d;
+  background: var(--accent-700);
+  color: var(--on-accent);
+  border-color: var(--accent-700);
+  box-shadow: 0 6px 16px var(--accent-shadow);
 }
 
 .vote-actions .vote-no {
@@ -1145,9 +1145,9 @@ button.attendance:focus-visible {
 }
 
 .filter-chips button.active {
-  border-color: var(--green-800);
-  background: var(--green-800);
-  color: #fff;
+  border-color: var(--accent-800);
+  background: var(--accent-800);
+  color: var(--on-accent);
 }
 
 .filter-chips[aria-disabled="true"] button {
@@ -1173,7 +1173,7 @@ button.attendance:focus-visible {
   padding: 28px 22px;
   border: 1px solid var(--line);
   border-radius: 20px;
-  background: linear-gradient(160deg, var(--surface), var(--green-50));
+  background: linear-gradient(160deg, var(--surface), var(--accent-50));
   text-align: center;
 }
 
@@ -1206,10 +1206,10 @@ button.attendance:focus-visible {
   align-items: center;
   justify-content: space-between;
   padding: 14px;
-  border: 1px solid var(--green-100);
+  border: 1px solid var(--accent-100);
   border-radius: 14px;
-  background: var(--green-50);
-  color: var(--green-ink);
+  background: var(--accent-50);
+  color: var(--accent-ink);
 }
 
 .rule-card > div {
@@ -1240,8 +1240,8 @@ button.attendance:focus-visible {
   gap: 12px;
   padding: 14px;
   border-radius: 16px;
-  background: var(--green-800);
-  color: #fff;
+  background: var(--accent-800);
+  color: var(--on-accent);
 }
 
 .notification-summary > span {
@@ -1297,7 +1297,7 @@ button.attendance:focus-visible {
 }
 
 .notification-list article.unread {
-  background: var(--green-50);
+  background: var(--accent-50);
 }
 
 .notification-icon {
@@ -1309,7 +1309,7 @@ button.attendance:focus-visible {
   border: 1px solid var(--line);
   border-radius: 11px;
   background: var(--surface);
-  color: var(--green-ink);
+  color: var(--accent-ink);
 }
 
 .notification-list article > div {
@@ -1327,7 +1327,7 @@ button.attendance:focus-visible {
 }
 
 .notification-list small {
-  color: var(--green-600);
+  color: var(--accent-600);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1339,7 +1339,7 @@ button.attendance:focus-visible {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--green-600);
+  background: var(--accent-600);
 }
 
 .notification-list .empty-card {
@@ -1360,7 +1360,7 @@ button.attendance:focus-visible {
   flex-direction: column;
   width: 238px;
   padding: 24px 14px;
-  background: var(--green-950);
+  background: var(--accent-950);
   color: #fff;
 }
 
@@ -1564,8 +1564,8 @@ button.attendance:focus-visible {
   width: 52px;
   height: 56px;
   border-radius: 12px;
-  background: var(--green-50);
-  color: var(--green-ink);
+  background: var(--accent-50);
+  color: var(--accent-ink);
 }
 
 .date-box b {
@@ -1662,9 +1662,9 @@ button.attendance:focus-visible {
 
 .member-chip.selected,
 .member-chip.is-yes {
-  border-color: var(--green-600);
-  background: var(--green-50);
-  color: var(--green-ink);
+  border-color: var(--accent-600);
+  background: var(--accent-50);
+  color: var(--accent-ink);
 }
 
 .member-chip.is-no {
@@ -1699,8 +1699,8 @@ span.member-chip {
 .add-chip {
   padding: 0 14px;
   border-style: dashed;
-  border-color: var(--green-600);
-  color: var(--green-ink);
+  border-color: var(--accent-600);
+  color: var(--accent-ink);
 }
 
 .admin-actions {
@@ -1819,7 +1819,7 @@ span.member-chip {
 }
 
 .round-head span {
-  color: var(--green-ink);
+  color: var(--accent-ink);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -1927,8 +1927,8 @@ span.member-chip {
   width: 40px;
   height: 40px;
   border-radius: 11px;
-  background: var(--green-50);
-  color: var(--green-ink);
+  background: var(--accent-50);
+  color: var(--accent-ink);
 }
 
 .panel-title > div {
@@ -2057,9 +2057,9 @@ span.member-chip {
 .guest-add input {
   min-height: 42px;
   padding: 0 12px;
-  border: 1px dashed var(--green-600);
+  border: 1px dashed var(--accent-600);
   border-radius: 11px;
-  background: var(--green-50);
+  background: var(--accent-50);
   color: var(--ink);
   outline: 0;
 }
@@ -2087,7 +2087,7 @@ span.member-chip {
 .bill-total {
   padding: 18px;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--green-950), var(--green-700));
+  background: linear-gradient(135deg, var(--accent-950), var(--accent-700));
   color: #fff;
 }
 
@@ -2142,7 +2142,7 @@ span.member-chip {
 
 .split-result strong {
   display: block;
-  color: var(--green-600);
+  color: var(--accent-600);
   font-size: 26px;
 }
 
@@ -2229,8 +2229,8 @@ span.member-chip {
 
 .kpi.danger { border-top: 3px solid var(--red); }
 .kpi.danger strong { color: var(--red); }
-.kpi.success { border-top: 3px solid var(--green-600); }
-.kpi.success strong { color: var(--green-600); }
+.kpi.success { border-top: 3px solid var(--accent-600); }
+.kpi.success strong { color: var(--accent-600); }
 .kpi.warning { border-top: 3px solid var(--yellow); }
 
 .debt-columns {
@@ -2333,7 +2333,7 @@ span.member-chip {
 }
 
 .session-debts article.is-fresh {
-  box-shadow: inset 3px 0 0 var(--green-600);
+  box-shadow: inset 3px 0 0 var(--accent-600);
 }
 
 .session-debts article > button {
@@ -2562,7 +2562,7 @@ span.member-chip {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: #030f088c;
+  background: var(--overlay);
   -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
 }
@@ -2650,8 +2650,8 @@ span.member-chip {
   gap: 10px;
   padding: 11px 12px;
   border-radius: 12px;
-  background: var(--green-50);
-  color: var(--green-ink);
+  background: var(--accent-50);
+  color: var(--accent-ink);
 }
 
 .hint > span {
@@ -2801,8 +2801,8 @@ span.member-chip {
 .spinner {
   width: 22px;
   height: 22px;
-  border: 3px solid var(--green-100);
-  border-top-color: var(--green-600);
+  border: 3px solid var(--accent-100);
+  border-top-color: var(--accent-600);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -2865,7 +2865,7 @@ span.member-chip {
   min-height: 50px;
   padding: 7px 16px 7px 7px;
   border-radius: 14px;
-  background: #13281b;
+  background: var(--toast-bg);
   color: #fff;
   font-size: 14px;
   box-shadow: 0 10px 35px #0000004d;
@@ -2880,7 +2880,7 @@ span.member-chip {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: var(--green-600);
+  background: var(--accent-600);
 }
 
 .toast.is-error > span {
@@ -3020,8 +3020,8 @@ span.member-chip {
   }
 
   .admin-tabs button.active {
-    background: var(--green-50);
-    color: var(--green-ink);
+    background: var(--accent-50);
+    color: var(--accent-ink);
   }
 
   .admin-grid,
@@ -3174,6 +3174,7 @@ span.member-chip {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .app-shell,
   .app-shell *,
   .app-shell *::before,
   .app-shell *::after {
