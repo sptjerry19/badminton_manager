@@ -159,6 +159,11 @@
 
         <main>
           <div id="userHomeTabContent" class="screen-content">
+            <div class="filter-chips session-tabs" role="tablist" aria-label="Buổi đánh">
+              <button id="attendanceTabBtn" type="button" role="tab" aria-selected="true" aria-controls="attendancePanel" class="active">Điểm danh</button>
+              <button id="billingTabBtn" type="button" role="tab" aria-selected="false" aria-controls="billingPanel" tabindex="-1">Tính tiền</button>
+            </div>
+            <div id="billingPanel" role="tabpanel" aria-labelledby="billingTabBtn" hidden>
             <section class="balance-card" id="myDebtCard">
               <div class="balance-top">
                 <span>Công nợ hiện tại</span>
@@ -170,21 +175,23 @@
               <div class="decor-shuttle" aria-hidden="true">◒</div>
             </section>
 
-            <button type="button" class="rank-mini" data-go-user-tab="ranking">
-              <span class="rank-number">#?</span>
-              <span>
-                <small>Bảng xếp hạng thành viên</small>
-                <b>Sắp ra mắt <em>· tính điểm theo trận</em></b>
-              </span>
-              <i data-icon="chevron"></i>
-            </button>
-
-            <div class="section-title"><h2>Vote buổi chơi</h2></div>
-            <p id="userVoteMessage" class="form-note" hidden></p>
-            <div id="userVoteList" class="stack-12"></div>
-
-            <div class="section-title"><h2>Sổ tiền sân</h2></div>
+            <div class="section-title"><h2>Sổ tiền sân của tôi</h2></div>
             <div id="userLedgerMount" class="basic-embed"></div>
+            </div>
+            <div id="attendancePanel" role="tabpanel" aria-labelledby="attendanceTabBtn">
+              <button type="button" class="rank-mini" data-go-user-tab="ranking">
+                <span class="rank-number">#?</span>
+                <span>
+                  <small>Bảng xếp hạng thành viên</small>
+                  <b>Sắp ra mắt <em>· tính điểm theo trận</em></b>
+                </span>
+                <i data-icon="chevron"></i>
+              </button>
+              <div class="section-title"><h2>Điểm danh buổi chơi</h2></div>
+              <div id="userSessionFilters"></div>
+              <p id="userVoteMessage" class="form-note" hidden></p>
+              <div id="userVoteList" class="stack-12"></div>
+            </div>
           </div>
 
           <div id="userRankingTabContent" class="screen-content" hidden>
@@ -250,8 +257,8 @@
             </div>
           </div>
           <nav aria-label="Mục quản trị">
-            <button type="button" data-admin-tab="court"><i data-icon="calendar"></i>Vote</button>
-            <button type="button" data-admin-tab="expenses"><i data-icon="wallet"></i>Nhập tiền</button>
+            <button type="button" data-admin-tab="court"><i data-icon="calendar"></i>Điểm danh</button>
+            <button type="button" data-admin-tab="expenses"><i data-icon="wallet"></i>Tính tiền</button>
             <button type="button" data-admin-tab="ledger"><i data-icon="chart"></i>Sổ nợ</button>
             <button type="button" data-admin-tab="credit"><i data-icon="wallet"></i>Tiền thừa</button>
             <button type="button" data-admin-tab="ranking"><i data-icon="trophy"></i>BXH</button>
@@ -282,8 +289,8 @@
         </div>
 
         <div class="admin-tabs" aria-label="Mục quản trị">
-          <button type="button" data-admin-tab="court">Vote</button>
-          <button type="button" data-admin-tab="expenses">Nhập tiền</button>
+          <button type="button" data-admin-tab="court">Điểm danh</button>
+          <button type="button" data-admin-tab="expenses">Tính tiền</button>
           <button type="button" data-admin-tab="ledger">Sổ nợ</button>
           <button type="button" data-admin-tab="credit">Tiền thừa</button>
           <button type="button" data-admin-tab="ranking">BXH</button>
@@ -314,6 +321,7 @@
               <p id="preSessionMessage" class="form-note" hidden></p>
               <p id="voteListMessage" class="form-note" hidden></p>
               <p class="hint-line">Bấm vào tên để đổi Tham gia / Không. "Tính tiền" mở form Nhập tiền với người đã tham gia.</p>
+              <div id="adminSessionFilters"></div>
               <div id="voteSessionList" class="stack-12"></div>
 
               <div class="section-title"><h2>Xếp trận tự động</h2></div>
@@ -829,6 +837,7 @@
     <script src="/firebase-config.js"></script>
     <script src="/push.js"></script>
     <script src="/tournament-panel.js"></script>
+    <script src="/session-filters.js"></script>
     <script src="/ledger.js"></script>
     <script src="/app.js"></script>
   </body>

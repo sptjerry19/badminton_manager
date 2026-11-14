@@ -23,6 +23,7 @@ const {
   getUpcomingSessionForMember,
   createSession,
   cancelVoteSession,
+  setVoteLocked,
   bookVoteSession,
   upsertMemberContact,
   updateMemberLevel,
@@ -287,7 +288,7 @@ app.get("/api/bootstrap", requireAuth, async (req, res) => {
       const [members, sessions, voteSessions] = await Promise.all([
         getMembers(),
         getRecentSessions(30),
-        listVoteSessions({ includeCancelled: true, limit: 30 }),
+        listVoteSessions({ includeCancelled: true, limit: null }),
       ]);
       return res.json({
         auth: { role },
@@ -303,7 +304,7 @@ app.get("/api/bootstrap", requireAuth, async (req, res) => {
         getUpcomingSessionForMember(memberName),
         getActivePollForMember(memberName),
         getGeneratedMatchesByDate(today),
-        listVoteSessions({ includeCancelled: false, limit: 30, memberName }),
+        listVoteSessions({ includeCancelled: false, limit: null, memberName }),
       ]);
 
     return res.json({
@@ -616,7 +617,7 @@ app.get("/api/sessions/votes", requireAuth, async (req, res) => {
       req.session.role === "admin" ? "" : req.session.memberName || "";
     const voteSessions = await listVoteSessions({
       includeCancelled,
-      limit: Number(req.query.limit || 30) || 30,
+      limit: req.query.limit ? Number(req.query.limit) || 30 : null,
       memberName,
     });
     return res.json({ sessions: voteSessions });
@@ -624,6 +625,26 @@ app.get("/api/sessions/votes", requireAuth, async (req, res) => {
     return res.status(500).json({ message: error.message });
   }
 });
+
+app.patch(
+  "/api/sessions/:sessionId/vote-lock",
+  requireAuth,
+  requireRole(["admin"]),
+  async (req, res) => {
+    try {
+      const sessionId = String(req.params.sessionId || "").trim();
+      const voteLocked = Boolean(req.body?.voteLocked);
+      const sessionItem = await setVoteLocked(sessionId, voteLocked);
+      return res.json({
+        ok: true,
+        session: sessionItem,
+        message: voteLocked ? "Đã khóa vote." : "Đã mở khóa vote.",
+      });
+    } catch (error) {
+      return res.status(400).json({ message: error.message });
+    }
+  },
+);
 
 app.post(
   "/api/sessions/:sessionId/cancel",
@@ -710,6 +731,7 @@ app.post(
         memberName,
         status,
         pollAnswer,
+        isAdmin: req.session.role === "admin",
       });
       return res.json({
         ok: true,
@@ -734,7 +756,12 @@ app.post(
           ? String(req.body?.memberName || "").trim()
           : req.session.memberName;
       const answer = String(req.body?.answer || "").trim();
-      const result = await answerPoll({ sessionId, memberName, answer });
+      const result = await answerPoll({
+        sessionId,
+        memberName,
+        answer,
+        isAdmin: req.session.role === "admin",
+      });
       return res.json({ ok: true, result, message: "Đã ghi nhận phiếu vote." });
     } catch (error) {
       return res.status(400).json({ message: error.message });
@@ -812,6 +839,7 @@ app.post(
         guestName,
         level,
         status,
+        isAdmin: true,
       });
       return res.json({
         ok: true,

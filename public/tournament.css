@@ -1,3 +1,14 @@
+:root {
+  --ink: #111111;
+  --paper: #f7f7f5;
+  --line: #e5e5e0;
+  --muted: #64748b;
+  --clay: #b42318;
+  --ok: #047857;
+  --blue: #1d4ed8;
+  --radius: 10px;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -5,16 +16,18 @@
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: var(--font-body);
+  font-family: "Plus Jakarta Sans", sans-serif;
   color: var(--ink);
-  background: var(--page);
+  background:
+    radial-gradient(circle at 10% 0%, #efe9df 0%, transparent 40%),
+    linear-gradient(180deg, #fafaf8 0%, #f0efe9 100%);
 }
 
 h1,
 h2,
 h3,
 .display {
-  font-family: var(--font-body);
+  font-family: "Oswald", sans-serif;
   letter-spacing: 0.02em;
   margin: 0;
 }

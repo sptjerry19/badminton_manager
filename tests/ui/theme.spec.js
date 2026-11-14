@@ -23,7 +23,7 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { if (server) await new Promise(resolve => server.close(resolve)); });
 
-async function app(page, { season, mode, role = "user", blockedStorage = false, debt = true, schedule = [], scheduleNow, scheduleFailure = false, scheduleOverride = {}, scheduleGate } = {}) {
+async function app(page, { season, mode, role = "user", blockedStorage = false, debt = true, schedule = [], scheduleNow, scheduleFailure = false, scheduleOverride = {}, scheduleGate, voteSessions, ledgerSessions } = {}) {
   const errors = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.addInitScript(({ season, mode, blockedStorage }) => {
@@ -62,7 +62,7 @@ async function app(page, { season, mode, role = "user", blockedStorage = false, 
       case "/api/login-options": data = { members }; break;
       case "/api/bootstrap":
         if (!loggedIn) return route.fulfill({ status: 401, json: { message: "Chưa đăng nhập" } });
-        data = { auth: { role, memberName: "Linh", memberId: "demo-linh" }, members, sessions: [], voteSessions: [vote()] }; break;
+        data = { auth: { role, memberName: "Linh", memberId: "demo-linh" }, members, sessions: [], voteSessions: voteSessions || [vote()] }; break;
       case "/api/basic":
         data = { role, memberName: "Linh", members, credits: [], sessions: [{ sessionId: "ledger-demo", date: "2026-11-01", court: "Sân cầu lông Demo", courtFee: 240000, shuttleFee: 0, extraFee: 0, shares: [{ shareId: "share-demo", memberId: "demo-linh", memberName: "Linh", shareAmount: 120000, paid: !debt }] }] }; break;
       case "/api/notices": data = { notices: [{ id: "notice-demo", noticeId: "notice-demo", content: "Hẹn cả nhóm ra sân cuối tuần!", createdAt: "2026-11-05T10:00:00Z" }] }; break;
@@ -73,6 +73,7 @@ async function app(page, { season, mode, role = "user", blockedStorage = false, 
       case "/api/logout": loggedIn = false; data = {}; break;
       default: return route.fulfill({ status: 500, json: { message: "Unmocked API: " + url.pathname } });
     }
+    if (url.pathname === "/api/basic" && ledgerSessions) data.sessions = ledgerSessions;
     return route.fulfill({ json: data });
   });
   await page.goto(origin);
@@ -83,6 +84,63 @@ async function app(page, { season, mode, role = "user", blockedStorage = false, 
 async function preferences(page) {
   await page.locator("#userSection [data-open-account]").click();
   await expect(page.locator("#accountModal")).toBeVisible();
+}
+
+for (const role of ["admin", "user"]) {
+  test(`${role}: session date/member filters, separate tabs and full debt totals`, async ({ page }) => {
+    const voteSessions = [
+      { sessionId: "old", date: "2025-01-01", time: "18:00", location: "Old court", myStatus: "yes", members: [{ name: "Linh", status: "yes" }, { name: "An", status: "no" }] },
+      { sessionId: "new", date: "2026-11-14", time: "18:00", location: "New court", myStatus: "no", members: [{ name: "Linh", status: "no" }, { name: "An", status: "yes" }] },
+      { sessionId: "pending", date: "2026-11-15", time: "18:00", location: "Next court", myStatus: "pending", members: [{ name: "Linh", status: "pending" }, { name: "An", status: "yes" }] }
+    ];
+    const ledgerSessions = voteSessions.slice(0, 2).map((session, index) => ({
+      id: session.sessionId, date: session.date, court: session.location, totalFee: 100000, courtFee: 100000,
+      shares: [{ id: `share-${index}`, memberId: index ? "demo-an" : "demo-linh", memberName: index ? "An" : "Linh", shareAmount: 100000, paid: false }]
+    }));
+    const errors = await app(page, { role, voteSessions, ledgerSessions });
+    const filters = page.locator(role === "admin" ? "#adminSessionFilters" : "#userSessionFilters");
+    const cards = page.locator(role === "admin" ? "#voteSessionList article" : "#userVoteList article");
+    await expect(cards).toHaveCount(3);
+    await filters.locator("select").selectOption(role === "admin" ? "Linh" : "mine");
+    await expect(cards).toHaveCount(1);
+    await expect(cards).toHaveAttribute("data-session", "old");
+    await filters.locator('[data-session-filter="from"]').fill("2026-11-14");
+    await expect(cards).toHaveCount(0);
+    await filters.locator("button").click();
+    await filters.locator('[data-session-filter="from"]').fill("2026-11-14");
+    await filters.locator('[data-session-filter="to"]').fill("2026-11-14");
+    await expect(cards).toHaveCount(1);
+    await expect(cards).toHaveAttribute("data-session", "new");
+    await noOverflow(page);
+    if (role === "user") {
+      await page.locator("#billingTabBtn").click();
+      await expect(page.locator("#attendancePanel")).toBeHidden();
+      await expect(page.locator("#billingPanel")).toBeVisible();
+    } else {
+      await page.locator('.admin-tabs [data-admin-tab="expenses"]').click();
+      await expect(page.locator("#courtTabContent")).toBeHidden();
+      await expect(page.locator("#expensesTabContent")).toBeVisible();
+      await page.locator('.admin-tabs [data-admin-tab="ledger"]').click();
+    }
+    const ledger = page.locator(role === "user" ? "#userLedgerMount" : "#adminLedgerMount");
+    const rows = ledger.locator(role === "user" ? ".ledger-item" : "[data-sessions] article");
+    await expect(rows).toHaveCount(role === "user" ? 1 : 2);
+    if (role === "admin") {
+      await ledger.locator("[data-session-filters] select").selectOption("Linh");
+      await expect(rows).toHaveCount(1);
+    }
+    await ledger.locator('[data-session-filter="from"]').fill("2026-11-14");
+    await expect(rows).toHaveCount(0);
+    await expect(page.locator(role === "user" ? "[data-debt-amount]" : "[data-unpaid]")).toContainText(role === "user" ? "100.000" : "200.000");
+    await ledger.locator("[data-reset-sessions]").click();
+    await expect(rows).toHaveCount(role === "user" ? 1 : 2);
+    await noOverflow(page);
+    if (role === "user") {
+      await page.locator("#attendanceTabBtn").click();
+      await expect(cards).toHaveCount(1);
+    }
+    expect(errors).toEqual([]);
+  });
 }
 async function closePreferences(page) {
   await page.locator("#accountModal [data-close-modal]").click();
@@ -222,6 +280,7 @@ for (const mode of ["light", "dark"]) {
     await page.locator('.vote-yes').click();
     await expect(page.locator(".vote-yes")).toHaveAttribute("aria-pressed", "true");
     await expect.poll(() => contrast(page, ".vote-yes")).toBeGreaterThanOrEqual(4.5);
+    await page.locator("#billingTabBtn").click();
     expect(await contrast(page, "#openQrBtn")).toBeGreaterThanOrEqual(4.5);
     expect(await contrast(page, "[data-debt-badge]")).toBeGreaterThanOrEqual(4.5);
     for (const width of [320, 375, 390, 430, 1280]) {
