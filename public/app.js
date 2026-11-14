@@ -362,6 +362,12 @@ function voteCounts(session) {
   };
 }
 
+function voteFrozenForUser(session) {
+  if (!session) return false;
+  const status = String(session.voteStatus || "open").toLowerCase();
+  return Boolean(session.voteLocked) && (status === "open" || status === "booked");
+}
+
 // Popup nhắc phản hồi khi user còn "pending" ở buổi sắp tới.
 function renderUpcoming(session) {
   if (!session) {
@@ -380,7 +386,8 @@ function renderUpcoming(session) {
 
   const voteStatus = String(session.voteStatus || "open").toLowerCase();
   const myStatus = String(session.myStatus || "pending").toLowerCase();
-  const canStillVote = voteStatus === "open" || voteStatus === "booked";
+  const canStillVote =
+    (voteStatus === "open" || voteStatus === "booked") && !voteFrozenForUser(session);
   toggleModal("attendanceModal", canStillVote && myStatus === "pending");
 }
 
@@ -395,34 +402,56 @@ function adminMemberChip(session, member, editable) {
   return `<button type="button" class="${cls}" title="${title}" data-action="${guest ? "toggle-guest" : "toggle-member"}" data-session="${escapeHtmlText(session.sessionId)}" data-member="${escapeHtmlText(member.name)}" data-level="${escapeHtmlText(member.level ?? "")}" data-status="${member.status}">${inner}</button>`;
 }
 
+function filteredVoteSessions(sessions, personal) {
+  const root = $(personal ? "userSessionFilters" : "adminSessionFilters");
+  const filter = window.SessionFilters.mount(root, {
+    personal,
+    members: [...state.members, ...sessions.flatMap((session) => session.members || [])],
+    onChange: () => personal ? renderUserVoteList(state.voteSessions) : renderAdminVoteList(state.voteSessions)
+  });
+  return sessions.filter((session) => filter.matchesDate(session.date) && (
+    !filter.member || (personal
+      ? session.myStatus === "yes"
+      : (session.members || []).some((member) => member.status === "yes" && filter.matchesName(member.name)))
+  ));
+}
+
 function renderAdminVoteList(sessions) {
   const container = $("voteSessionList");
   if (!container) return;
   state.voteSessions = Array.isArray(sessions) ? sessions : [];
-  if (!state.voteSessions.length) {
-    container.innerHTML = `<div class="empty-card">Chưa có buổi vote nào. Bấm "Tạo vote mới" để bắt đầu.</div>`;
+  const filtered = filteredVoteSessions(state.voteSessions, false);
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty-card">Không có buổi đánh phù hợp. Thử đổi bộ lọc hoặc tạo vote mới.</div>`;
     return;
   }
 
   const order = { yes: 0, pending: 1, no: 2 };
-  container.innerHTML = state.voteSessions
+  container.innerHTML = filtered
     .map((session) => {
       const status = String(session.voteStatus || "open").toLowerCase();
       const sid = escapeHtmlText(session.sessionId);
       const active = status !== "cancelled";
+      const voteLocked = Boolean(session.voteLocked);
+      const editableVotes = active && !voteLocked;
       const bits = dateBits(session.date);
       const counts = voteCounts(session);
       const chips = [...counts.members]
         .sort((a, b) => order[a.status] - order[b.status] || a.name.localeCompare(b.name, "vi"))
-        .map((member) => adminMemberChip(session, member, active))
+        .map((member) => adminMemberChip(session, member, editableVotes))
         .join("");
       const thumb =
         session.bookingImageUrl && status === "booked"
           ? `<button type="button" class="session-thumb" data-action="preview-booking" data-session="${sid}" aria-label="Xem ảnh đặt sân"><img src="${escapeHtmlText(session.bookingImageUrl)}" alt="" /></button>`
           : "";
       const charged = session.basicSessionId ? `<span class="badge badge-blue">Đã tính tiền</span>` : "";
+      const lockBtn =
+        active && status !== "cancelled"
+          ? `<button type="button" class="btn btn-ghost" data-action="toggle-vote-lock" data-session="${sid}" data-locked="${voteLocked ? "1" : "0"}">${voteLocked ? icon("unlock", 18) : icon("lock", 18)}<span>${voteLocked ? "Mở vote" : "Khóa vote"}</span></button>`
+          : "";
       const actions = active
         ? `<div class="admin-actions">
+            ${lockBtn}
             <label class="btn btn-ghost upload-btn">
               ${icon("camera")}<span>${status === "booked" ? "Đổi ảnh sân" : "Đã đặt sân"}</span>
               <input type="file" accept="image/*" data-action="book-vote" data-session="${sid}" />
@@ -450,7 +479,7 @@ function renderAdminVoteList(sessions) {
         </div>
         <div class="member-chips">
           ${chips || `<span class="hint-line">Chưa có ai trong danh sách.</span>`}
-          ${active ? `<button type="button" class="add-chip" data-action="add-guest" data-session="${sid}">${icon("plus", 16)} Thêm giao lưu</button>` : ""}
+          ${editableVotes ? `<button type="button" class="add-chip" data-action="add-guest" data-session="${sid}">${icon("plus", 16)} Thêm giao lưu</button>` : ""}
         </div>
         ${actions}
       </article>`;
@@ -461,11 +490,11 @@ function renderAdminVoteList(sessions) {
 function renderUserVoteList(sessions) {
   const container = $("userVoteList");
   if (!container) return;
-  const list = (Array.isArray(sessions) ? sessions : []).filter(
+  const list = filteredVoteSessions(Array.isArray(sessions) ? sessions : [], true).filter(
     (session) => String(session.voteStatus || "open").toLowerCase() !== "cancelled"
   );
   if (!list.length) {
-    container.innerHTML = `<div class="empty-card">Chưa có buổi vote nào. Admin tạo lịch là bạn sẽ thấy ở đây.</div>`;
+    container.innerHTML = `<div class="empty-card">Không có buổi đánh phù hợp. Thử đổi bộ lọc hoặc chờ admin tạo lịch mới.</div>`;
     return;
   }
 
@@ -473,6 +502,7 @@ function renderUserVoteList(sessions) {
     .map((session) => {
       const status = String(session.voteStatus || "open").toLowerCase();
       const myStatus = String(session.myStatus || "pending").toLowerCase();
+      const frozen = voteFrozenForUser(session);
       const sid = escapeHtmlText(session.sessionId);
       const bits = dateBits(session.date);
       const counts = voteCounts(session);
@@ -509,9 +539,8 @@ function renderUserVoteList(sessions) {
             </div>
             ${icon("chevron", 16)}
           </button>
-          <div class="vote-actions">
-            <button type="button" class="btn vote-yes${myStatus === "yes" ? " is-picked" : ""}${myStatus === "no" ? " is-dimmed" : ""}" data-action="user-respond" data-status="yes" data-session="${sid}" aria-pressed="${myStatus === "yes"}">${icon("check")}<span>${myStatus === "yes" ? "Đã tham gia" : "Có tham gia"}</span></button>
-            <button type="button" class="btn vote-no${myStatus === "no" ? " is-picked" : ""}${myStatus === "yes" ? " is-dimmed" : ""}" data-action="user-respond" data-status="no" data-session="${sid}" aria-pressed="${myStatus === "no"}">${icon("close")}<span>${myStatus === "no" ? "Không tham gia" : "Không"}</span></button>
+          <div class="vote-actions">${frozen ? `<p class="hint-line">Admin đã khóa vote cho buổi này. Bạn không thể đổi lựa chọn.</p>` : `<button type="button" class="btn vote-yes${myStatus === "yes" ? " is-picked" : ""}${myStatus === "no" ? " is-dimmed" : ""}" data-action="user-respond" data-status="yes" data-session="${sid}" aria-pressed="${myStatus === "yes"}">${icon("check")}<span>${myStatus === "yes" ? "Đã tham gia" : "Có tham gia"}</span></button>
+            <button type="button" class="btn vote-no${myStatus === "no" ? " is-picked" : ""}${myStatus === "yes" ? " is-dimmed" : ""}" data-action="user-respond" data-status="no" data-session="${sid}" aria-pressed="${myStatus === "no"}">${icon("close")}<span>${myStatus === "no" ? "Không tham gia" : "Không"}</span></button>`}
           </div>
         </div>
       </article>`;
@@ -604,6 +633,15 @@ async function bookVoteSession(sessionId, file) {
     body: JSON.stringify({ imageDataUrl })
   });
   showToast(data.message || "Đã đánh dấu đặt sân.");
+  await loadAdminDashboard();
+}
+
+async function toggleVoteLock(sessionId, nextLocked) {
+  const data = await api(`/api/sessions/${encodeURIComponent(sessionId)}/vote-lock`, {
+    method: "PATCH",
+    body: JSON.stringify({ voteLocked: nextLocked })
+  });
+  showToast(data.message || (nextLocked ? "Đã khóa vote." : "Đã mở khóa vote."));
   await loadAdminDashboard();
 }
 
@@ -753,6 +791,11 @@ function renderUserDebt(myDebt, creditBalance = 0) {
 
 function openVoteModal(vote) {
   if (!vote) return;
+  const session = state.voteSessions.find((item) => item.sessionId === vote.sessionId);
+  if (voteFrozenForUser(session || vote)) {
+    state.activeVote = null;
+    return;
+  }
   state.activeVote = vote;
   $("voteSessionText").textContent = `Phiên: ${vote.date} ${vote.time || ""} ${vote.location ? `- ${vote.location}` : ""}`;
   $("voteQuestionText").textContent = vote.question || "Bạn vui lòng bỏ phiếu.";
@@ -775,6 +818,13 @@ async function submitAttendance(status, sessionIdOverride = "") {
   const sessionId = String(sessionIdOverride || state.upcomingSessionId || "").trim();
   if (!sessionId) {
     setMessage("attendanceModalMessage", "Chưa có buổi upcoming để phản hồi.", true);
+    return;
+  }
+  const sess = state.voteSessions.find((item) => item.sessionId === sessionId);
+  if (voteFrozenForUser(sess)) {
+    const msg = "Vote đã khóa. Liên hệ admin nếu cần đổi lựa chọn.";
+    setMessage("attendanceModalMessage", msg, true);
+    setMessage("userVoteMessage", msg, true);
     return;
   }
   try {
@@ -1142,7 +1192,8 @@ async function loadUserDashboard() {
   await loadUserBasicLedger(data.auth?.memberName || "");
   if (state.activeUserTab !== "notices") loadNotices("userNoticeList", { loading: false }).catch(() => {});
   if (data.activeVote) {
-    openVoteModal(data.activeVote);
+    const pollSession = state.voteSessions.find((item) => item.sessionId === data.activeVote.sessionId);
+    if (!voteFrozenForUser(pollSession || data.activeVote)) openVoteModal(data.activeVote);
   }
 }
 
@@ -1617,6 +1668,15 @@ function bindVotes() {
       openBookingImage(session);
       return;
     }
+    if (action === "toggle-vote-lock") {
+      try {
+        const cur = button.dataset.locked === "1";
+        await toggleVoteLock(sessionId, !cur);
+      } catch (error) {
+        setMessage("voteListMessage", error.message, true);
+      }
+      return;
+    }
     if (action === "cancel-vote") {
       try {
         await cancelVoteSession(sessionId);
@@ -1699,6 +1759,11 @@ function bindVotes() {
       return;
     }
     if (action === "user-respond" && sessionId) {
+      const sess = state.voteSessions.find((item) => item.sessionId === sessionId);
+      if (voteFrozenForUser(sess)) {
+        showToast("Vote đã khóa. Liên hệ admin nếu cần đổi lựa chọn.");
+        return;
+      }
       button.disabled = true;
       await submitAttendance(button.dataset.status, sessionId);
       button.disabled = false;
@@ -1795,6 +1860,16 @@ function bindUserModals() {
 }
 
 function bindEvents() {
+  ["attendance", "billing"].forEach((tab) => {
+    $(tab + "TabBtn").addEventListener("click", () => {
+      ["attendance", "billing"].forEach((key) => {
+        const active = key === tab;
+        $(key + "Panel").hidden = !active;
+        $(key + "TabBtn").classList.toggle("active", active);
+        $(key + "TabBtn").setAttribute("aria-selected", String(active));
+      });
+    });
+  });
   bindChrome();
   bindAuth();
   bindTabs();

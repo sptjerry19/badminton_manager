@@ -3,6 +3,21 @@
    Token màu ở tokens.css; file này chỉ dùng biến.
    ========================================================= */
 
+.session-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
+  margin: 16px 0;
+}
+.session-filters .field { min-width: 0; }
+.session-filters input, .session-filters select { width: 100%; min-width: 0; }
+.session-tabs { margin-bottom: 20px; }
+.session-tabs button { flex: 1; }
+@media (min-width: 700px) {
+  .session-filters { grid-template-columns: 1fr 1fr 1.4fr auto; }
+}
+
 *,
 *::before,
 *::after {

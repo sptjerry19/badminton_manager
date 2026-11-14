@@ -1,5 +1,4 @@
 const crypto = require("crypto");
-const { AsyncLocalStorage } = require("async_hooks");
 const { Pool } = require("pg");
 const { calculateSession } = require("./calc");
 const { DEFAULT_SETTINGS, DEFAULT_FIXED_MEMBERS } = require("./config");
@@ -99,9 +98,6 @@ if (!process.env.POSTGRES_URL) {
   );
 }
 
-// Node mặc định chỉ chờ 250ms cho mỗi địa chỉ IP (Happy Eyeballs) -> dễ timeout khi mạng quốc tế chậm.
-require("net").setDefaultAutoSelectFamilyAttemptTimeout(5000);
-
 const pool = new Pool({
   connectionString: process.env.POSTGRES_URL,
   ssl: process.env.POSTGRES_URL.includes("localhost")
@@ -109,29 +105,8 @@ const pool = new Pool({
     : { rejectUnauthorized: false },
 });
 
-const txStorage = new AsyncLocalStorage();
-
 async function query(text, params = []) {
-  const client = txStorage.getStore();
-  return (client || pool).query(text, params);
-}
-
-// Mọi query() gọi bên trong fn dùng chung 1 client/transaction.
-// Gọi lồng nhau thì tái sử dụng transaction đang chạy.
-async function withTransaction(fn) {
-  if (txStorage.getStore()) return fn();
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const result = await txStorage.run(client, fn);
-    await client.query("COMMIT");
-    return result;
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw error;
-  } finally {
-    client.release();
-  }
+  return pool.query(text, params);
 }
 
 async function initializeDatabase() {
@@ -289,14 +264,6 @@ async function initializeDatabase() {
       UNIQUE (match_date, round, match_no)
     );
 
-    CREATE TABLE IF NOT EXISTS generated_match_round_waiting (
-      match_date TEXT NOT NULL,
-      round INTEGER NOT NULL,
-      waiting_json JSONB NOT NULL DEFAULT '[]'::jsonb,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (match_date, round)
-    );
-
     CREATE TABLE IF NOT EXISTS birthday_events (
       event_id TEXT PRIMARY KEY,
       event_name TEXT NOT NULL,
@@ -386,14 +353,12 @@ async function initializeDatabase() {
     ADD COLUMN IF NOT EXISTS booking_image_url TEXT NOT NULL DEFAULT '';
   `);
   await query(`
-    ALTER TABLE members
-    ADD COLUMN IF NOT EXISTS birthday TEXT NOT NULL DEFAULT '';
+    ALTER TABLE sessions
+    ADD COLUMN IF NOT EXISTS vote_locked BOOLEAN NOT NULL DEFAULT FALSE;
   `);
   await query(`
-    ALTER TABLE basic_sessions
-    ADD COLUMN IF NOT EXISTS extra_fee INTEGER NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS extra_note TEXT NOT NULL DEFAULT '',
-    ADD COLUMN IF NOT EXISTS vote_session_id TEXT NOT NULL DEFAULT '';
+    ALTER TABLE members
+    ADD COLUMN IF NOT EXISTS birthday TEXT NOT NULL DEFAULT '';
   `);
   await query(`
     ALTER TABLE birthday_event_brands
@@ -668,6 +633,7 @@ function mapSessionRow(row, extras = {}) {
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
     voteStatus: normalizeVoteStatus(row.vote_status),
     bookingImageUrl: row.booking_image_url || "",
+    voteLocked: Boolean(row.vote_locked),
     ...extras,
   };
 }
@@ -735,7 +701,8 @@ async function listVoteSessions({
   limit = 30,
   memberName = "",
 } = {}) {
-  const max = Math.max(1, Math.min(100, Number(limit) || 30));
+  // NULL means the full attendance history, so date/member filters include older sessions.
+  const max = limit === null ? null : Math.max(1, Math.min(100, Number(limit) || 30));
   const sessionsResult = await query(
     includeCancelled
       ? `
@@ -764,41 +731,24 @@ async function listVoteSessions({
     [sessionIds],
   );
 
-  const chargedResult = await query(
-    `
-    SELECT vote_session_id, MAX(basic_session_id) AS basic_session_id
-    FROM basic_sessions
-    WHERE vote_session_id = ANY($1::text[])
-    GROUP BY vote_session_id
-    `,
-    [sessionIds],
-  );
-  const basicIdBySession = {};
-  chargedResult.rows.forEach((row) => {
-    basicIdBySession[row.vote_session_id] = row.basic_session_id;
-  });
-
   const memberNameCi = safeLower(memberName);
   const yesBySession = {};
-  const membersBySession = {};
   const statsBySession = {};
   const myStatusBySession = {};
+  const membersBySession = {};
   participantsResult.rows.forEach((row) => {
     const sid = row.session_id;
+    if (!membersBySession[sid]) membersBySession[sid] = [];
+    membersBySession[sid].push({
+      memberId: row.member_id,
+      name: row.member_name,
+      guest: row.participant_type === "Giao lưu",
+      level: row.participant_level,
+      status: String(row.status || "pending").toLowerCase(),
+    });
     if (!statsBySession[sid])
       statsBySession[sid] = { yes: 0, no: 0, pending: 0 };
     const status = String(row.status || "pending").toLowerCase();
-    if (!membersBySession[sid]) membersBySession[sid] = [];
-    membersBySession[sid].push({
-      memberId: row.member_id || "",
-      name: row.member_name,
-      status: ["yes", "no"].includes(status) ? status : "pending",
-      guest: row.participant_type === "GL",
-      level:
-        row.participant_level === null || row.participant_level === undefined
-          ? null
-          : normalizeLevel(row.participant_level),
-    });
     if (memberNameCi && row.member_name_ci === memberNameCi) {
       myStatusBySession[sid] = status;
     }
@@ -824,7 +774,6 @@ async function listVoteSessions({
       stats: statsBySession[row.session_id] || { yes: 0, no: 0, pending: 0 },
       yesMembers: yesBySession[row.session_id] || [],
       members: membersBySession[row.session_id] || [],
-      basicSessionId: basicIdBySession[row.session_id] || "",
     });
     if (memberNameCi) {
       mapped.myStatus = myStatusBySession[row.session_id] || "pending";
@@ -839,6 +788,12 @@ function assertSessionAcceptsVotes(session) {
   if (status === "cancelled") throw new Error("Buổi này đã bị hủy vote.");
 }
 
+function assertUserVoteNotLocked(session, isAdmin = false) {
+  if (!session?.voteLocked) return;
+  if (isAdmin) return;
+  throw new Error("Vote đã khóa. Liên hệ admin nếu cần đổi lựa chọn.");
+}
+
 async function cancelVoteSession(sessionId) {
   const session = await getSessionById(sessionId);
   if (!session) throw new Error("Không tìm thấy buổi chơi.");
@@ -851,6 +806,21 @@ async function cancelVoteSession(sessionId) {
     [sessionId],
   );
   return getSessionById(sessionId);
+}
+
+async function setVoteLocked(sessionId, voteLocked = false) {
+  const sid = String(sessionId || "").trim();
+  const session = await getSessionById(sid);
+  if (!session) throw new Error("Không tìm thấy buổi chơi.");
+  if (session.voteStatus === "cancelled") {
+    throw new Error("Không thể khóa/mở vote cho buổi đã hủy.");
+  }
+  const locked = Boolean(voteLocked);
+  await query(`UPDATE sessions SET vote_locked = $2 WHERE session_id = $1`, [
+    sid,
+    locked,
+  ]);
+  return getSessionById(sid);
 }
 
 async function bookVoteSession(sessionId, bookingImageUrl) {
@@ -943,6 +913,7 @@ async function getActivePollForMember(memberName) {
      AND pa.member_name_ci = $2
     WHERE (s.date || 'T' || COALESCE(s.time, '00:00')) >= $1
       AND COALESCE(s.vote_status, 'open') <> 'cancelled'
+      AND COALESCE(s.vote_locked, FALSE) = FALSE
       AND (pa.answer IS NULL OR BTRIM(pa.answer) = '')
     ORDER BY s.date ASC, s.time ASC
     LIMIT 1
@@ -994,6 +965,7 @@ async function getUpcomingSessionForMember(memberName) {
      AND sp.member_name_ci = $2
     WHERE (s.date || 'T' || COALESCE(s.time, '00:00')) >= $1
       AND COALESCE(s.vote_status, 'open') <> 'cancelled'
+      AND COALESCE(s.vote_locked, FALSE) = FALSE
     ORDER BY
       CASE WHEN sp.status = 'pending' THEN 0 ELSE 1 END,
       s.date ASC,
@@ -1022,6 +994,7 @@ async function getUpcomingSessionForMember(memberName) {
     totalCost: toNumber(row.total_cost),
     voteStatus: normalizeVoteStatus(row.vote_status),
     bookingImageUrl: row.booking_image_url || "",
+    voteLocked: Boolean(row.vote_locked),
     myStatus: row.my_status || "pending",
     poll: poll
       ? {
@@ -1047,9 +1020,9 @@ async function createSession(payload, createdBy = "admin") {
   await query(
     `
     INSERT INTO sessions(
-      session_id, date, time, location, note, fixed_court_cost, extra_courts, shuttlecock_cost, total_cost, created_by, created_at, vote_status, booking_image_url
+      session_id, date, time, location, note, fixed_court_cost, extra_courts, shuttlecock_cost, total_cost, created_by, created_at, vote_status, booking_image_url, vote_locked
     )
-    VALUES ($1,$2,$3,$4,$5,0,0,0,0,$6,$7,'open','')
+    VALUES ($1,$2,$3,$4,$5,0,0,0,0,$6,$7,'open','',FALSE)
     `,
     [sessionId, date, time, location, note, createdBy, ts],
   );
@@ -1089,11 +1062,7 @@ async function createSession(payload, createdBy = "admin") {
   return { sessionId, totalCost: 0, poll };
 }
 
-async function settleSession(input) {
-  return withTransaction(() => settleSessionTx(input));
-}
-
-async function settleSessionTx({
+async function settleSession({
   sessionId,
   fixedCourtCost,
   extraCourts,
@@ -1726,7 +1695,13 @@ async function getBirthdayEventAdminView(eventId) {
   };
 }
 
-async function respondToSession({ sessionId, memberName, status, pollAnswer }) {
+async function respondToSession({
+  sessionId,
+  memberName,
+  status,
+  pollAnswer,
+  isAdmin = false,
+}) {
   const safeStatus = safeLower(status);
   if (!["yes", "no"].includes(safeStatus)) {
     throw new Error("Trạng thái tham gia chỉ nhận yes/no.");
@@ -1740,6 +1715,7 @@ async function respondToSession({ sessionId, memberName, status, pollAnswer }) {
 
   const session = await getSessionById(sessionId);
   assertSessionAcceptsVotes(session);
+  assertUserVoteNotLocked(session, isAdmin);
 
   const ts = nowIso();
   await query(
@@ -1791,12 +1767,14 @@ async function respondToSession({ sessionId, memberName, status, pollAnswer }) {
   };
 }
 
-async function answerPoll({ sessionId, memberName, answer }) {
+async function answerPoll({ sessionId, memberName, answer, isAdmin = false }) {
   const answerText = String(answer || "").trim();
   if (!answerText) throw new Error("Câu trả lời poll không được để trống.");
 
   const session = await getSessionById(sessionId);
   if (!session) throw new Error("Không tìm thấy buổi chơi.");
+  assertSessionAcceptsVotes(session);
+  assertUserVoteNotLocked(session, isAdmin);
   if (session.voteStatus === "cancelled")
     throw new Error("Buổi này đã bị hủy vote.");
 
@@ -1843,9 +1821,11 @@ async function addGuestToSession({
   guestName,
   level = 5,
   status = "yes",
+  isAdmin = false,
 }) {
   const session = await getSessionById(sessionId);
   assertSessionAcceptsVotes(session);
+  assertUserVoteNotLocked(session, isAdmin);
   const name = String(guestName || "").trim();
   if (!name) throw new Error("Tên GL không được để trống.");
   const safeStatus = safeLower(status || "yes");
@@ -1883,11 +1863,7 @@ async function addGuestToSession({
   };
 }
 
-async function addPayment(input) {
-  return withTransaction(() => addPaymentTx(input));
-}
-
-async function addPaymentTx({ date, memberName, amount, note }) {
+async function addPayment({ date, memberName, amount, note }) {
   const safeAmount = toNumber(amount);
   if (safeAmount <= 0) throw new Error("Số tiền thanh toán phải lớn hơn 0.");
   const paymentId = crypto.randomUUID();
@@ -1934,11 +1910,7 @@ function buildDebtMemberIdFromName(name) {
   return `d_${hash.slice(0, 12)}`;
 }
 
-async function addExpense(input) {
-  return withTransaction(() => addExpenseTx(input));
-}
-
-async function addExpenseTx({
+async function addExpense({
   sessionId,
   name,
   totalAmount,
@@ -2092,20 +2064,19 @@ async function getExpenses(limit = 50) {
 }
 
 async function recomputeDebts() {
-  return withTransaction(recomputeDebtsTx);
-}
-
-async function recomputeDebtsTx() {
-  // Tuần tự hóa các lần recompute đồng thời; khóa tự nhả khi COMMIT/ROLLBACK.
-  await query(`SELECT pg_advisory_xact_lock(hashtext('recompute_debts'))`);
-  // Tuần tự: 1 client trong transaction không chạy query song song được.
-  const allMembers = await getMembers();
-  const activeFixedMembers = await getActiveFixedMembers();
-  const participantsResult = await query(`SELECT * FROM participants`);
-  const paymentsResult = await query(`SELECT * FROM payments`);
-  const expenseParticipantsResult = await query(
-    `SELECT * FROM expense_participants`,
-  );
+  const [
+    allMembers,
+    activeFixedMembers,
+    participantsResult,
+    paymentsResult,
+    expenseParticipantsResult,
+  ] = await Promise.all([
+    getMembers(),
+    getActiveFixedMembers(),
+    query(`SELECT * FROM participants`),
+    query(`SELECT * FROM payments`),
+    query(`SELECT * FROM expense_participants`),
+  ]);
 
   const memberByName = {};
   allMembers.forEach((member) => {
@@ -2264,18 +2235,9 @@ async function replaceGeneratedMatchesForDate(sessionId, matchDate, rounds) {
   if (!date) throw new Error("Thiếu matchDate để lưu lịch trận.");
 
   await query(`DELETE FROM generated_matches WHERE match_date = $1`, [date]);
-  await query(`DELETE FROM generated_match_round_waiting WHERE match_date = $1`, [date]);
   let inserted = 0;
   for (const roundItem of rounds || []) {
     const roundNo = Number(roundItem.round || 1);
-    const waitingNames = Array.isArray(roundItem.waiting) ? roundItem.waiting : [];
-    await query(
-      `
-      INSERT INTO generated_match_round_waiting(match_date, round, waiting_json, updated_at)
-      VALUES ($1, $2, $3::jsonb, $4)
-      `,
-      [date, roundNo, JSON.stringify(waitingNames), nowIso()],
-    );
     const matches = Array.isArray(roundItem.matches) ? roundItem.matches : [];
     for (let i = 0; i < matches.length; i += 1) {
       const match = matches[i];
@@ -2316,34 +2278,17 @@ async function replaceGeneratedMatchesForDate(sessionId, matchDate, rounds) {
 
 async function getGeneratedMatchesByDate(matchDate) {
   const date = String(matchDate || "").trim();
-  if (!date) return { matches: [], waitingByRound: {} };
-  const [result, waitingResult] = await Promise.all([
-    query(
-      `
-      SELECT *
-      FROM generated_matches
-      WHERE match_date = $1
-      ORDER BY round ASC, match_no ASC
-      `,
-      [date],
-    ),
-    query(
-      `
-      SELECT round, waiting_json
-      FROM generated_match_round_waiting
-      WHERE match_date = $1
-      ORDER BY round ASC
-      `,
-      [date],
-    ),
-  ]);
-  const waitingByRound = {};
-  waitingResult.rows.forEach((row) => {
-    const roundNo = Number(row.round || 1);
-    waitingByRound[roundNo] = Array.isArray(row.waiting_json) ? row.waiting_json : [];
-  });
-  const matches = result.rows.map((row) => ({
-    id: Number(row.id),
+  if (!date) return [];
+  const result = await query(
+    `
+    SELECT *
+    FROM generated_matches
+    WHERE match_date = $1
+    ORDER BY round ASC, match_no ASC
+    `,
+    [date],
+  );
+  return result.rows.map((row) => ({
     matchDate: row.match_date,
     sessionId: row.session_id,
     round: Number(row.round || 1),
@@ -2356,7 +2301,6 @@ async function getGeneratedMatchesByDate(matchDate) {
     status: row.status || "scheduled",
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : "",
   }));
-  return { matches, waitingByRound };
 }
 
 async function getMonthlyReport(month) {
@@ -2530,6 +2474,7 @@ async function getSnapshotForSheetSync() {
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
       voteStatus: normalizeVoteStatus(row.vote_status),
       bookingImageUrl: row.booking_image_url || "",
+      voteLocked: Boolean(row.vote_locked),
     })),
     participants: participants.rows.map((row) => ({
       sessionId: row.session_id,
@@ -2673,7 +2618,6 @@ async function replaceAllDataFromSnapshot(snapshot) {
   try {
     await client.query("BEGIN");
     await client.query("DELETE FROM generated_matches");
-    await client.query("DELETE FROM generated_match_round_waiting");
     await client.query("DELETE FROM birthday_drink_orders");
     await client.query("DELETE FROM birthday_event_drinks");
     await client.query("DELETE FROM birthday_event_brands");
@@ -2723,8 +2667,8 @@ async function replaceAllDataFromSnapshot(snapshot) {
     for (const row of snapshot.sessions || []) {
       await client.query(
         `
-        INSERT INTO sessions(session_id, date, time, location, note, fixed_court_cost, extra_courts, shuttlecock_cost, total_cost, created_by, created_at, vote_status, booking_image_url)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        INSERT INTO sessions(session_id, date, time, location, note, fixed_court_cost, extra_courts, shuttlecock_cost, total_cost, created_by, created_at, vote_status, booking_image_url, vote_locked)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
         `,
         [
           String(row.sessionId || "").trim(),
@@ -2740,6 +2684,7 @@ async function replaceAllDataFromSnapshot(snapshot) {
           String(row.createdAt || nowIso()),
           normalizeVoteStatus(row.voteStatus || row.vote_status),
           String(row.bookingImageUrl || row.booking_image_url || "").trim(),
+          Boolean(row.voteLocked ?? row.vote_locked),
         ],
       );
     }
@@ -3028,9 +2973,6 @@ function mapBasicSession(row) {
     court: row.court || "",
     courtFee: Math.round(toNumber(row.court_fee)),
     shuttleFee: Math.round(toNumber(row.shuttle_fee)),
-    extraFee: Math.round(toNumber(row.extra_fee)),
-    extraNote: row.extra_note || "",
-    voteSessionId: row.vote_session_id || "",
     totalFee: Math.round(toNumber(row.total_fee)),
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
   };
@@ -3102,9 +3044,6 @@ async function createBasicSession({
   court,
   courtFee,
   shuttleFee,
-  extraFee,
-  extraNote,
-  voteSessionId,
   memberIds,
   guestNames,
 }) {
@@ -3118,17 +3057,11 @@ async function createBasicSession({
 
   const safeCourtFee = Math.round(toNumber(courtFee));
   const safeShuttleFee = Math.round(toNumber(shuttleFee));
-  const safeExtraFee = Math.round(toNumber(extraFee));
-  if (safeCourtFee < 0 || safeShuttleFee < 0 || safeExtraFee < 0) {
-    throw new Error("Tiền sân, tiền cầu và phát sinh không được âm.");
-  }
-  const safeExtraNote = String(extraNote || "").trim().slice(0, 200);
-  const safeVoteSessionId = String(voteSessionId || "").trim();
-  if (safeVoteSessionId && !(await getSessionById(safeVoteSessionId))) {
-    throw new Error("Không tìm thấy buổi vote cần tính tiền.");
+  if (safeCourtFee < 0 || safeShuttleFee < 0) {
+    throw new Error("Tiền sân và tiền cầu không được âm.");
   }
 
-  const totalFee = safeCourtFee + safeShuttleFee + safeExtraFee;
+  const totalFee = safeCourtFee + safeShuttleFee;
   if (totalFee <= 0) throw new Error("Tổng tiền phải lớn hơn 0.");
 
   const ids = Array.isArray(memberIds)
@@ -3189,10 +3122,9 @@ async function createBasicSession({
     await client.query(
       `
       INSERT INTO basic_sessions(
-        basic_session_id, play_date, court, court_fee, shuttle_fee,
-        extra_fee, extra_note, vote_session_id, total_fee, created_at
+        basic_session_id, play_date, court, court_fee, shuttle_fee, total_fee, created_at
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
       `,
       [
         sessionId,
@@ -3200,9 +3132,6 @@ async function createBasicSession({
         safeCourt,
         safeCourtFee,
         safeShuttleFee,
-        safeExtraFee,
-        safeExtraNote,
-        safeVoteSessionId,
         totalFee,
         ts,
       ],
@@ -3259,65 +3188,33 @@ async function setBasicSharePaid(shareId, paid) {
   return mapBasicShare(result.rows[0]);
 }
 
-async function settleBasicPerson(input) {
-  return withTransaction(() => settleBasicPersonTx(input));
-}
-
-// Đánh dấu toàn bộ phần chưa trả của 1 người là đã trả. Nếu người đó có
-// tiền nạp trước thì trừ phần đã dùng để không bị tính 2 lần.
-async function settleBasicPersonTx({ memberId, memberName }) {
+async function settleBasicPerson({ memberId, memberName }) {
   const id = String(memberId || "").trim();
   const name = String(memberName || "").trim();
   if (!id && !name) throw new Error("Thiếu người cần cập nhật.");
 
-  const updated = await query(
+  const existing = await query(
+    id
+      ? `SELECT id FROM basic_shares WHERE member_id = $1 LIMIT 1`
+      : `SELECT id FROM basic_shares WHERE member_id = '' AND member_name_ci = $1 LIMIT 1`,
+    [id || safeLower(name)],
+  );
+  if (!existing.rows[0]) throw new Error("Không tìm thấy người này trong sổ.");
+
+  await query(
     id
       ? `
         UPDATE basic_shares
         SET paid = TRUE, paid_at = NOW()
         WHERE member_id = $1 AND paid = FALSE
-        RETURNING share_amount
       `
       : `
         UPDATE basic_shares
         SET paid = TRUE, paid_at = NOW()
         WHERE member_id = '' AND member_name_ci = $1 AND paid = FALSE
-        RETURNING share_amount
       `,
     [id || safeLower(name)],
   );
-  if (!updated.rows.length) {
-    throw new Error("Người này không còn phần nào chưa trả.");
-  }
-
-  if (id) {
-    const unpaid = updated.rows.reduce(
-      (sum, row) => sum + Math.round(toNumber(row.share_amount)),
-      0,
-    );
-    const credit = await getMemberCreditBalanceById(id);
-    const used = Math.min(Math.max(0, credit), unpaid);
-    if (used > 0) {
-      const member = await query(
-        `SELECT name FROM members WHERE member_id = $1`,
-        [id],
-      );
-      await query(
-        `
-        INSERT INTO member_credits(credit_id, member_id, member_name, amount, note, created_at)
-        VALUES ($1,$2,$3,$4,$5,$6)
-        `,
-        [
-          crypto.randomUUID(),
-          id,
-          member.rows[0]?.name || name,
-          -used,
-          "Trừ vào tiền sân",
-          nowIso(),
-        ],
-      );
-    }
-  }
   return getBasicLedger();
 }
 
@@ -3578,13 +3475,13 @@ async function listNotices(limit = 40) {
     ORDER BY created_at DESC
     LIMIT $1
     `,
-    [safeLimit]
+    [safeLimit],
   );
   return result.rows.map((row) => ({
     noticeId: row.notice_id,
     content: row.content || "",
     createdBy: row.created_by || "",
-    createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
   }));
 }
 
@@ -3599,14 +3496,14 @@ async function createNotice({ content, createdBy }) {
     VALUES ($1,$2,$3,NOW())
     RETURNING notice_id, content, created_by, created_at
     `,
-    [noticeId, text, String(createdBy || "admin").trim() || "admin"]
+    [noticeId, text, String(createdBy || "admin").trim() || "admin"],
   );
   const row = result.rows[0];
   return {
     noticeId: row.notice_id,
     content: row.content || "",
     createdBy: row.created_by || "",
-    createdAt: row.created_at ? new Date(row.created_at).toISOString() : ""
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : "",
   };
 }
 
@@ -3637,6 +3534,7 @@ module.exports = {
   getUpcomingSessionForMember,
   createSession,
   cancelVoteSession,
+  setVoteLocked,
   bookVoteSession,
   settleSession,
   upsertMemberContact,
@@ -3655,7 +3553,6 @@ module.exports = {
   addPayment,
   addExpense,
   recomputeDebts,
-  withTransaction,
   getDebts,
   getPayments,
   getExpenses,

@@ -425,6 +425,8 @@
                 <p data-session-meta></p>
               </div>
             </div>
+            <div data-session-filters></div>
+            <p class="hint-line">Bộ lọc chỉ áp dụng cho danh sách buổi; tổng công nợ ở trên tính toàn bộ lịch sử.</p>
             <div data-sessions></div>
           </section>
         </div>
@@ -433,7 +435,7 @@
   }
 
   function personalLedgerMarkup() {
-    return `<div class="ledger-list" data-personal></div><p class="form-note is-error" data-ledger-error hidden></p>`;
+    return `<div data-session-filters></div><div class="ledger-list" data-personal></div><p class="form-note is-error" data-ledger-error hidden></p>`;
   }
 
   function personKey(share) {
@@ -598,23 +600,38 @@
     `;
   }
 
+  function filteredSessions() {
+    const personal = ledger.role !== "admin";
+    const root = q(ledger.ledgerRoot, "[data-session-filters]");
+    const filter = window.SessionFilters.mount(root, {
+      personal,
+      members: [...ledger.members, ...ledger.sessions.flatMap((session) => (session.shares || []).map((share) => ({ name: share.memberName })))],
+      onChange: () => personal ? paintPersonal() : paintSessions()
+    });
+    return ledger.sessions.filter((session) => filter.matchesDate(session.date) && (
+      personal ? (session.shares || []).some((share) => String(share.memberName || "").trim().toLowerCase() === ledger.memberName.trim().toLowerCase())
+        : !filter.member || (session.shares || []).some((share) => filter.matchesName(share.memberName))
+    ));
+  }
+
   function paintSessions() {
     const root = ledger.ledgerRoot;
     const list = q(root, "[data-sessions]");
     const monthKey = localToday().slice(0, 7);
-    const inMonth = ledger.sessions.filter((session) => String(session.date || "").startsWith(monthKey)).length;
-    q(root, "[data-session-meta]").textContent = `${ledger.sessions.length} buổi · ${inMonth} buổi trong tháng này`;
-    if (!ledger.sessions.length) {
-      list.innerHTML = `<div class="empty-card" style="border:0;border-radius:0">Khi admin lưu một buổi, sổ sẽ hiện theo ngày, sân và từng người.</div>`;
+    const sessions = filteredSessions();
+    const inMonth = sessions.filter((session) => String(session.date || "").startsWith(monthKey)).length;
+    q(root, "[data-session-meta]").textContent = `${sessions.length} buổi · ${inMonth} buổi trong tháng này`;
+    if (!sessions.length) {
+      list.innerHTML = `<div class="empty-card" style="border:0;border-radius:0">Không có buổi đánh phù hợp với bộ lọc.</div>`;
       return;
     }
-    list.innerHTML = ledger.sessions.map(sessionCard).join("");
+    list.innerHTML = sessions.map(sessionCard).join("");
   }
 
-  function myShares() {
+  function myShares(sessions = ledger.sessions) {
     const nameCi = String(ledger.memberName || "").trim().toLowerCase();
     const rows = [];
-    ledger.sessions.forEach((session) => {
+    sessions.forEach((session) => {
       (session.shares || []).forEach((share) => {
         if (String(share.memberName || "").trim().toLowerCase() === nameCi) rows.push({ session, share });
       });
@@ -625,9 +642,9 @@
   function paintPersonal() {
     const root = ledger.ledgerRoot;
     const node = q(root, "[data-personal]");
-    const rows = myShares();
+    const rows = myShares(filteredSessions());
     if (!rows.length) {
-      node.outerHTML = `<div class="empty-card" data-personal>Chưa có buổi nào trong sổ của bạn.</div>`;
+      node.outerHTML = `<div class="empty-card" data-personal>Không có buổi đánh phù hợp trong sổ của bạn.</div>`;
       return;
     }
     node.outerHTML = `<div class="ledger-list" data-personal>${rows
