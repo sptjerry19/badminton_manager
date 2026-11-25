@@ -1,12 +1,10 @@
+/* Đỏ báo lỗi đậm/nhạt hơn token chung để đủ tương phản ở cả hai chế độ. */
 :root {
-  --ink: #111111;
-  --paper: #f7f7f5;
-  --line: #e5e5e0;
-  --muted: #64748b;
-  --clay: #b42318;
-  --ok: #047857;
-  --blue: #1d4ed8;
-  --radius: 10px;
+  --clay: #c22f3f;
+}
+
+html.dark {
+  --clay: #ff8a95;
 }
 
 * {
@@ -16,18 +14,16 @@
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: var(--font-body);
   color: var(--ink);
-  background:
-    radial-gradient(circle at 10% 0%, #efe9df 0%, transparent 40%),
-    linear-gradient(180deg, #fafaf8 0%, #f0efe9 100%);
+  background: var(--page);
 }
 
 h1,
 h2,
 h3,
 .display {
-  font-family: "Oswald", sans-serif;
+  font-family: var(--font-body);
   letter-spacing: 0.02em;
   margin: 0;
 }
@@ -41,7 +37,7 @@ h3,
 .bezel {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--surface);
   box-shadow: 0 10px 30px rgba(17, 17, 17, 0.04);
 }
 
@@ -93,7 +89,8 @@ h3,
   border-radius: 8px;
   padding: 10px 12px;
   font: inherit;
-  background: #fff;
+  background: var(--surface);
+  color: var(--ink);
 }
 
 .segment {
@@ -102,7 +99,7 @@ h3,
   gap: 6px;
   padding: 4px;
   border-radius: 10px;
-  background: #eee;
+  background: var(--surface-2);
 }
 
 .segment-btn {
@@ -110,6 +107,7 @@ h3,
   border-radius: 8px;
   padding: 10px;
   background: transparent;
+  color: var(--ink);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -117,7 +115,7 @@ h3,
 
 .segment-btn.is-on {
   background: var(--ink);
-  color: #fff;
+  color: var(--surface);
 }
 
 .pill,
@@ -133,7 +131,7 @@ h3,
   font-weight: 700;
   cursor: pointer;
   background: var(--ink);
-  color: #fff;
+  color: var(--surface);
 }
 
 .btn.ghost {
@@ -149,7 +147,8 @@ h3,
 }
 
 .btn.ok {
-  background: var(--ok);
+  background: var(--primary);
+  color: var(--on-accent);
 }
 
 .btn:disabled {
@@ -177,7 +176,7 @@ h3,
 }
 
 .msg.is-ok {
-  color: var(--ok);
+  color: var(--green-ink);
 }
 
 .topbar {
@@ -197,7 +196,8 @@ h3,
 
 .tab {
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--surface);
+  color: var(--ink);
   border-radius: 999px;
   padding: 8px 12px;
   font: inherit;
@@ -207,7 +207,7 @@ h3,
 
 .tab.is-on {
   background: var(--ink);
-  color: #fff;
+  color: var(--surface);
   border-color: var(--ink);
 }
 
@@ -223,7 +223,7 @@ h3,
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 14px;
-  background: #fff;
+  background: var(--surface);
 }
 
 .card + .card {
@@ -246,7 +246,7 @@ h3,
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  background: #eee;
+  background: var(--surface-2);
 }
 
 .badge.pending {
@@ -275,7 +275,7 @@ h3,
 .chip {
   border-radius: 999px;
   background: var(--ink);
-  color: #fff;
+  color: var(--surface);
   padding: 4px 8px;
   font-size: 12px;
 }
@@ -336,7 +336,7 @@ th {
   width: min(560px, 100%);
   max-height: 90vh;
   overflow: auto;
-  background: #fff;
+  background: var(--surface);
   border-radius: 12px;
   padding: 18px;
 }
